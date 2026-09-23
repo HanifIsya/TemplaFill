@@ -221,8 +221,8 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
             except Exception as e:
                 last_error = e
                 err_str = str(e).lower()
-                # On 404 NotFound, continue to next candidate model
-                if "404" in err_str or "not found" in err_str:
+                # On 404 NotFound, 503 ServiceUnavailable, or temporary overload, try next candidate model
+                if any(x in err_str for x in ("404", "not found", "503", "unavailable", "overload")):
                     continue
                 # For rate limit (429) or other errors, break and use heuristic fallback
                 break
@@ -265,9 +265,22 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
         """Call Gemini generate_content and return text."""
         if not self._client:
             raise RuntimeError("Gemini client is not initialized")
+
+        config = None
+        if _HAS_GENAI and hasattr(types, "GenerateContentConfig") and hasattr(types, "ThinkingConfig"):
+            try:
+                config = types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_level="low")
+                )
+            except Exception:
+                config = None
+
         # Try async client
         if hasattr(self._client, "aio"):
-            resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt)
+            if config:
+                resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt, config=config)
+            else:
+                resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt)
             return str(getattr(resp, "text", "") or "")
         else:
             import asyncio
@@ -275,7 +288,10 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
             loop = asyncio.get_running_loop()
 
             def sync_call() -> str:
-                resp = self._client.models.generate_content(model=self.model, contents=prompt)
+                if config:
+                    resp = self._client.models.generate_content(model=self.model, contents=prompt, config=config)
+                else:
+                    resp = self._client.models.generate_content(model=self.model, contents=prompt)
                 return str(getattr(resp, "text", "") or "")
 
             return await loop.run_in_executor(None, sync_call)
