@@ -29,4 +29,4 @@ services:
       - key: GEMINI_MODEL
         value: gemini-3.7-flash
       - key: GEMINI_EMBEDDING_MODEL
-        value: text-embedding-004
+        value: gemini-embedding-001

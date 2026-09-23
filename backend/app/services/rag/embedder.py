@@ -102,6 +102,9 @@ class Embedder:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
         self.model = model if model is not None else settings.gemini_embedding_model
+        # Sanitize legacy / unsupported embedding models that return 404 in v1beta
+        if self.model in ("text-embedding-004", "models/text-embedding-004"):
+            self.model = "gemini-embedding-001"
         self.dims = dims
         self.batch_size = batch_size
         # Auto-detect fake mode if no key or explicitly forced

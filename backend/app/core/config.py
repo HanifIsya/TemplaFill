@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # ----- Gemini API -----
     gemini_api_key: str = Field(default="", description="Gemini API key")
     gemini_model: str = Field(default="gemini-3.7-flash")
-    gemini_embedding_model: str = Field(default="text-embedding-004")
+    gemini_embedding_model: str = Field(default="gemini-embedding-001")
 
     # ----- File Storage -----
     upload_dir: str = Field(default="./uploads")
