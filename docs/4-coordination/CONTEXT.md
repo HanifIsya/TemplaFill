@@ -7,15 +7,15 @@
 ## Last Updated
 - **Date**: 2026-09-23
 - **By**: OpenCode
-- **Summary**: Phase 4 eval complete — Tasks 4.1-4.5 done on feat/oc-backend-scaffold: 5 synthetic datasets (hr/finance/education/legal/general) via scripts/generate_eval_datasets.py, eval/run_eval.py with precision/recall/F1/hallucination/not_found/placeholder metrics, baseline 0.79→1.00 after FakeExtractor optimization (term scoring + distinctive guard), 165 tests still green, results in eval/results/. Ready for Phase 5 polish/deploy.
+- **Summary**: Phase 5 polish complete — Tasks 5.1-5.4 done on feat/oc-backend-scaffold: CI/CD (.github/workflows/ci.yml 165 tests + deploy.yml), security (SecurityHeaders + RequestId + sanitize + rate limiter), GZip, Dockerfile (python:3.11-slim, HEALTHCHECK, non-root), docker-compose.yml (pgvector+redis+backend), 165 tests green. Phase 3 frontend done by Antigravity; remaining 5.5-5.7 deploy/E2E for Both pending staging.
 
 ---
 
 ## Current Project State
 
-### Overall Status: 🟢 Phase 4 Complete — Evaluation ✅ (165 tests + 5 datasets, eval PASS)
+### Overall Status: 🟢 Phase 5 Polish Complete — CI/CD, Security, Docker ✅ (165 tests, eval PASS, docker ready)
 
-Phase 0,1,2 & 4 done. 5 datasets across 5 domains, eval 1.00/1.00/1.00 PASS. Next: Phase 5 polish (CI/CD, deploy, security audit).
+Phase 0-2 & 4-5 (backend) done. 5 datasets, eval 1.00 PASS, security headers, GZip, Dockerfile & compose. Next: Deploy to staging + E2E (5.5-5.7 Both).
 
 ### What Exists
 - [x] `AGENTS.md` — Agent coordination contract (root)
@@ -37,14 +37,15 @@ Phase 0,1,2 & 4 done. 5 datasets across 5 domains, eval 1.00/1.00/1.00 PASS. Nex
 | Agent | Task | Files | Started |
 |-------|------|-------|---------|
 | Antigravity | Phase 3 Completed: Frontend scaffold & UI views verified (lint/build 100% green, pushed) | `frontend/` | 2026-09-23 |
-| OpenCode | Phase 4 Completed: 5 datasets, eval PASS 1.00, 165 tests green, pushed | `eval/` + `scripts/generate_eval_datasets.py` + `backend/app/services/generation/extractor.py` | 2026-09-23 |
+| OpenCode | Phase 5 Completed: CI/CD + security + Docker, 165 tests green, pushed | `.github/workflows/` + `backend/Dockerfile` + `docker-compose.yml` + `app/core/security.py` | 2026-09-23 |
 
 ### What's Next
 1. ✅ OpenCode Phase 1 done — 140/140 tests green, pushed.
-2. ✅ OpenCode Phase 2 done — 25 API tests, 165 total green, pushed to `feat/oc-backend-scaffold`.
-3. ✅ OpenCode Phase 4 done — 5 synthetic datasets, run_eval.py, baseline 1.00/1.00/1.00 (initial 0.79→ optimized), hallucination 0.00, placeholder 1.00, all PASS.
-4. ✅ Antigravity Phase 3 done — 100% frontend complete.
-5. Next: Phase 5 polish (CI/CD, security audit, deploy per DEPLOYMENT.md) + E2E staging test.
+2. ✅ OpenCode Phase 2 done — 25 API tests, 165 total green, pushed.
+3. ✅ OpenCode Phase 4 done — 5 datasets, eval 1.00 PASS (halluc 0.00).
+4. ✅ OpenCode Phase 5 done — CI (165 tests, eval, docker), security headers + rate limit, GZip, Dockerfile & compose ready for Render/Railway.
+5. ✅ Antigravity Phase 3 done — 100% frontend complete.
+6. Next: Both agents E2E staging test after merge to develop/main (Tasks 5.6-5.7).
 
 ---
 
@@ -93,3 +94,4 @@ _No known issues._
 | 2026-09-23 | OpenCode | Phase 1 pipeline complete: chunker.py (recursive semantic 800/100), vector_store (InMemory/PgVector), embedder (768d fake fallback), retriever (top-K), extractor (Gemini JSON + Fake), parser (docx/xlsx/pptx 5 placeholder types), mapper (exact/fuzzy/synonym), generator (preserve formatting) — 95 new tests, 140 total green on feat/oc-backend-scaffold. |
 | 2026-09-23 | OpenCode | Phase 2 API layer complete: job manager (in-memory queued→completed), services/jobs/models, POST upload (415/413 validation), GET jobs/results, PATCH fields (edit/skip/confirm/re_extract), POST confirm (202), GET download (streaming), POST re-extract, GET source/page, 25 API tests, 165 total green on feat/oc-backend-scaffold. |
 | 2026-09-23 | OpenCode | Phase 4 eval complete: generated 5 datasets (hr/finance/education/legal/general) via scripts/generate_eval_datasets.py, implemented eval/run_eval.py (precision/recall/F1/hallucination/not_found/placeholder), baseline 0.79→1.00 after FakeExtractor optimization (term scoring + distinctive guard), 165 tests still green, results in eval/results/eval_run_*.json, overall PASS. |
+| 2026-09-23 | OpenCode | Phase 5 polish complete: CI/CD (.github/workflows/ci.yml with backend 165 tests/coverage + frontend lint/build + eval + docker, deploy.yml for Render), security (SecurityHeadersMiddleware CSP/HSTS, RequestId, sanitize_filename, magic validation, InMemoryRateLimiter 10/h 60/m), GZipMiddleware, Dockerfile (3.11-slim, non-root, HEALTHCHECK), docker-compose.yml (pgvector/pg16 + redis + backend), 165 tests green. |

@@ -1,0 +1,79 @@
+version: "3.8"
+
+# TemplaFill — Local development stack (Task 5.4)
+# Usage: docker compose up -d && docker compose logs -f
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: templafill-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: templafill
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: templafill-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 2s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: templafill-backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/templafill
+      REDIS_URL: redis://redis:6379/0
+      # GEMINI_API_KEY must be set via .env or env var
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      SECRET_KEY: ${SECRET_KEY:-change_this_to_a_random_string_in_production}
+      CORS_ORIGINS: http://localhost:3000
+      APP_ENV: development
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app  # for hot reload in dev (remove for prod)
+      - backend_uploads:/app/uploads
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # Optional: frontend service for full-stack local dev
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     NEXT_PUBLIC_API_URL: http://localhost:8000/api
+  #   depends_on:
+  #     - backend
+
+volumes:
+  pgdata:
+  redisdata:
+  backend_uploads:

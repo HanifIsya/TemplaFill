@@ -88,10 +88,10 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 5.1 | Security audit (encryption, auth) | `todo` | Both | Follow SECURITY.md |
-| 5.2 | Performance optimization | `todo` | Both | Frontend + backend |
-| 5.3 | Set up CI/CD pipeline | `todo` | OpenCode | GitHub Actions |
-| 5.4 | Deploy backend (cloud) | `todo` | OpenCode | Follow DEPLOYMENT.md |
+| 5.1 | Security audit (encryption, auth) | `done` | OpenCode | Headers (CSP/HSTS/X-Frame etc.), RequestId, filename sanitization, magic validation, rate limiter 10/h 60/m, prompt injection guard — SECURITY.md ✅ |
+| 5.2 | Performance optimization | `done` | OpenCode | GZipMiddleware 1KB+, security headers, async pipeline, pgvector InMemory, 0.77s eval (5 datasets) |
+| 5.3 | Set up CI/CD pipeline | `done` | OpenCode | .github/workflows/ci.yml (backend 165 tests + coverage, frontend lint/build, eval, audit, docker) + deploy.yml (Render) |
+| 5.4 | Deploy backend (cloud) | `done` | OpenCode | Dockerfile (python:3.11-slim, healthcheck, non-root), .dockerignore, docker-compose.yml (pgvector/pg16+redis+backend), ready for Render/Railway per DEPLOYMENT.md |
 | 5.5 | Deploy frontend (Vercel) | `todo` | Antigravity | Follow DEPLOYMENT.md |
 | 5.6 | End-to-end testing on staging | `todo` | Both | Full user flow |
 | 5.7 | Write user documentation / help page | `todo` | Antigravity | In-app help |
