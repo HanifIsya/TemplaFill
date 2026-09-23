@@ -245,11 +245,14 @@ export default function Home() {
       const interval = setInterval(async () => {
         try {
           pollAttempts++;
-          currentProgress = Math.min(95, currentProgress + 15);
+          currentProgress = Math.min(95, currentProgress + 10);
           const updated = await api.getJobProgress(jobId, currentProgress);
           setProgress(updated);
 
-          if (updated.status === 'completed' || updated.progressPercent >= 100 || pollAttempts >= 12) {
+          const isComplete = updated.status === 'completed' || (updated.progressPercent >= 100 && updated.status !== 'extracting' && updated.status !== 'mapping');
+          const isTimeout = pollAttempts >= 50;
+
+          if (isComplete || isTimeout) {
             clearInterval(interval);
             // Fetch results
             const result = await api.getFieldMappings(session.sessionId);

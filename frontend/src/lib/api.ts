@@ -417,7 +417,8 @@ class ApiClient {
     sessionId: string,
     confirmedFields: Record<string, string>
   ): Promise<GenerationResult> {
-    const health = await this.checkHealth();
+    const isMock = sessionId.startsWith('demo-') || sessionId.startsWith('session-');
+    const health = isMock ? { isLive: false } : await this.checkHealth();
     if (health.isLive) {
       try {
         const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/confirm`, {
@@ -446,7 +447,8 @@ class ApiClient {
     return {
       ...MOCK_GENERATION,
       sessionId,
-      downloadUrl: `${this.baseUrl}/jobs/${sessionId}/download?type=filled`,
+      downloadUrl: '/samples/sample_template.docx',
+      filename: 'Executive_Contract_Summary_Filled_Demo.docx',
     };
   }
 

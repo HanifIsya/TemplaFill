@@ -16,21 +16,16 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
   onReset,
 }) => {
   const handleDownload = () => {
-    if (generationResult.downloadUrl === '#') {
-      const blob = new Blob(
-        [
-          `TemplaFill Generated Output\nSession: ${sessionInfo.sessionId}\nDate: ${new Date().toISOString()}`
-        ],
-        { type: 'text/plain' }
-      );
-      const url = URL.createObjectURL(blob);
+    const url = generationResult.downloadUrl;
+    if (url === '#' || url.startsWith('/samples/')) {
       const a = document.createElement('a');
-      a.href = url;
-      a.download = generationResult.filename;
+      a.href = url.startsWith('/samples/') ? url : '/samples/sample_template.docx';
+      a.download = generationResult.filename || 'Executive_Contract_Summary_Filled_Demo.docx';
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } else {
-      window.open(generationResult.downloadUrl, '_blank');
+      window.open(url, '_blank');
     }
   };
 
