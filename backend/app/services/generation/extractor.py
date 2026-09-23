@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import re
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -156,7 +156,7 @@ class GeminiExtractor:
             self.use_fake = use_fake
         else:
             self.use_fake = not bool(self.api_key) or not _HAS_GENAI
-        self._client = None
+        self._client: Any = None
         self._fake = FakeExtractor()
         if not self.use_fake and _HAS_GENAI:
             try:
@@ -257,28 +257,30 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
             )
         except Exception:
             res = self._fake.extract(field_name, chunks, field_description)
-            if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
+            if source_pages and res.source_page and 1 <= source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]
             return res
 
-    async def _call_gemini(self, prompt: str) -> str:  # type: ignore[no-untyped-def]
+    async def _call_gemini(self, prompt: str) -> str:
         """Call Gemini generate_content and return text."""
+        if not self._client:
+            raise RuntimeError("Gemini client is not initialized")
         # Try async client
         if hasattr(self._client, "aio"):
-            resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt)  # type: ignore[attr-defined]
-            return resp.text or ""  # type: ignore[attr-defined]
+            resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt)
+            return str(getattr(resp, "text", "") or "")
         else:
             import asyncio
 
             loop = asyncio.get_running_loop()
 
-            def sync_call():  # type: ignore[no-untyped-def]
-                resp = self._client.models.generate_content(model=self.model, contents=prompt)  # type: ignore[attr-defined]
-                return resp.text or ""
+            def sync_call() -> str:
+                resp = self._client.models.generate_content(model=self.model, contents=prompt)
+                return str(getattr(resp, "text", "") or "")
 
             return await loop.run_in_executor(None, sync_call)
 
-    def _parse_json_response(self, text: str) -> Dict:  # type: ignore[type-arg]
+    def _parse_json_response(self, text: str) -> Dict[str, Any]:
         """Parse JSON from model text (handle markdown code block)."""
         text = text.strip()
         # Remove ```json ... ``` wrapper if present
