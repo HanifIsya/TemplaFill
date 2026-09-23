@@ -1,0 +1,42 @@
+{
+  "dataset_id": "finance_01",
+  "source_file": "financial_report_01.pdf",
+  "template_file": "quarterly_summary.xlsx",
+  "fields": [
+    {
+      "field_name": "invoice_number",
+      "placeholder": "{{invoice_number}}",
+      "expected_value": "INV-2026-001",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "invoice_date",
+      "placeholder": "{{invoice_date}}",
+      "expected_value": "2026-03-15",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "total_amount",
+      "placeholder": "{{total_amount}}",
+      "expected_value": "$12,300",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "customer_name",
+      "placeholder": "{{customer_name}}",
+      "expected_value": "Acme Corp",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "due_date",
+      "placeholder": "{{due_date}}",
+      "expected_value": null,
+      "source_page": null,
+      "is_present_in_source": false
+    }
+  ]
+}

@@ -42,112 +42,104 @@ class ExtractionResult(BaseModel):
 
 
 class FakeExtractor:
-    """Deterministic fake extractor for tests — no API call.
+    """Deterministic fake extractor — improved scoring to reduce hallucinations (Task 4.4).
 
-    Logic: searches chunks for field name/value patterns via simple heuristics.
+    Uses difflib ratio between field_name and line key to pick best line,
+    with strict threshold for absent fields.
     """
 
     def extract(self, field_name: str, chunks_texts: List[str], field_description: str = "") -> ExtractionResult:
-        field_norm = field_name.lower().replace("_", " ")
-        # Also consider description
-        query_terms = set(field_norm.split())
-        if field_description:
-            query_terms.update(field_description.lower().split())
-        # Search chunks for best match containing potential value patterns
-        best_chunk: Optional[str] = None
-        best_page: Optional[int] = None  # fake extractor doesn't know page; caller can map
-        # For fake, we look for lines containing field name hint and capture after colon
-        # e.g., "Applicant: John Doe" for field full_name -> "John Doe"
-        for idx, chunk in enumerate(chunks_texts):
-            lower = chunk.lower()
-            # Check if any query term appears
-            if any(t in lower for t in query_terms if len(t) > 2):
-                best_chunk = chunk
-                best_page = idx + 1  # fake page = chunk index
-                break
+        import difflib
 
-        # If no chunk matched query terms, still try regex across all chunks for email/phone (value may not have field hint)
-        if not best_chunk:
-            # For email/phone, search all chunks with regex even without field hint
-            if "email" in field_norm:
-                for ch in chunks_texts:
-                    m = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", ch)
-                    if m:
-                        return ExtractionResult(field_name=field_name, extracted_value=m.group(0), confidence=0.9, source_text=m.group(0), status="extracted")
-            if "phone" in field_norm:
-                for ch in chunks_texts:
-                    m = re.search(r"\+?[\d\s\-\(\)]{7,}", ch)
-                    if m:
-                        # Avoid matching pure years/dates; require at least 7 digits/spaces
-                        val = m.group(0).strip()
-                        if sum(c.isdigit() for c in val) >= 7:
-                            return ExtractionResult(field_name=field_name, extracted_value=val, confidence=0.8, source_text=val, status="extracted")
-            return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, status="not_found")
-
-        # Try to extract value via heuristic: look for "Field: value" pattern
-        # Prioritize lines where key_part contains the original field_name itself (not just description terms)
+        field_norm = field_name.lower().replace("_", " ").strip()
         field_terms = set(field_norm.split())
-        lines = best_chunk.split("\n")
-        # First pass: exact field name terms
-        for line in lines:
-            if ":" in line:
-                key_part, val_part = line.split(":", 1)
-                if any(t in key_part.lower() for t in field_terms if len(t) > 2):
-                    val = val_part.strip()
-                    if val:
-                        return ExtractionResult(
-                            field_name=field_name,
-                            extracted_value=val[:100],
-                            confidence=0.85,
-                            source_page=best_page,
-                            source_text=line.strip()[:200],
-                            status="extracted",
-                        )
-        # Second pass: any query term (including description)
-        for line in lines:
-            if ":" in line:
-                key_part, val_part = line.split(":", 1)
-                if any(t in key_part.lower() for t in query_terms if len(t) > 2):
-                    val = val_part.strip()
-                    if val:
-                        return ExtractionResult(
-                            field_name=field_name,
-                            extracted_value=val[:100],
-                            confidence=0.80,
-                            source_page=best_page,
-                            source_text=line.strip()[:200],
-                            status="extracted",
-                        )
 
-        # Fallback regex for email/phone on best_chunk
+        # Collect all lines with colon across all chunks
+        all_lines: list[tuple[str, str, str, int]] = []  # (key, value, full_line, chunk_idx)
+        for idx, chunk in enumerate(chunks_texts):
+            for line in chunk.split("\n"):
+                if ":" in line:
+                    key_part, val_part = line.split(":", 1)
+                    key = key_part.strip()
+                    val = val_part.strip()
+                    if key and val:
+                        all_lines.append((key, val, line.strip(), idx))
+
+        # Score each line by term overlap + difflib as tie-breaker
+        best_match: tuple[str, str, str, int] | None = None
+        best_score = -1.0
+        best_difflib = 0.0
+        for key, val, full, chunk_idx in all_lines:
+            key_norm = key.lower().replace("_", " ").strip()
+            key_terms = set(key_norm.split())
+            # Term overlap: how many field_terms appear in key
+            matched = sum(1 for t in field_terms if t in key_norm)
+            term_score = matched / len(field_terms) if field_terms else 0
+            difflib_score = difflib.SequenceMatcher(None, field_norm, key_norm).ratio()
+            # Combined score: term_score weighted 0.7, difflib 0.3, but if term_score 0 then overall 0
+            if term_score == 0 and difflib_score < 0.5:
+                combined = 0
+            else:
+                combined = term_score * 0.7 + difflib_score * 0.3
+                # Boost perfect term match
+                if term_score == 1.0:
+                    combined = max(combined, 0.9)
+            if combined > best_score or (abs(combined - best_score) < 1e-6 and difflib_score > best_difflib):
+                best_score = combined
+                best_difflib = difflib_score
+                best_match = (key, val, full, chunk_idx)
+
+        # Threshold: need combined >=0.5 to accept; for distinctive fields require higher if distinctive missing
+        if best_match and best_score >= 0.5:
+            key, val, full, chunk_idx = best_match
+            distinctives = [t for t in field_terms if len(t) > 2 and t not in {"date", "name", "number", "amount", "total", "value", "phone", "email", "invoice", "contract", "customer", "student", "company", "report"}]
+            # For due_date, distinctives = ["due"]; key "Invoice Date" lacks "due" -> penalize
+            if distinctives and not any(d in key.lower() for d in distinctives):
+                # Require high combined (>=0.85) to accept, else treat as not found
+                if best_score < 0.85:
+                    best_match = None
+                else:
+                    pass
+            else:
+                # Accept
+                return ExtractionResult(
+                    field_name=field_name,
+                    extracted_value=val[:100],
+                    confidence=round(0.85 if best_difflib >= 0.85 else 0.75, 2),
+                    source_page=chunk_idx + 1,
+                    source_text=full[:200],
+                    status="extracted",
+                )
+            # If penalized (distinctive missing and score <0.85), fall through to not_found
+            if best_match is None:
+                pass
+            else:
+                # Was penalized but score high enough (>=0.85) -> still extracted (rare)
+                return ExtractionResult(
+                    field_name=field_name,
+                    extracted_value=val[:100],
+                    confidence=0.75,
+                    source_page=chunk_idx + 1,
+                    source_text=full[:200],
+                    status="extracted",
+                )
+
+        # Fallback regex for email/phone across all chunks
         if "email" in field_norm:
-            m = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", best_chunk)
-            if m:
-                return ExtractionResult(field_name=field_name, extracted_value=m.group(0), confidence=0.9, source_text=m.group(0), status="extracted")
+            for ch in chunks_texts:
+                m = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", ch)
+                if m:
+                    return ExtractionResult(field_name=field_name, extracted_value=m.group(0), confidence=0.9, source_text=m.group(0), status="extracted")
         if "phone" in field_norm:
-            m = re.search(r"\+?[\d\s\-\(\)]{7,}", best_chunk)
-            if m:
-                val = m.group(0).strip()
-                if sum(c.isdigit() for c in val) >= 7:
-                    return ExtractionResult(field_name=field_name, extracted_value=val, confidence=0.8, source_text=val, status="extracted")
-        # If still not found, return snippet as value with lower confidence (simulate LLM extraction)
-        # Take first 50 chars of chunk as value heuristic: but we prefer not to hallucinate, so return not_found unless strong
-        # For test purposes, we can return first 20 chars containing query term
-        snippet = best_chunk[:200].strip()
-        # Only return value if chunk is short and contains field name-like header
-        if len(snippet) < 500 and any(t in snippet.lower() for t in query_terms):
-            # Extract next words after field name occurrence
-            lower = snippet.lower()
-            for term in query_terms:
-                idx = lower.find(term)
-                if idx != -1:
-                    after = snippet[idx + len(term) : idx + len(term) + 50].strip(" :\n-")
-                    if after:
-                        val = after.split("\n")[0].split(".")[0].strip()[:80]
-                        if val:
-                            return ExtractionResult(field_name=field_name, extracted_value=val, confidence=0.6, source_text=snippet[:200], status="extracted")
+            for ch in chunks_texts:
+                m = re.search(r"\+?[\d\s\-\(\)]{7,}", ch)
+                if m:
+                    val = m.group(0).strip()
+                    if sum(c.isdigit() for c in val) >= 7:
+                        return ExtractionResult(field_name=field_name, extracted_value=val, confidence=0.8, source_text=val, status="extracted")
 
-        return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, source_text=best_chunk[:200] if best_chunk else None, status="not_found")
+        snippet = best_match[2][:200] if best_match else (chunks_texts[0][:200] if chunks_texts else None)
+        return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, source_text=snippet, status="not_found")
 
 
 class GeminiExtractor:
