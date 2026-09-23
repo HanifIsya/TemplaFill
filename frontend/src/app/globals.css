@@ -2,145 +2,111 @@
 
 @layer base {
   :root {
-    /* Brand Primary (Electric Indigo) */
-    --color-primary-50: #EEF2FF;
-    --color-primary-100: #E0E7FF;
-    --color-primary-200: #C7D2FE;
-    --color-primary-300: #A5B4FC;
-    --color-primary-400: #818CF8;
-    --color-primary-500: #6366F1;
-    --color-primary-600: #4F46E5;
-    --color-primary-700: #4338CA;
-    --color-primary-800: #3730A3;
-    --color-primary-900: #312E81;
-
-    /* Accent Cyan */
-    --color-accent-400: #22D3EE;
-    --color-accent-500: #06B6D4;
-    --color-accent-600: #0891B2;
-
-    /* Light Mode Neutrals */
+    /* Solid High-Contrast Neutral (Light Mode) */
     --bg-page: #F8FAFC;
     --bg-surface: #FFFFFF;
-    --bg-surface-elevated: #FFFFFF;
-    --bg-subtle: #F1F5F9;
-    --border-color: #E2E8F0;
-    --border-subtle: #CBD5E1;
+    --bg-elevated: #F1F5F9;
+    --border-base: #E2E8F0;
+    --border-strong: #CBD5E1;
     --text-primary: #0F172A;
     --text-secondary: #475569;
-    --text-muted: #94A3B8;
+    --text-muted: #64748B;
 
-    /* Semantic */
-    --success-bg: #ECFDF5;
+    /* Technical Solid Blue Accent (No gradients) */
+    --accent-base: #1D4ED8;
+    --accent-hover: #1E40AF;
+    --accent-subtle: #EFF6FF;
+    --accent-border: #BFDBFE;
+
+    /* Solid Semantic Indicators */
     --success-text: #065F46;
+    --success-bg: #ECFDF5;
     --success-border: #A7F3D0;
-    --warning-bg: #FFFBEB;
     --warning-text: #92400E;
+    --warning-bg: #FFFBEB;
     --warning-border: #FDE68A;
-    --error-bg: #FEF2F2;
     --error-text: #991B1B;
+    --error-bg: #FEF2F2;
     --error-border: #FECACA;
-
-    /* Shadows */
-    --shadow-soft: 0 4px 20px -2px rgba(15, 23, 42, 0.06);
-    --shadow-card: 0 10px 30px -4px rgba(15, 23, 42, 0.08);
-    --shadow-glow: 0 0 25px rgba(79, 70, 229, 0.25);
   }
 
   .dark {
-    /* Dark Mode Midnight Slate */
-    --bg-page: #090D16;
-    --bg-surface: #0F172A;
-    --bg-surface-elevated: #1E293B;
-    --bg-subtle: #141E33;
-    --border-color: #1E293B;
-    --border-subtle: #334155;
+    /* High-Contrast Technical Charcoal & Slate (Dark Mode) */
+    --bg-page: #0B0F17;
+    --bg-surface: #111827;
+    --bg-elevated: #1A2234;
+    --border-base: #263245;
+    --border-strong: #374761;
     --text-primary: #F8FAFC;
-    --text-secondary: #94A3B8;
-    --text-muted: #64748B;
+    --text-secondary: #CBD5E1;
+    --text-muted: #8493A8;
 
-    /* Dark Mode Semantic */
-    --success-bg: rgba(6, 95, 70, 0.25);
+    /* Solid Blue Accent in Dark Mode */
+    --accent-base: #3B82F6;
+    --accent-hover: #2563EB;
+    --accent-subtle: #172554;
+    --accent-border: #1E3A8A;
+
+    /* High-Contrast Semantic in Dark Mode */
     --success-text: #34D399;
-    --success-border: rgba(52, 211, 153, 0.3);
-    --warning-bg: rgba(146, 64, 14, 0.25);
+    --success-bg: #064E3B;
+    --success-border: #059669;
     --warning-text: #FBBF24;
-    --warning-border: rgba(251, 191, 36, 0.3);
-    --error-bg: rgba(153, 27, 27, 0.25);
+    --warning-bg: #78350F;
+    --warning-border: #D97706;
     --error-text: #F87171;
-    --error-border: rgba(248, 113, 113, 0.3);
-
-    --shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
-    --shadow-card: 0 10px 30px -4px rgba(0, 0, 0, 0.6);
-    --shadow-glow: 0 0 30px rgba(99, 102, 241, 0.35);
+    --error-bg: #7F1D1D;
+    --error-border: #DC2626;
   }
 }
 
 body {
   background-color: var(--bg-page);
   color: var(--text-primary);
-  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  transition: background-color 0.25s ease, color 0.25s ease;
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background-color 0.15s ease, color 0.15s ease;
   min-height: 100vh;
 }
 
-/* Glassmorphism utility */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--border-color);
+/* Solid high-contrast container surface (replaces glassmorphism) */
+.solid-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
 }
 
-.dark .glass-panel {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  border: 1px solid rgba(51, 65, 85, 0.6);
+.dark .solid-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.4);
 }
 
-/* Glowing mesh backgrounds */
-.bg-grid-pattern {
-  background-size: 32px 32px;
-  background-image: 
-    linear-gradient(to right, rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+/* Snappy solid button utility - no opacity fading */
+.btn-primary {
+  background-color: var(--accent-base);
+  color: #FFFFFF;
+  border: 1px solid transparent;
+  font-weight: 600;
+  transition: background-color 0.12s ease, transform 0.08s ease;
 }
 
-.dark .bg-grid-pattern {
-  background-image: 
-    linear-gradient(to right, rgba(51, 65, 85, 0.2) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(51, 65, 85, 0.2) 1px, transparent 1px);
+.btn-primary:hover {
+  background-color: var(--accent-hover);
 }
 
-/* Shimmer animation */
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+.btn-primary:active {
+  transform: translateY(1px);
 }
 
-.animate-shimmer {
-  position: relative;
-  overflow: hidden;
+.btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.animate-shimmer::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
-  animation: shimmer 1.8s infinite;
-}
-
-/* Pulse glow keyframe */
-@keyframes pulse-glow {
-  0%, 100% { opacity: 0.4; transform: scale(1); }
-  50% { opacity: 0.8; transform: scale(1.05); }
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 3s ease-in-out infinite;
+.btn-secondary:hover {
+  background-color: var(--bg-elevated);
+  border-color: var(--text-muted);
 }

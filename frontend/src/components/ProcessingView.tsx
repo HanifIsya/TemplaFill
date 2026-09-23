@@ -1,15 +1,7 @@
 'use client';
 
 import React from 'react';
-import {
-  Loader2,
-  FileSearch,
-  Database,
-  ScanText,
-  Sparkles,
-  CheckCircle2,
-  Cpu,
-} from 'lucide-react';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 import { JobProgress } from '../lib/types';
 
 interface ProcessingViewProps {
@@ -26,75 +18,65 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({
   const steps = [
     {
       num: 1,
-      title: 'PDF Text & Table Extraction',
-      description: 'Extracting text streams and tabular matrices using PyMuPDF and pdfplumber.',
-      icon: <FileSearch className="w-5 h-5 text-indigo-500" />,
+      title: 'PDF Text and Table Extraction',
+      description: 'Extracting content blocks and tabular structures using PyMuPDF and pdfplumber.',
       threshold: 25,
     },
     {
       num: 2,
-      title: 'Semantic Chunking & Embedding',
-      description: 'Splitting clauses into semantic segments via Gemini text-embedding-004.',
-      icon: <Database className="w-5 h-5 text-cyan-500" />,
+      title: 'Semantic Chunking and Embedding',
+      description: 'Partitioning text into 800-token chunks and computing 768-dimensional embeddings.',
       threshold: 50,
     },
     {
       num: 3,
-      title: 'Template Placeholder Parsing',
-      description: `Scanning ${templateFilename} for mustache tags, table cells, and field keys.`,
-      icon: <ScanText className="w-5 h-5 text-indigo-400" />,
+      title: 'Template Placeholder Inspection',
+      description: `Locating target fields and tags within ${templateFilename}.`,
       threshold: 75,
     },
     {
       num: 4,
-      title: 'Gemini 2.0 Flash Structured Mapping',
-      description: 'Retrieving relevant context via RAG and validating schema confidence scores.',
-      icon: <Sparkles className="w-5 h-5 text-amber-500" />,
+      title: 'Structured Extraction via Gemini 2.0',
+      description: 'Retrieving relevant candidate chunks via vector cosine similarity and scoring confidence.',
       threshold: 100,
     },
   ];
 
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-8 py-8">
+    <div className="w-full max-w-4xl mx-auto space-y-6 py-6">
       {/* Header */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-indigo-500" />
-          <span>Step 2: AI Pipeline in Progress</span>
-        </div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-          Analyzing & Mapping Documents
-        </h1>
-        <p className="text-sm text-slate-600 dark:text-slate-400 max-w-xl mx-auto">
-          Processing <span className="font-semibold text-slate-800 dark:text-slate-200">{sourceFilename}</span> into{' '}
-          <span className="font-semibold text-slate-800 dark:text-slate-200">{templateFilename}</span>
+      <div className="space-y-1">
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Document Extraction in Progress
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+          Source: <span className="font-semibold">{sourceFilename}</span> | Target: <span className="font-semibold">{templateFilename}</span>
         </p>
       </div>
 
-      {/* Progress Card */}
-      <div className="p-6 rounded-2xl glass-panel shadow-md space-y-6">
-        {/* Progress Bar & Percent */}
-        <div className="space-y-2">
-          <div className="flex items-center justify-between text-xs font-semibold text-slate-700 dark:text-slate-300">
-            <span className="flex items-center gap-1.5">
-              <Cpu className="w-4 h-4 text-indigo-500" />
-              <span>Pipeline Status: {progress.currentStep}</span>
+      {/* Main Status Panel */}
+      <div className="p-5 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-5">
+        {/* Progress Bar */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs font-mono">
+            <span className="text-slate-700 dark:text-slate-300 font-medium">
+              Pipeline: {progress.currentStep}
             </span>
-            <span className="font-mono text-indigo-600 dark:text-indigo-400 text-sm">
+            <span className="font-bold text-blue-700 dark:text-blue-400">
               {progress.progressPercent}%
             </span>
           </div>
 
-          <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden relative">
+          <div className="w-full h-2 rounded bg-slate-100 dark:bg-slate-800 overflow-hidden">
             <div
-              className="h-full bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-400 rounded-full transition-all duration-300 relative animate-shimmer"
+              className="h-full bg-blue-700 dark:bg-blue-500 rounded transition-all duration-200"
               style={{ width: `${progress.progressPercent}%` }}
             />
           </div>
         </div>
 
-        {/* Phase Step List */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+        {/* Pipeline Phase Steps */}
+        <div className="divide-y divide-slate-100 dark:divide-slate-800 border-t border-slate-100 dark:border-slate-800 pt-1">
           {steps.map((s) => {
             const isFinished = progress.progressPercent >= s.threshold;
             const isCurrent =
@@ -102,43 +84,47 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({
               progress.progressPercent >= s.threshold - 25;
 
             return (
-              <div
-                key={s.num}
-                className={`p-4 rounded-xl border transition-all ${
-                  isFinished
-                    ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60'
-                    : isCurrent
-                    ? 'bg-indigo-50/50 dark:bg-indigo-950/40 border-indigo-300 dark:border-indigo-700 shadow-sm'
-                    : 'bg-slate-50/50 dark:bg-slate-900/40 border-slate-200/80 dark:border-slate-800 opacity-60'
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
-                      isFinished
-                        ? 'bg-emerald-100 dark:bg-emerald-950 text-emerald-600 dark:text-emerald-400'
-                        : isCurrent
-                        ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400'
-                        : 'bg-slate-200 dark:bg-slate-800 text-slate-400'
-                    }`}
-                  >
-                    {isFinished ? (
-                      <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                    ) : isCurrent ? (
-                      <Loader2 className="w-5 h-5 animate-spin text-indigo-600 dark:text-indigo-400" />
-                    ) : (
-                      s.icon
-                    )}
+              <div key={s.num} className="py-3 flex items-start gap-3 text-xs">
+                <div className="mt-0.5 shrink-0">
+                  {isFinished ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  ) : isCurrent ? (
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
+                  ) : (
+                    <span className="w-4 h-4 rounded-full border border-slate-300 dark:border-slate-700 flex items-center justify-center font-mono text-[10px] text-slate-400">
+                      {s.num}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center justify-between">
+                    <span
+                      className={`font-semibold ${
+                        isFinished
+                          ? 'text-slate-900 dark:text-slate-100'
+                          : isCurrent
+                          ? 'text-blue-700 dark:text-blue-400'
+                          : 'text-slate-400 dark:text-slate-600'
+                      }`}
+                    >
+                      {s.num}. {s.title}
+                    </span>
+                    <span
+                      className={`font-mono text-[10px] uppercase ${
+                        isFinished
+                          ? 'text-emerald-700 dark:text-emerald-400'
+                          : isCurrent
+                          ? 'text-blue-700 dark:text-blue-400'
+                          : 'text-slate-400 dark:text-slate-600'
+                      }`}
+                    >
+                      {isFinished ? 'Completed' : isCurrent ? 'Active' : 'Pending'}
+                    </span>
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-xs text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-                      <span>{s.num}.</span>
-                      <span>{s.title}</span>
-                    </h3>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-relaxed">
-                      {s.description}
-                    </p>
-                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {s.description}
+                  </p>
                 </div>
               </div>
             );
@@ -146,21 +132,15 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({
         </div>
       </div>
 
-      {/* Terminal Pulse Indicator */}
-      <div className="p-4 rounded-xl bg-slate-900 text-slate-300 font-mono text-xs border border-slate-800 shadow-sm space-y-1.5">
-        <div className="flex items-center gap-2 pb-1 border-b border-slate-800 text-slate-400">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-          <span>Real-time RAG Engine Logs</span>
+      {/* Technical Process Logs */}
+      <div className="p-3.5 rounded bg-slate-900 text-slate-300 font-mono text-[11px] border border-slate-800 space-y-1">
+        <div className="text-slate-500 pb-1 border-b border-slate-800 flex items-center justify-between">
+          <span>Worker Process Execution Logs</span>
+          <span>Chunk Size: 800 tokens</span>
         </div>
-        <p className="text-slate-400">
-          <span className="text-indigo-400">[Worker 0]</span> Parsing source tokens with chunk_size=800, overlap=100
-        </p>
-        <p className="text-slate-400">
-          <span className="text-cyan-400">[Gemini 2.0]</span> Schema generation with top_k=5 nearest semantic vectors
-        </p>
-        <p className="text-emerald-400">
-          <span className="text-slate-500">[Info]</span> Preserving document typography and placeholder bookmarks
-        </p>
+        <p className="text-slate-400">[INFO] Initializing PyMuPDF text reader and pdfplumber table parser.</p>
+        <p className="text-slate-400">[INFO] Generating semantic chunk embeddings via text-embedding-004.</p>
+        <p className="text-blue-400">[INFO] Top-K retrieval executing vector cosine search.</p>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Sparkles, Sun, Moon, History } from 'lucide-react';
+import { Sun, Moon, History } from 'lucide-react';
 import { WorkflowStep } from '../lib/types';
 
 interface NavbarProps {
@@ -22,41 +22,36 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenHistory,
 }) => {
   const steps: { key: WorkflowStep; label: string; num: number }[] = [
-    { key: 'upload', label: 'Upload Files', num: 1 },
-    { key: 'processing', label: 'AI Extraction', num: 2 },
-    { key: 'review', label: 'Map & Review', num: 3 },
-    { key: 'download', label: 'Download', num: 4 },
+    { key: 'upload', label: 'Upload', num: 1 },
+    { key: 'processing', label: 'Extraction', num: 2 },
+    { key: 'review', label: 'Review Fields', num: 3 },
+    { key: 'download', label: 'Export', num: 4 },
   ];
 
   return (
-    <header className="sticky top-0 z-40 w-full glass-panel border-b transition-colors">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+    <header className="sticky top-0 z-40 w-full bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
         {/* Brand */}
-        <div 
-          className="flex items-center gap-3 cursor-pointer group"
+        <div
+          className="flex items-center gap-2.5 cursor-pointer"
           onClick={() => onNavigateStep?.('landing')}
         >
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-400 flex items-center justify-center shadow-md shadow-indigo-500/25 group-hover:scale-105 transition-transform">
-            <Sparkles className="w-5 h-5 text-white" />
+          <div className="w-7 h-7 rounded bg-blue-700 dark:bg-blue-600 flex items-center justify-center text-white font-mono font-bold text-xs">
+            TF
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-xl tracking-tight bg-gradient-to-r from-indigo-600 via-indigo-500 to-cyan-500 dark:from-indigo-400 dark:to-cyan-300 bg-clip-text text-transparent">
-                TemplaFill
-              </span>
-              <span className="text-[10px] font-semibold tracking-wider uppercase px-1.5 py-0.5 rounded bg-indigo-100 dark:bg-indigo-950/80 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800">
-                v0.1
-              </span>
-            </div>
-            <p className="text-xs text-slate-500 dark:text-slate-400 hidden sm:block">
-              Extract. Map. Fill.
-            </p>
+          <div className="flex items-baseline gap-2">
+            <span className="font-bold text-base tracking-tight text-slate-900 dark:text-slate-100">
+              TemplaFill
+            </span>
+            <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
+              v0.1.0
+            </span>
           </div>
         </div>
 
-        {/* Workflow Steps Indicator */}
+        {/* Structured Workflow Steps Bar */}
         {currentStep !== 'landing' && (
-          <div className="hidden md:flex items-center gap-1.5 bg-slate-100/80 dark:bg-slate-900/80 p-1.5 rounded-full border border-slate-200/80 dark:border-slate-800">
+          <nav aria-label="Workflow progress" className="hidden md:flex items-center gap-2">
             {steps.map((s, idx) => {
               const isActive = currentStep === s.key;
               const isPast =
@@ -68,63 +63,48 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <React.Fragment key={s.key}>
                   {idx > 0 && (
                     <div
-                      className={`w-4 h-0.5 ${
-                        isPast ? 'bg-indigo-500' : 'bg-slate-300 dark:bg-slate-700'
+                      className={`w-3 h-px ${
+                        isPast ? 'bg-blue-600 dark:bg-blue-500' : 'bg-slate-300 dark:bg-slate-700'
                       }`}
                     />
                   )}
                   <div
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium transition-all ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium ${
                       isActive
-                        ? 'bg-indigo-600 text-white shadow-sm'
+                        ? 'bg-blue-50 dark:bg-blue-950 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                         : isPast
-                        ? 'text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40'
-                        : 'text-slate-500 dark:text-slate-400'
+                        ? 'text-slate-700 dark:text-slate-300'
+                        : 'text-slate-400 dark:text-slate-600'
                     }`}
                   >
-                    <span
-                      className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        isActive
-                          ? 'bg-white/25 text-white'
-                          : isPast
-                          ? 'bg-indigo-200 dark:bg-indigo-800 text-indigo-700 dark:text-indigo-200'
-                          : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                      }`}
-                    >
-                      {s.num}
-                    </span>
+                    <span className="font-mono">{s.num}.</span>
                     <span>{s.label}</span>
                   </div>
                 </React.Fragment>
               );
             })}
-          </div>
+          </nav>
         )}
 
-        {/* Right Tools */}
-        <div className="flex items-center gap-3">
-          {/* Backend Status Pill */}
-          <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
-            {isBackendLive ? (
-              <>
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>Backend Connected</span>
-              </>
-            ) : (
-              <>
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                <span>Interactive Dev Mode</span>
-              </>
-            )}
+        {/* Right Controls */}
+        <div className="flex items-center gap-2">
+          {/* Backend Status Indicator */}
+          <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400">
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                isBackendLive ? 'bg-emerald-600 dark:bg-emerald-400' : 'bg-amber-600 dark:bg-amber-400'
+              }`}
+            />
+            <span>{isBackendLive ? 'API LIVE' : 'DEV SIMULATION'}</span>
           </div>
 
-          {/* Recent Sessions History */}
+          {/* History Button */}
           {onOpenHistory && (
             <button
               onClick={onOpenHistory}
-              aria-label="View Recent Sessions"
-              title="Recent Sessions History"
-              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Recent Sessions"
+              title="Recent Sessions"
+              className="p-1.5 rounded border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
             >
               <History className="w-4 h-4" />
             </button>
@@ -134,24 +114,20 @@ export const Navbar: React.FC<NavbarProps> = ({
           <button
             onClick={onToggleTheme}
             aria-label="Toggle Theme"
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            className="p-1.5 rounded border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
           >
-            {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            {isDark ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
 
-          {/* GitHub Repo */}
+          {/* GitHub Link */}
           <a
             href="https://github.com/HanifIsya/TemplaFill"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub Repository"
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
+            className="p-1.5 rounded border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
           >
-            <svg
-              className="w-4 h-4 fill-current"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
+            <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
               <path
                 fillRule="evenodd"
                 clipRule="evenodd"

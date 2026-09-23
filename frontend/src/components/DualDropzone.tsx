@@ -1,18 +1,7 @@
 'use client';
 
 import React, { useRef, useState } from 'react';
-import {
-  FileText,
-  FileSpreadsheet,
-  Presentation,
-  UploadCloud,
-  CheckCircle2,
-  Trash2,
-  ArrowRight,
-  FileCheck2,
-  Sparkles,
-  Info,
-} from 'lucide-react';
+import { UploadCloud, CheckCircle2, Trash2, ArrowRight } from 'lucide-react';
 
 interface DualDropzoneProps {
   sourceFile: File | null;
@@ -47,17 +36,6 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
-  const getTemplateIcon = (filename: string) => {
-    const ext = filename.split('.').pop()?.toLowerCase();
-    if (ext === 'xlsx' || ext === 'xls') {
-      return <FileSpreadsheet className="w-8 h-8 text-emerald-500" />;
-    }
-    if (ext === 'pptx' || ext === 'ppt') {
-      return <Presentation className="w-8 h-8 text-orange-500" />;
-    }
-    return <FileText className="w-8 h-8 text-indigo-500" />;
-  };
-
   const handleSourceDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setSourceDragActive(false);
@@ -66,7 +44,7 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
       if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
         onSetSourceFile(file);
       } else {
-        alert('Please upload a valid PDF document for the source content.');
+        alert('Please upload a valid PDF document.');
       }
     }
   };
@@ -88,23 +66,19 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
   const canProceed = sourceFile !== null && templateFile !== null && !isLoading;
 
   return (
-    <div className="w-full max-w-5xl mx-auto space-y-8 py-6">
-      {/* Header Info */}
-      <div className="text-center space-y-3">
-        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800">
-          <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-          <span>Step 1: Upload Documents</span>
-        </div>
-        <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-          Select Source PDF & Target Template
-        </h1>
-        <p className="text-slate-600 dark:text-slate-400 max-w-2xl mx-auto text-sm sm:text-base">
-          Upload your unstructured source document (contracts, reports, resumes) alongside your formatted template (.docx, .xlsx, .pptx).
+    <div className="w-full max-w-5xl mx-auto space-y-6 py-6">
+      {/* Header */}
+      <div className="space-y-1">
+        <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
+          Upload Documents
+        </h2>
+        <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-400">
+          Select a source PDF document containing extraction data and a destination template.
         </p>
       </div>
 
-      {/* Dual Upload Area */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* Dual Upload Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Card 1: Source PDF */}
         <div
           onDragOver={(e) => {
@@ -113,12 +87,10 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
           }}
           onDragLeave={() => setSourceDragActive(false)}
           onDrop={handleSourceDrop}
-          className={`relative rounded-2xl p-6 transition-all duration-200 flex flex-col justify-between border-2 ${
-            sourceFile
-              ? 'border-indigo-500/50 bg-indigo-50/20 dark:bg-indigo-950/20'
-              : sourceDragActive
-              ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/40 scale-[1.01]'
-              : 'border-dashed border-slate-300 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 hover:border-slate-400 dark:hover:border-slate-600'
+          className={`rounded border p-5 flex flex-col justify-between transition-colors ${
+            sourceDragActive
+              ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/30'
+              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
           }`}
         >
           <input
@@ -134,71 +106,59 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
           />
 
           <div>
-            {/* Header label */}
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5">
-                <FileText className="w-4 h-4" />
-                Input 1: Source Document
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 dark:border-slate-800">
+              <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                1. Source Document
               </span>
-              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                PDF (Up to 50MB)
-              </span>
+              <span className="font-mono text-[11px] text-slate-500">PDF, Max 50MB</span>
             </div>
 
             {sourceFile ? (
-              <div className="p-4 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 shadow-sm space-y-3">
+              <div className="p-3.5 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 space-y-2">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-red-100 dark:bg-red-950/80 flex items-center justify-center shrink-0">
-                      <FileText className="w-6 h-6 text-red-600 dark:text-red-400" />
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm text-slate-800 dark:text-slate-200 line-clamp-1">
-                        {sourceFile.name}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {formatFileSize(sourceFile.size)} • Source PDF
-                      </p>
-                    </div>
+                  <div>
+                    <p className="font-medium text-xs text-slate-900 dark:text-slate-100 line-clamp-1">
+                      {sourceFile.name}
+                    </p>
+                    <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      {formatFileSize(sourceFile.size)}
+                    </p>
                   </div>
                   <button
                     onClick={() => onSetSourceFile(null)}
                     aria-label="Remove source file"
-                    className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                    className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Ready for deep extraction & RAG indexing</span>
+                  <span>Ready for text and table extraction</span>
                 </div>
               </div>
             ) : (
               <div
                 onClick={() => sourceInputRef.current?.click()}
-                className="py-12 px-4 flex flex-col items-center justify-center text-center cursor-pointer group"
+                className="py-10 px-4 border border-dashed border-slate-300 dark:border-slate-700 rounded flex flex-col items-center justify-center text-center cursor-pointer hover:border-slate-400 dark:hover:border-slate-600"
               >
-                <div className="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 flex items-center justify-center text-indigo-600 dark:text-indigo-400 mb-4 group-hover:scale-110 transition-transform">
-                  <UploadCloud className="w-8 h-8" />
-                </div>
-                <p className="font-semibold text-sm text-slate-800 dark:text-slate-200 mb-1">
-                  Click to upload or drag & drop Source PDF
+                <UploadCloud className="w-6 h-6 text-slate-400 mb-2" />
+                <p className="font-medium text-xs text-slate-800 dark:text-slate-200">
+                  Click or drag source PDF here
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
-                  Contracts, reports, court decisions, bank statements, or CVs.
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Contracts, reports, court filings, financial sheets
                 </p>
               </div>
             )}
           </div>
 
-          <div className="pt-4 border-t border-slate-200/60 dark:border-slate-800/60 mt-4 flex items-center justify-between text-xs text-slate-500">
-            <span>Text, tables, and clauses supported</span>
-            <span className="font-mono text-[10px]">PyMuPDF + pdfplumber</span>
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 mt-4 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+            <span>Extractor: PyMuPDF + pdfplumber</span>
           </div>
         </div>
 
-        {/* Card 2: Template Document */}
+        {/* Card 2: Target Template */}
         <div
           onDragOver={(e) => {
             e.preventDefault();
@@ -206,12 +166,10 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
           }}
           onDragLeave={() => setTemplateDragActive(false)}
           onDrop={handleTemplateDrop}
-          className={`relative rounded-2xl p-6 transition-all duration-200 flex flex-col justify-between border-2 ${
-            templateFile
-              ? 'border-indigo-500/50 bg-indigo-50/20 dark:bg-indigo-950/20'
-              : templateDragActive
-              ? 'border-indigo-500 bg-indigo-50/40 dark:bg-indigo-950/40 scale-[1.01]'
-              : 'border-dashed border-slate-300 dark:border-slate-700 bg-white/70 dark:bg-slate-900/60 hover:border-slate-400 dark:hover:border-slate-600'
+          className={`rounded border p-5 flex flex-col justify-between transition-colors ${
+            templateDragActive
+              ? 'border-blue-600 bg-blue-50/50 dark:bg-blue-950/30'
+              : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900'
           }`}
         >
           <input
@@ -227,106 +185,80 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
           />
 
           <div>
-            {/* Header label */}
-            <div className="flex items-center justify-between mb-4">
-              <span className="text-xs font-bold uppercase tracking-wider text-cyan-600 dark:text-cyan-400 flex items-center gap-1.5">
-                <FileCheck2 className="w-4 h-4" />
-                Input 2: Target Template
+            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-100 dark:border-slate-800">
+              <span className="font-mono text-xs font-semibold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                2. Target Template
               </span>
-              <span className="text-[11px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                DOCX, XLSX, PPTX
-              </span>
+              <span className="font-mono text-[11px] text-slate-500">DOCX, XLSX, PPTX</span>
             </div>
 
             {templateFile ? (
-              <div className="p-4 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700 shadow-sm space-y-3">
+              <div className="p-3.5 rounded border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 space-y-2">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-cyan-100 dark:bg-cyan-950/80 flex items-center justify-center shrink-0">
-                      {getTemplateIcon(templateFile.name)}
-                    </div>
-                    <div>
-                      <p className="font-semibold text-sm text-slate-800 dark:text-slate-200 line-clamp-1">
-                        {templateFile.name}
-                      </p>
-                      <p className="text-xs text-slate-500 dark:text-slate-400 uppercase">
-                        {formatFileSize(templateFile.size)} • {templateFile.name.split('.').pop()}
-                      </p>
-                    </div>
+                  <div>
+                    <p className="font-medium text-xs text-slate-900 dark:text-slate-100 line-clamp-1">
+                      {templateFile.name}
+                    </p>
+                    <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 uppercase">
+                      {formatFileSize(templateFile.size)} ({templateFile.name.split('.').pop()})
+                    </p>
                   </div>
                   <button
                     onClick={() => onSetTemplateFile(null)}
                     aria-label="Remove template file"
-                    className="p-1.5 text-slate-400 hover:text-red-500 rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 transition-colors"
+                    className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
-                <div className="flex items-center gap-1.5 text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 dark:text-emerald-400 font-medium pt-1 border-t border-slate-200/60 dark:border-slate-700/60">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Template placeholders will be auto-detected</span>
+                  <span>Placeholders detected and ready for mapping</span>
                 </div>
               </div>
             ) : (
               <div
                 onClick={() => templateInputRef.current?.click()}
-                className="py-12 px-4 flex flex-col items-center justify-center text-center cursor-pointer group"
+                className="py-10 px-4 border border-dashed border-slate-300 dark:border-slate-700 rounded flex flex-col items-center justify-center text-center cursor-pointer hover:border-slate-400 dark:hover:border-slate-600"
               >
-                <div className="w-16 h-16 rounded-2xl bg-cyan-50 dark:bg-cyan-950/60 flex items-center justify-center text-cyan-600 dark:text-cyan-400 mb-4 group-hover:scale-110 transition-transform">
-                  <UploadCloud className="w-8 h-8" />
-                </div>
-                <p className="font-semibold text-sm text-slate-800 dark:text-slate-200 mb-1">
-                  Click to upload or drag & drop Template
+                <UploadCloud className="w-6 h-6 text-slate-400 mb-2" />
+                <p className="font-medium text-xs text-slate-800 dark:text-slate-200">
+                  Click or drag target template here
                 </p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
-                  Supports .docx, .xlsx spreadsheets, .pptx slides, or fillable PDF.
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  .docx documents, .xlsx sheets, or .pptx presentations
                 </p>
               </div>
             )}
           </div>
 
-          <div className="pt-4 border-t border-slate-200/60 dark:border-slate-800/60 mt-4 flex items-center justify-between text-xs text-slate-500">
-            <span>Preserves original styling & layout</span>
-            <span className="font-mono text-[10px]">Multi-format engine</span>
+          <div className="pt-3 border-t border-slate-100 dark:border-slate-800 mt-4 flex items-center justify-between text-[11px] text-slate-500 font-mono">
+            <span>Preserves original typography and cell borders</span>
           </div>
         </div>
       </div>
 
-      {/* Demo Preset Bar & Action CTA */}
-      <div className="p-4 rounded-2xl glass-panel shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={onLoadDemoFiles}
-            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900 border border-indigo-200 dark:border-indigo-800 transition-all cursor-pointer"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Load Demo Preset (Sample Contract & .docx Template)</span>
-          </button>
-          <span className="text-xs text-slate-500 hidden md:inline">
-            No sample files on hand? Try our preloaded demo instantly.
-          </span>
-        </div>
+      {/* Action Controls Bar */}
+      <div className="p-4 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <button
+          onClick={onLoadDemoFiles}
+          className="text-xs font-medium text-blue-700 dark:text-blue-400 hover:underline cursor-pointer"
+        >
+          Load Sample Contract and Template Pair
+        </button>
 
         <button
           disabled={!canProceed}
           onClick={onStartExtraction}
-          className={`w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold text-sm shadow-md transition-all cursor-pointer ${
+          className={`w-full sm:w-auto px-5 py-2.5 rounded font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer ${
             canProceed
-              ? 'bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white shadow-indigo-500/25 hover:scale-[1.02]'
-              : 'bg-slate-200 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed shadow-none'
+              ? 'bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-600 cursor-not-allowed border border-slate-200 dark:border-slate-700'
           }`}
         >
-          <span>Begin AI Extraction</span>
-          <ArrowRight className="w-4 h-4" />
+          <span>Begin Extraction</span>
+          <ArrowRight className="w-3.5 h-3.5" />
         </button>
-      </div>
-
-      {/* Privacy Guarantee Note */}
-      <div className="flex items-center justify-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-        <Info className="w-3.5 h-3.5 text-slate-400" />
-        <span>
-          Files are processed securely in memory and isolated sessions. No training on user data.
-        </span>
       </div>
     </div>
   );

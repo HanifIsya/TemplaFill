@@ -1,21 +1,23 @@
 import type { Metadata } from 'next';
-import { Inter, JetBrains_Mono } from 'next/font/google';
+import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google';
 import './globals.css';
 
-const inter = Inter({
+const ibmPlexSans = IBM_Plex_Sans({
   variable: '--font-sans',
   subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
 });
 
-const jetbrainsMono = JetBrains_Mono({
+const ibmPlexMono = IBM_Plex_Mono({
   variable: '--font-mono',
   subsets: ['latin'],
+  weight: ['400', '500', '600'],
 });
 
 export const metadata: Metadata = {
-  title: 'TemplaFill — Extract. Map. Fill.',
+  title: 'TemplaFill | Document Field Extraction & Template Population',
   description:
-    'AI-powered document automation. Extract structured data from complex PDFs and fill Word, Excel, and PowerPoint templates accurately.',
+    'Extract structured fields from source PDF documents and populate DOCX, XLSX, and PPTX templates using RAG and Gemini.',
 };
 
 export default function RootLayout({
@@ -24,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} h-full`}>
+    <html lang="en" className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full`}>
       <body className="min-h-full flex flex-col font-sans antialiased">{children}</body>
     </html>
   );
