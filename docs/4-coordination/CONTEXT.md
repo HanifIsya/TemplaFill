@@ -6,8 +6,8 @@
 
 ## Last Updated
 - **Date**: 2026-09-23
-- **By**: Antigravity
-- **Summary**: All 24 foundation documents created. Git repository initialized and pushed. Ready for development.
+- **By**: OpenCode
+- **Summary**: Task 0.3 done — FastAPI backend scaffold created on branch feat/oc-backend-scaffold (app/main.py with CORS + /api/health, core/config.py via pydantic-settings, API stubs, services skeleton, requirements.txt/pyproject.toml, 8 passing pytest tests). Proceeding to Phase 1 (Task 1.1 & 1.2 — PDF extraction).
 
 ---
 
@@ -30,19 +30,19 @@ The foundation documentation phase is 100% complete. Both agents can now claim t
 - [x] `docs/6-security/*` — SECURITY, DATA_PRIVACY
 - [x] `docs/7-operations/*` — SETUP, DEPLOYMENT, DECISIONS
 - [ ] `frontend/` — Next.js app scaffold (Antigravity - Task 0.4)
-- [ ] `backend/` — FastAPI backend scaffold (OpenCode - Task 0.3)
+- [x] `backend/` — FastAPI backend scaffold (OpenCode - Task 0.3) ✅ branch feat/oc-backend-scaffold
 - [ ] `eval/` — Evaluation suite (OpenCode)
 
 ### What's Being Worked On Right Now
 | Agent | Task | Files | Started |
 |-------|------|-------|---------|
-| Antigravity | Providing kick-off prompts; ready for Task 0.4 (Frontend scaffold) | `frontend/` | 2026-09-23 |
-| OpenCode | Ready for Task 0.3 (Backend scaffold) & Task 1.1 (PDF extraction) | `backend/` | — |
+| Antigravity | Task 0.4: Next.js Frontend Scaffold with Design System | `frontend/` | 2026-09-23 |
+| OpenCode | Task 1.1 & 1.2: PDF text & table extraction services | `backend/app/services/extraction/` | 2026-09-23 |
 
 ### What's Next
-1. OpenCode: Branch `feat/oc-backend-scaffold`, set up FastAPI backend structure (`requirements.txt`, `pyproject.toml`, `app/main.py`), verify tests, commit & push.
+1. ✅ OpenCode Task 0.3 done — scaffold verified (8/8 pytest green), pushed to `feat/oc-backend-scaffold`.
 2. Antigravity: Branch `feat/ag-frontend-scaffold`, set up Next.js 14+ frontend structure per `DESIGN_SYSTEM.md`, mock API client, verify build, commit & push.
-3. OpenCode: Proceed to Phase 1 (PDF text & table extraction pipeline with Gemini structured output).
+3. OpenCode Phase 1: Implement PDF extraction pipeline — text extraction (PyMuPDF, Task 1.1) + table extraction (pdfplumber, Task 1.2) with unit tests.
 
 ---
 
@@ -86,3 +86,4 @@ _No known issues._
 | Date | Agent | Summary |
 |------|-------|---------|
 | 2026-09-23 | Antigravity | Project kickoff. Created AGENTS.md, CHANGELOG.md, and all coordination docs. Creating remaining 17 documentation files. |
+| 2026-09-23 | OpenCode | Task 0.3 scaffold complete: FastAPI app with CORS + GET /api/health, pydantic-settings config, API stubs (upload/jobs), services skeleton, requirements.txt/pyproject.toml, 8 pytest tests passing. Branch feat/oc-backend-scaffold. |
