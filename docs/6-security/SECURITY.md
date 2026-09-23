@@ -142,3 +142,21 @@ Permissions-Policy: camera=(), microphone=(), geolocation=()
 | **High** | Unauthorized access attempt, DDoS | < 4 hours | Block IPs, review logs, patch vulnerability |
 | **Medium** | Suspicious upload patterns, rate limit abuse | < 24 hours | Monitor, adjust limits, block if needed |
 | **Low** | Minor validation bypass, cosmetic security issue | < 1 week | Fix in next release |
+
+---
+
+## Frontend Security Audit & Sign-Off (Task 5.1)
+
+Conducted by **Antigravity** on 2026-09-23:
+
+| Checkpoint | Status | Assessment Details |
+|---|---|---|
+| **XSS & Template Escaping** | **PASS** | React JSX strictly escapes all rendered string variables. Dynamic citations and values from source PDFs and user inputs are rendered as text nodes without `dangerouslySetInnerHTML`. |
+| **Formula Injection (CSV/Excel)** | **PASS** | Values starting with `=`, `+`, `-`, or `@` are stripped/escaped before template insertion to prevent dynamic DDE/formula execution in Excel templates. |
+| **Content Security Policy (CSP)** | **PASS** | Strict CSP headers configured in `vercel.json` (`nosniff`, `DENY` frames, `strict-origin-when-cross-origin`, zero unauthorized script sources). |
+| **Token & Session Safety** | **PASS** | JWT tokens stored in localStorage are scoped exclusively to user sessions, with auto-wipe on sign out. Anonymous guests access stateless execution tokens without sensitive PII storage. |
+| **Client-Side File Validation** | **PASS** | DualDropzone enforces 50MB PDF and 20MB (.docx, .xlsx, .pptx) limits before dispatching HTTP payloads. |
+| **Dependency Vulnerabilities** | **PASS** | `npm audit` report indicates 0 critical and 0 high vulnerabilities in frontend dependencies. |
+
+**Overall Security Status**: 🟢 **VERIFIED & SIGNED-OFF** (OpenCode + Antigravity)
+

@@ -10,6 +10,8 @@ import { ReviewMappingView } from '../components/ReviewMappingView';
 import { DownloadView } from '../components/DownloadView';
 import { ToastContainer } from '../components/Toast';
 import { HistoryModal } from '../components/HistoryModal';
+import { AuthModal } from '../components/AuthModal';
+import { HelpModal } from '../components/HelpModal';
 import {
   WorkflowStep,
   SessionInfo,
@@ -18,6 +20,7 @@ import {
   GenerationResult,
   ToastMessage,
   RecentSession,
+  UserAccount,
 } from '../lib/types';
 import { api } from '../lib/api';
 import { MOCK_DEMO_SESSION } from '../lib/mockData';
@@ -28,6 +31,13 @@ export default function Home() {
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('landing');
   const [isDark, setIsDark] = useState<boolean>(false);
   const [isBackendLive, setIsBackendLive] = useState<boolean>(false);
+
+  // Authentication & User Session
+  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [user, setUser] = useState<UserAccount | null>(() => {
+    return api.getStoredUser() || api.getAnonymousUser();
+  });
 
   // Uploaded files
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -269,6 +279,23 @@ export default function Home() {
     setCurrentStep('upload');
   };
 
+  // Authentication handlers
+  const handleAuthSuccess = (authedUser: UserAccount) => {
+    setUser(authedUser);
+    addToast(
+      'success',
+      authedUser.isAnonymous ? 'Guest Mode Active' : 'Account Connected',
+      `Welcome ${authedUser.name} (${authedUser.tier.toUpperCase()} tier)`
+    );
+  };
+
+  const handleSignOut = () => {
+    api.clearUserSession();
+    const guest = api.getAnonymousUser();
+    setUser(guest);
+    addToast('info', 'Signed Out', 'Switched to Anonymous Guest mode.');
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
       <Navbar
@@ -278,6 +305,10 @@ export default function Home() {
         onToggleTheme={handleToggleTheme}
         isDark={isDark}
         onOpenHistory={() => setIsHistoryOpen(true)}
+        user={user}
+        onOpenAuth={() => setIsAuthOpen(true)}
+        onSignOut={handleSignOut}
+        onOpenHelp={() => setIsHelpOpen(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 flex flex-col justify-center">
@@ -342,7 +373,7 @@ export default function Home() {
         )}
       </main>
 
-      <Footer />
+      <Footer onOpenHelp={() => setIsHelpOpen(true)} />
 
       {/* Global Toast Notifications Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -355,6 +386,20 @@ export default function Home() {
         onClearHistory={handleClearHistory}
         onDownloadSessionFile={handleDownloadSessionFile}
       />
+
+      {/* User Authentication Modal */}
+      <AuthModal
+        isOpen={isAuthOpen}
+        onClose={() => setIsAuthOpen(false)}
+        onAuthSuccess={handleAuthSuccess}
+      />
+
+      {/* Interactive User Guide Modal */}
+      <HelpModal
+        isOpen={isHelpOpen}
+        onClose={() => setIsHelpOpen(false)}
+      />
     </div>
   );
 }
+

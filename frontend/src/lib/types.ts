@@ -87,4 +87,25 @@ export interface RecentSession {
   downloadFilename: string;
 }
 
+export interface UserAccount {
+  id: string;
+  email: string;
+  name: string;
+  tier: 'free' | 'pro' | 'enterprise';
+  remainingFills: number; // e.g. 3 for free anonymous, unlimited for registered
+  isAnonymous: boolean;
+  createdAt: string;
+}
+
+export interface AuthTokens {
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn: number;
+}
+
+export interface AuthResponse {
+  user: UserAccount;
+  tokens: AuthTokens;
+}
+
 export type WorkflowStep = 'landing' | 'upload' | 'processing' | 'review' | 'download';

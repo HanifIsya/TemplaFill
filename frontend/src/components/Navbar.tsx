@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { Sun, Moon, History } from 'lucide-react';
-import { WorkflowStep } from '../lib/types';
+import { Sun, Moon, History, BookOpen, LogIn, LogOut, User as UserIcon } from 'lucide-react';
+import { WorkflowStep, UserAccount } from '../lib/types';
 
 interface NavbarProps {
   currentStep: WorkflowStep;
@@ -11,6 +11,10 @@ interface NavbarProps {
   onToggleTheme: () => void;
   isDark: boolean;
   onOpenHistory?: () => void;
+  user?: UserAccount | null;
+  onOpenAuth?: () => void;
+  onSignOut?: () => void;
+  onOpenHelp?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -20,6 +24,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onToggleTheme,
   isDark,
   onOpenHistory,
+  user,
+  onOpenAuth,
+  onSignOut,
+  onOpenHelp,
 }) => {
   const steps: { key: WorkflowStep; label: string; num: number }[] = [
     { key: 'upload', label: 'Upload', num: 1 },
@@ -98,6 +106,19 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span>{isBackendLive ? 'API LIVE' : 'DEV SIMULATION'}</span>
           </div>
 
+          {/* User Guide / Help Button */}
+          {onOpenHelp && (
+            <button
+              onClick={onOpenHelp}
+              aria-label="User Guide"
+              title="User Guide & Documentation"
+              className="flex items-center gap-1 px-2 py-1 rounded border border-slate-200 dark:border-slate-800 text-xs font-mono text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+              <span className="hidden md:inline">Guide</span>
+            </button>
+          )}
+
           {/* History Button */}
           {onOpenHistory && (
             <button
@@ -108,6 +129,44 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <History className="w-4 h-4" />
             </button>
+          )}
+
+          {/* User Account State */}
+          {user && !user.isAnonymous ? (
+            <div className="flex items-center gap-1.5 pl-1">
+              <div
+                className="flex items-center gap-1.5 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-mono text-slate-900 dark:text-slate-100"
+                title={`Signed in as ${user.email}`}
+              >
+                <div className="w-4 h-4 rounded-full bg-indigo-600 text-white flex items-center justify-center text-[10px] font-bold">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="hidden lg:inline max-w-[100px] truncate">{user.name}</span>
+                <span className="text-[10px] px-1 py-0.2 bg-indigo-950 text-indigo-300 border border-indigo-800 rounded font-semibold uppercase">
+                  {user.tier}
+                </span>
+              </div>
+              {onSignOut && (
+                <button
+                  onClick={onSignOut}
+                  aria-label="Sign Out"
+                  title="Sign Out"
+                  className="p-1.5 rounded border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            onOpenAuth && (
+              <button
+                onClick={onOpenAuth}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-mono font-medium transition-colors cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span>Sign In</span>
+              </button>
+            )
           )}
 
           {/* Theme Toggle */}

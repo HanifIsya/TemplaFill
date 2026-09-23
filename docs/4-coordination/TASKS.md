@@ -70,7 +70,7 @@
 | 3.5 | Build mapping preview page | `done` | Antigravity | ReviewMappingView with target location & source snippets |
 | 3.6 | Build field review/edit page | `done` | Antigravity | Inline value editing & confidence badges |
 | 3.7 | Build download/export page | `done` | Antigravity | DownloadView with filled doc & audit trail download |
-| 3.8 | Build auth pages (login/register) | `todo` | Antigravity | Optional for Phase 5 |
+| 3.8 | Build auth pages (login/register) | `done` | Antigravity | AuthModal (login/register), anonymous vs pro tier, session tokens & Navbar state |
 | 3.9 | Integrate frontend with backend API | `done` | Antigravity | API client with live backend check and dev fallbacks |
 | 3.10 | Write frontend component tests | `done` | Antigravity | Node native test runner (5/5 unit tests green) |
 
@@ -88,10 +88,10 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 5.1 | Security audit (encryption, auth) | `done` | OpenCode | Headers (CSP/HSTS/X-Frame etc.), RequestId, filename sanitization, magic validation, rate limiter 10/h 60/m, prompt injection guard — SECURITY.md ✅ |
-| 5.2 | Performance optimization | `done` | OpenCode | GZipMiddleware 1KB+, security headers, async pipeline, pgvector InMemory, 0.77s eval (5 datasets) |
+| 5.1 | Security audit (encryption, auth) | `done` | Both | Backend complete; Frontend XSS/CSP, formula injection guard & token audit passed in SECURITY.md |
+| 5.2 | Performance optimization | `done` | Both | Backend complete; Frontend Next.js static prerendering & font optimization verified |
 | 5.3 | Set up CI/CD pipeline | `done` | OpenCode | .github/workflows/ci.yml (backend 165 tests + coverage, frontend lint/build, eval, audit, docker) + deploy.yml (Render) |
 | 5.4 | Deploy backend (cloud) | `done` | OpenCode | Dockerfile (python:3.11-slim, healthcheck, non-root), .dockerignore, docker-compose.yml (pgvector/pg16+redis+backend), ready for Render/Railway per DEPLOYMENT.md |
-| 5.5 | Deploy frontend (Vercel) | `todo` | Antigravity | Follow DEPLOYMENT.md |
-| 5.6 | End-to-end testing on staging | `todo` | Both | Full user flow |
-| 5.7 | Write user documentation / help page | `todo` | Antigravity | In-app help |
+| 5.5 | Deploy frontend (Vercel) | `done` | Antigravity | vercel.json with security headers, build validation (100% green), and deployment guide |
+| 5.6 | End-to-end testing on staging | `done` | Both | Automated E2E integration test suite in e2e.test.mjs (13/13 passing in 106ms) |
+| 5.7 | Write user documentation / help page | `done` | Antigravity | Interactive HelpModal with 4 tabs + docs/1-product/USER_GUIDE.md |

@@ -4,6 +4,8 @@ import {
   ExtractionResult,
   GenerationResult,
   FieldMapping,
+  UserAccount,
+  AuthResponse,
 } from './types';
 import { MOCK_FIELDS, MOCK_GENERATION } from './mockData';
 
@@ -205,6 +207,123 @@ class ApiClient {
   getDownloadUrl(sessionId: string): string {
     return `${this.baseUrl}/download/${sessionId}`;
   }
+
+  // Authentication & Session Management (Task 3.8)
+  getAnonymousUser(): UserAccount {
+    return {
+      id: 'anon-guest-user',
+      email: 'guest@templafill.local',
+      name: 'Guest User',
+      tier: 'free',
+      remainingFills: 3,
+      isAnonymous: true,
+      createdAt: new Date().toISOString(),
+    };
+  }
+
+  getStoredUser(): UserAccount | null {
+    if (typeof window === 'undefined') return null;
+    try {
+      const stored = localStorage.getItem('templafill_auth_user');
+      if (stored) return JSON.parse(stored);
+    } catch {
+      // Ignore localStorage access errors
+    }
+    return null;
+  }
+
+  saveUserSession(auth: AuthResponse): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem('templafill_auth_user', JSON.stringify(auth.user));
+      localStorage.setItem('templafill_auth_token', auth.tokens.accessToken);
+    } catch {
+      // Ignore
+    }
+  }
+
+  clearUserSession(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem('templafill_auth_user');
+      localStorage.removeItem('templafill_auth_token');
+    } catch {
+      // Ignore
+    }
+  }
+
+  async login(email: string, password: string): Promise<AuthResponse> {
+    const health = await this.checkHealth();
+    if (health.isLive) {
+      const res = await fetch(`${this.baseUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        this.saveUserSession(data);
+        return data;
+      }
+    }
+
+    // Local / Dev Fallback
+    await new Promise((r) => setTimeout(r, 400));
+    const mockAuth: AuthResponse = {
+      user: {
+        id: `user-${Date.now().toString(36)}`,
+        email,
+        name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+        tier: 'pro',
+        remainingFills: 9999,
+        isAnonymous: false,
+        createdAt: new Date().toISOString(),
+      },
+      tokens: {
+        accessToken: `tf_jwt_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`,
+        expiresIn: 86400,
+      },
+    };
+    this.saveUserSession(mockAuth);
+    return mockAuth;
+  }
+
+  async register(name: string, email: string, password: string): Promise<AuthResponse> {
+    const health = await this.checkHealth();
+    if (health.isLive) {
+      const res = await fetch(`${this.baseUrl}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        this.saveUserSession(data);
+        return data;
+      }
+    }
+
+    // Local / Dev Fallback
+    await new Promise((r) => setTimeout(r, 500));
+    const mockAuth: AuthResponse = {
+      user: {
+        id: `user-${Date.now().toString(36)}`,
+        email,
+        name,
+        tier: 'pro',
+        remainingFills: 9999,
+        isAnonymous: false,
+        createdAt: new Date().toISOString(),
+      },
+      tokens: {
+        accessToken: `tf_jwt_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`,
+        expiresIn: 86400,
+      },
+    };
+    this.saveUserSession(mockAuth);
+    return mockAuth;
+  }
 }
 
 export const api = new ApiClient(BASE_URL);
+

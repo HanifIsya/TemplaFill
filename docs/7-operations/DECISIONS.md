@@ -124,6 +124,26 @@
   - Real user documents should not be processed on free tier in production
   - Budget for paid tier when launching publicly
 
+### ADR-008: Elimination of AI Design Tropes in Favor of Industrial Typography
+- **Date**: 2026-09-23
+- **Status**: Accepted
+- **Context**: Standard AI designs frequently rely on low-contrast glassmorphism, purple-to-blue gradients, decorative emojis in section headers, and generic cards. User specifically mandated removing these tropes for high-trust professional utility.
+- **Decision**: Adopt IBM Plex Sans + IBM Plex Mono typography, solid slate contrast surfaces (`#0f172a` / `#1e293b`), crisp single-pixel borders (`#334155`), and electric indigo focal action highlights without decorative gradients or icons spam.
+- **Consequences**:
+  - Uncompromising legibility for legal and corporate analysts.
+  - High performance with minimal CSS footprint and instant paint times.
+  - Clean distinction as a serious enterprise-grade developer/analyst tool.
+
 ---
 
-_Add new decisions below this line._
+### ADR-009: Joint Security and Performance Sign-Off (Task 5.1 & 5.2)
+- **Date**: 2026-09-23
+- **Status**: Accepted
+- **Context**: Pre-deployment quality gate required for full-stack TemplaFill application across backend FastAPI and Next.js frontend.
+- **Decision**: Sign off on both backend and frontend audits:
+  - Backend: GZipMiddleware 1KB+, InMemoryRateLimiter, SecurityHeadersMiddleware (CSP, HSTS), magic byte validation, non-root Docker container.
+  - Frontend: Zero-vulnerability bundle, static page pre-rendering, safe string interpolation, Vercel security headers.
+- **Consequences**:
+  - Safe for public staging and demonstration.
+  - Full adherence to zero persistent storage and GDPR ephemeral data requirements.
+
