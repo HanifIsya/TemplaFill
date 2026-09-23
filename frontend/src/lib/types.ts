@@ -60,6 +60,9 @@ export interface ExtractionResult {
   lowConfidenceCount: number;
   averageConfidence: number;
   fields: FieldMapping[];
+  hasAiError?: boolean;
+  aiErrorMessage?: string;
+  engineUsed?: 'gemini' | 'heuristic' | 'mock';
 }
 
 export interface GenerationResult {

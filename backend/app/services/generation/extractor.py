@@ -201,12 +201,31 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
 
         # Live Gemini call
         prompt = self._build_prompt(field_name, field_description, chunks)
+        response: Optional[str] = None
         try:
-            # Use structured output if available; fallback to text + json parse
-            # google-genai: client.models.generate_content with response_schema
-            # For compatibility, we try simple generate and parse JSON
             response = await self._call_gemini(prompt)
-            data = self._parse_json_response(response)
+        except Exception as e:
+            err_str = str(e).lower()
+            # If 404 NotFound on gemini-2.0-flash, automatically fallback to universal gemini-1.5-flash
+            if ("404" in err_str or "not found" in err_str) and "2.0" in self.model:
+                try:
+                    self.model = "gemini-1.5-flash"
+                    response = await self._call_gemini(prompt)
+                except Exception as e2:
+                    res = self._fake.extract(field_name, chunks, field_description)
+                    if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
+                        res.source_page = source_pages[res.source_page - 1]
+                    res.source_text = f"[AI_ERROR: {str(e2)[:120]}] {res.source_text or ''}"
+                    return res
+            else:
+                res = self._fake.extract(field_name, chunks, field_description)
+                if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
+                    res.source_page = source_pages[res.source_page - 1]
+                res.source_text = f"[AI_ERROR: {str(e)[:120]}] {res.source_text or ''}"
+                return res
+
+        try:
+            data = self._parse_json_response(response or "")
             value = data.get("value")
             # Normalize empty string to None
             if isinstance(value, str) and not value.strip():
@@ -226,8 +245,7 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
                 source_text=source_text[:500] if isinstance(source_text, str) else None,
                 status=status,
             )
-        except Exception:  # noqa: BLE001
-            # Fallback to deterministic FakeExtractor on Gemini API error, rate limit (429), or network issue
+        except Exception:
             res = self._fake.extract(field_name, chunks, field_description)
             if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]

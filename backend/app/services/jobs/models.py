@@ -104,10 +104,13 @@ class Job(BaseModel):
     def to_results_dict(self) -> Dict[str, Any]:
         fields_found = sum(1 for f in self.field_results if f.status == "extracted" and f.extracted_value is not None)
         fields_not_found = len(self.field_results) - fields_found
+        has_ai_error = any("AI_ERROR" in (f.source_reference.snippet or "") for f in self.field_results if f.source_reference)
         return {
             "job_id": self.job_id,
             "overall_confidence": round(self.overall_confidence, 2),
             "fields_found": fields_found,
             "fields_not_found": fields_not_found,
+            "has_ai_error": has_ai_error,
+            "engine_used": "heuristic" if has_ai_error else "gemini",
             "fields": [f.model_dump() for f in self.field_results],
         }

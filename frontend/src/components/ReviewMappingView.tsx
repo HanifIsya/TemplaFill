@@ -10,6 +10,7 @@ import {
   List,
   Columns,
   CheckCheck,
+  AlertTriangle,
 } from 'lucide-react';
 import { FieldMapping, ExtractionResult } from '../lib/types';
 import { CitationModal } from './CitationModal';
@@ -214,6 +215,26 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Gemini AI Error / Quota Notice Banner */}
+      {extractionResult.hasAiError && (
+        <div className="p-3.5 rounded border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
+          <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold text-xs text-amber-800 dark:text-amber-300">
+                Pemberitahuan Gemini API: Layanan AI Mengalami Kendala (404 NotFound / 429 Quota Limit)
+              </span>
+              <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-amber-400 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200">
+                Heuristic Engine Active
+              </span>
+            </div>
+            <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
+              Request ke Google AI Studio mengembalikan kode error <strong>404 NotFound</strong> (model name) atau <strong>429 RateLimit</strong>. Sistem secara transparan beralih ke <strong>Mesin Ekstraksi Heuristik Lokal</strong> agar proses ekstraksi dokumen Anda tidak gagal. Anda dapat meninjau, mengedit, atau mengkonfirmasi field di bawah ini sebelum mengekspor.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Control Bar: Search, Filters, View Modes, Add Field */}
       <div className="p-3 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 space-y-3">

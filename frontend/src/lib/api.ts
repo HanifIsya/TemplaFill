@@ -296,6 +296,15 @@ class ApiClient {
             const low = fields.filter((f) => f.confidence < 0.5).length;
             const avg = fields.reduce((acc, f) => acc + f.confidence, 0) / fields.length;
 
+            const hasAiError = Boolean(
+              data.has_ai_error ||
+              rawFields.some((f: any) =>
+                f.source_reference?.snippet?.includes('AI_ERROR') ||
+                f.source_reference?.snippet?.includes('404') ||
+                f.source_reference?.snippet?.includes('429')
+              )
+            );
+
             return {
               sessionId,
               totalFields: fields.length,
@@ -304,6 +313,11 @@ class ApiClient {
               lowConfidenceCount: low,
               averageConfidence: avg,
               fields,
+              hasAiError,
+              aiErrorMessage: hasAiError
+                ? 'Gemini API Error / Quota Limit (404/429). Mesin ekstraksi otomatis beralih ke Mesin Heuristik Lokal.'
+                : undefined,
+              engineUsed: hasAiError ? 'heuristic' : 'gemini',
             };
           }
         }

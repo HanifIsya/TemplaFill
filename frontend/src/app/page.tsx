@@ -259,11 +259,19 @@ export default function Home() {
             setExtractionResult(result);
             setIsProcessing(false);
             setCurrentStep('review');
-            addToast(
-              'success',
-              'Extraction Complete',
-              `Found ${result.totalFields} fields with ${result.highConfidenceCount} high confidence.`
-            );
+            if (result.hasAiError) {
+              addToast(
+                'warning',
+                'Gemini AI Limit / Error',
+                result.aiErrorMessage || 'Google AI Studio merespons dengan kendala kuota / 404. Sistem otomatis menggunakan Ekstraksi Heuristik Lokal.'
+              );
+            } else {
+              addToast(
+                'success',
+                'Extraction Complete',
+                `Found ${result.totalFields} fields with ${result.highConfidenceCount} high confidence.`
+              );
+            }
           } else if (updated.status === 'failed') {
             clearInterval(interval);
             throw new Error(updated.errorMessage || 'Job failed during backend processing');
