@@ -27,6 +27,6 @@ services:
       - key: UPLOAD_DIR
         value: /tmp/uploads
       - key: GEMINI_MODEL
-        value: gemini-2.0-flash
+        value: gemini-3.7-flash
       - key: GEMINI_EMBEDDING_MODEL
         value: text-embedding-004

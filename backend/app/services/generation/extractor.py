@@ -149,6 +149,9 @@ class GeminiExtractor:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
         self.model = model if model is not None else settings.gemini_model
+        # Sanitize deprecated / inactive models that return 404 in Google AI Studio
+        if self.model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"):
+            self.model = "gemini-3.7-flash"
         if use_fake is not None:
             self.use_fake = use_fake
         else:
@@ -199,30 +202,37 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
                 res.source_page = source_pages[res.source_page - 1]
             return res
 
-        # Live Gemini call
+        # Live Gemini call with candidate model progression (Gemini 3.7 Flash & 3.8 Flash)
         prompt = self._build_prompt(field_name, field_description, chunks)
         response: Optional[str] = None
-        try:
-            response = await self._call_gemini(prompt)
-        except Exception as e:
-            err_str = str(e).lower()
-            # If 404 NotFound on gemini-2.0-flash, automatically fallback to universal gemini-1.5-flash
-            if ("404" in err_str or "not found" in err_str) and "2.0" in self.model:
-                try:
-                    self.model = "gemini-1.5-flash"
-                    response = await self._call_gemini(prompt)
-                except Exception as e2:
-                    res = self._fake.extract(field_name, chunks, field_description)
-                    if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
-                        res.source_page = source_pages[res.source_page - 1]
-                    res.source_text = f"[AI_ERROR: {str(e2)[:120]}] {res.source_text or ''}"
-                    return res
-            else:
-                res = self._fake.extract(field_name, chunks, field_description)
-                if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
-                    res.source_page = source_pages[res.source_page - 1]
-                res.source_text = f"[AI_ERROR: {str(e)[:120]}] {res.source_text or ''}"
-                return res
+
+        candidate_models: list[str] = []
+        for m in [self.model, "gemini-3.7-flash", "gemini-3.8-flash"]:
+            if m and m not in candidate_models and m not in ("gemini-2.0-flash", "gemini-1.5-flash"):
+                candidate_models.append(m)
+
+        last_error: Optional[Exception] = None
+        for candidate in candidate_models:
+            try:
+                self.model = candidate
+                response = await self._call_gemini(prompt)
+                if response:
+                    break
+            except Exception as e:
+                last_error = e
+                err_str = str(e).lower()
+                # On 404 NotFound, continue to next candidate model
+                if "404" in err_str or "not found" in err_str:
+                    continue
+                # For rate limit (429) or other errors, break and use heuristic fallback
+                break
+
+        if not response:
+            res = self._fake.extract(field_name, chunks, field_description)
+            if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
+                res.source_page = source_pages[res.source_page - 1]
+            res.source_text = f"[AI_ERROR: {str(last_error)[:120]}] {res.source_text or ''}"
+            return res
 
         try:
             data = self._parse_json_response(response or "")

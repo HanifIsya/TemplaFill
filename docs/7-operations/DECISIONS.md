@@ -164,3 +164,18 @@
   - UptimeRobot 5-min `GET /api/health` ping optional to keep warm (12 req/hour < quota, 720 req/month).
   - If traffic grows beyond free 750h or 15-min sleep becomes UX issue, upgrade to Render Starter $7 (always-on) — single config change, no code.
 
+---
+
+### ADR-011: Migrate Primary Extraction Model to Gemini 3.7 Flash with 3.8 Fallback
+- **Date**: 2026-09-23
+- **Status**: Accepted
+- **Context**: Google AI Studio accounts on current GA expose `Gemini 3.7 Flash` and `Gemini 3.8 Flash`. Prior configuration targeting `gemini-2.0-flash` and `gemini-1.5-flash` caused 404 NotFound errors on extraction requests, leading to rate counter spikes and extraction failures.
+- **Decision**: 
+  1. Set `gemini-3.7-flash` as the default model across `backend/app/core/config.py`, `render.yaml`, and `.env.example`.
+  2. Implement candidate model progression in `extractor.py`: try `gemini-3.7-flash`, fall back to `gemini-3.8-flash` on 404, and auto-sanitize legacy model identifiers.
+  3. Fall back to heuristic extraction with transparent UI notice banner (Amber alert) and toast message when AI API quota/limits are reached instead of silently redirecting.
+- **Consequences**:
+  - Eliminates 404 NotFound errors from Google AI Studio.
+  - Extraction requests align with active models in the user's Google AI Studio project.
+  - Transparent user experience when API limits or network errors occur.
+
