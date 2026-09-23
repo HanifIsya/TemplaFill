@@ -20,11 +20,11 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 0.1 | Create all project documentation (23 files) | `in_progress` | Antigravity | Foundation docs |
-| 0.2 | Initialize git repository | `todo` | OpenCode | `git init`, `.gitignore` |
+| 0.1 | Create all project documentation (23 files) | `done` | Antigravity | Foundation docs complete |
+| 0.2 | Initialize git repository | `done` | User/OpenCode | `git init`, `.gitignore` set up |
 | 0.3 | Set up Python backend project structure | `todo` | OpenCode | FastAPI scaffold, `pyproject.toml` |
-| 0.4 | Set up Next.js frontend project structure | `todo` | Antigravity | After docs complete |
-| 0.5 | Create `.env.example` with all required vars | `todo` | Both | Coordinate via CONTEXT.md |
+| 0.4 | Set up Next.js frontend project structure | `todo` | Antigravity | Ready to start |
+| 0.5 | Create `.env.example` with all required vars | `done` | Antigravity | Created at project root |
 
 ## Phase 1: Core Backend Pipeline (OpenCode)
 
