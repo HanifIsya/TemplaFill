@@ -6,16 +6,16 @@
 
 ## Last Updated
 - **Date**: 2026-09-23
-- **By**: Antigravity
-- **Summary**: All 24 foundation documents created. Git repository initialized and pushed. Ready for development.
+- **By**: OpenCode
+- **Summary**: Phase 1 pipeline complete — Tasks 1.3-1.14 done on feat/oc-backend-scaffold: chunker (recursive 800/100 + metadata), vector_store (InMemory+PgVector stub), embedder (text-embedding-004 768d, fake fallback), retriever (top-K cosine), extractor (Gemini JSON + Fake), parser (docx/xlsx/pptx 5 placeholder patterns), mapper (exact/fuzzy/synonym), generator (preserve formatting). 140 pytest green (was 45) across 8 test suites. Ready for Phase 2 API layer.
 
 ---
 
 ## Current Project State
 
-### Overall Status: 🟢 Phase 0 Setup & Ready for Development
+### Overall Status: 🟢 Phase 1 Complete — Core Backend Pipeline ✅
 
-The foundation documentation phase is 100% complete. Both agents can now claim their respective Phase 0 and Phase 1/3 tasks.
+Phase 0 & Phase 1 (Tasks 0.3, 1.1-1.14) done. 140 tests green. Proceeding to Phase 2 API layer (file upload, jobs, mapping preview, generation).
 
 ### What Exists
 - [x] `AGENTS.md` — Agent coordination contract (root)
@@ -29,20 +29,21 @@ The foundation documentation phase is 100% complete. Both agents can now claim t
 - [x] `docs/5-quality/*` — EVAL, FEEDBACK_LOOP, TESTING
 - [x] `docs/6-security/*` — SECURITY, DATA_PRIVACY
 - [x] `docs/7-operations/*` — SETUP, DEPLOYMENT, DECISIONS
-- [ ] `frontend/` — Next.js app scaffold (Antigravity - Task 0.4)
-- [ ] `backend/` — FastAPI backend scaffold (OpenCode - Task 0.3)
+- [x] `frontend/` — Next.js 14+ App with Design System, Dual Dropzone, Processing, Review, and Download UI ✅ branch feat/ag-frontend-scaffold
+- [x] `backend/` — FastAPI backend scaffold (OpenCode - Task 0.3) ✅ branch feat/oc-backend-scaffold
 - [ ] `eval/` — Evaluation suite (OpenCode)
 
 ### What's Being Worked On Right Now
 | Agent | Task | Files | Started |
 |-------|------|-------|---------|
-| Antigravity | Providing kick-off prompts; ready for Task 0.4 (Frontend scaffold) | `frontend/` | 2026-09-23 |
-| OpenCode | Ready for Task 0.3 (Backend scaffold) & Task 1.1 (PDF extraction) | `backend/` | — |
+| Antigravity | Phase 3 Completed: Frontend scaffold & UI views verified (lint/build 100% green, pushed) | `frontend/` | 2026-09-23 |
+| OpenCode | Phase 2: API layer (upload, jobs, mapping, generation endpoints) | `backend/app/api/` | 2026-09-23 |
 
 ### What's Next
-1. OpenCode: Branch `feat/oc-backend-scaffold`, set up FastAPI backend structure (`requirements.txt`, `pyproject.toml`, `app/main.py`), verify tests, commit & push.
-2. Antigravity: Branch `feat/ag-frontend-scaffold`, set up Next.js 14+ frontend structure per `DESIGN_SYSTEM.md`, mock API client, verify build, commit & push.
-3. OpenCode: Proceed to Phase 1 (PDF text & table extraction pipeline with Gemini structured output).
+1. ✅ OpenCode Phase 1 done — 140/140 tests green, pushed to `feat/oc-backend-scaffold`.
+2. ✅ Antigravity Phase 0 & Phase 3 (Tasks 3.1-3.7, 3.9) done — Lint & Turbopack build 100% green, pushed to `feat/ag-frontend-scaffold`.
+3. OpenCode proceeding with Phase 2 API (endpoints matching `API.md`).
+4. Once OpenCode merges Phase 2 API into `develop` or `main`, Antigravity will run end-to-end integration tests between Frontend and Backend API!
 
 ---
 
@@ -86,3 +87,6 @@ _No known issues._
 | Date | Agent | Summary |
 |------|-------|---------|
 | 2026-09-23 | Antigravity | Project kickoff. Created AGENTS.md, CHANGELOG.md, and all coordination docs. Creating remaining 17 documentation files. |
+| 2026-09-23 | OpenCode | Task 0.3 scaffold complete: FastAPI app with CORS + GET /api/health, pydantic-settings config, API stubs (upload/jobs), services skeleton, requirements.txt/pyproject.toml, 8 pytest tests passing. Branch feat/oc-backend-scaffold. |
+| 2026-09-23 | OpenCode | Task 1.1 & 1.2 extraction pipeline done: text_extractor.py (PyMuPDF), table_extractor.py (pdfplumber), pdf_extractor.py (combined orchestrator), models.py (Pydantic), exceptions.py, 37 new extraction tests (45 total green). |
+| 2026-09-23 | OpenCode | Phase 1 pipeline complete: chunker.py (recursive semantic 800/100), vector_store (InMemory/PgVector), embedder (768d fake fallback), retriever (top-K), extractor (Gemini JSON + Fake), parser (docx/xlsx/pptx 5 placeholder types), mapper (exact/fuzzy/synonym), generator (preserve formatting) — 95 new tests, 140 total green on feat/oc-backend-scaffold. |
