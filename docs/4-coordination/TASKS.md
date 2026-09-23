@@ -30,8 +30,8 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 1.1 | Implement PDF text extraction service | `todo` | OpenCode | PyMuPDF + pdfplumber |
-| 1.2 | Implement PDF table extraction service | `todo` | OpenCode | pdfplumber / camelot |
+| 1.1 | Implement PDF text extraction service | `done` | OpenCode | PyMuPDF text extractor — 18 tests green, branch feat/oc-backend-scaffold |
+| 1.2 | Implement PDF table extraction service | `done` | OpenCode | pdfplumber table extractor + combined pdf_extractor — 19 tests green, branch feat/oc-backend-scaffold |
 | 1.3 | Implement text chunking strategy | `todo` | OpenCode | Semantic chunking for RAG |
 | 1.4 | Set up vector database (pgvector) | `todo` | OpenCode | Embeddings storage |
 | 1.5 | Implement embedding service | `todo` | OpenCode | Gemini embedding API |
