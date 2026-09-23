@@ -213,18 +213,26 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
 
         last_error: Optional[Exception] = None
         for candidate in candidate_models:
-            try:
-                self.model = candidate
-                response = await self._call_gemini(prompt)
-                if response:
+            for attempt in range(2):
+                try:
+                    self.model = candidate
+                    response = await self._call_gemini(prompt)
+                    if response:
+                        break
+                except Exception as e:
+                    last_error = e
+                    err_str = str(e).lower()
+                    # On 503 ServiceUnavailable or 429 RateLimit, backoff briefly and retry
+                    if any(x in err_str for x in ("503", "unavailable", "overload", "429", "rate")):
+                        if attempt < 1:
+                            import asyncio
+                            await asyncio.sleep(1.5)
+                            continue
+                    # On 404 NotFound, advance directly to next candidate model
+                    if "404" in err_str or "not found" in err_str:
+                        break
                     break
-            except Exception as e:
-                last_error = e
-                err_str = str(e).lower()
-                # On 404 NotFound, 503 ServiceUnavailable, or temporary overload, try next candidate model
-                if any(x in err_str for x in ("404", "not found", "503", "unavailable", "overload")):
-                    continue
-                # For rate limit (429) or other errors, break and use heuristic fallback
+            if response:
                 break
 
         if not response:

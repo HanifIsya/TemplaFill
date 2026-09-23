@@ -263,6 +263,9 @@ class JobManager:
                     is_manually_edited=False,
                 )
                 field_results.append(fr)
+                # Polite pacing between field extractions to prevent Google Free Tier 503 load-shedding
+                import asyncio
+                await asyncio.sleep(0.3)
 
             job.field_results = field_results
             job.overall_confidence = round(total_conf / len(field_results), 2) if field_results else 0.0
