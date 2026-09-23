@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Sparkles, Sun, Moon } from 'lucide-react';
+import { Sparkles, Sun, Moon, History } from 'lucide-react';
 import { WorkflowStep } from '../lib/types';
 
 interface NavbarProps {
@@ -10,6 +10,7 @@ interface NavbarProps {
   isBackendLive?: boolean;
   onToggleTheme: () => void;
   isDark: boolean;
+  onOpenHistory?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,6 +19,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   isBackendLive = false,
   onToggleTheme,
   isDark,
+  onOpenHistory,
 }) => {
   const steps: { key: WorkflowStep; label: string; num: number }[] = [
     { key: 'upload', label: 'Upload Files', num: 1 },
@@ -116,11 +118,23 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
           </div>
 
+          {/* Recent Sessions History */}
+          {onOpenHistory && (
+            <button
+              onClick={onOpenHistory}
+              aria-label="View Recent Sessions"
+              title="Recent Sessions History"
+              className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <History className="w-4 h-4" />
+            </button>
+          )}
+
           {/* Theme Toggle */}
           <button
             onClick={onToggleTheme}
             aria-label="Toggle Theme"
-            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors"
+            className="p-2 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
             {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
           </button>

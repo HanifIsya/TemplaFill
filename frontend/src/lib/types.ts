@@ -47,6 +47,8 @@ export interface FieldMapping {
   sourceSnippet?: string;
   isEdited: boolean;
   isConfirmed: boolean;
+  isSkipped?: boolean;
+  reExtractHint?: string;
   fieldType: 'text' | 'date' | 'number' | 'currency' | 'table';
 }
 
@@ -67,6 +69,22 @@ export interface GenerationResult {
   fileSizeBytes: number;
   format: TemplateFormat;
   generatedAt: string;
+}
+
+export interface ToastMessage {
+  id: string;
+  type: 'success' | 'warning' | 'error' | 'info';
+  title: string;
+  message: string;
+}
+
+export interface RecentSession {
+  sessionId: string;
+  sourceFilename: string;
+  templateFilename: string;
+  date: string;
+  fieldCount: number;
+  downloadFilename: string;
 }
 
 export type WorkflowStep = 'landing' | 'upload' | 'processing' | 'review' | 'download';

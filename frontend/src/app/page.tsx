@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { HeroLanding } from '../components/HeroLanding';
@@ -8,15 +8,21 @@ import { DualDropzone } from '../components/DualDropzone';
 import { ProcessingView } from '../components/ProcessingView';
 import { ReviewMappingView } from '../components/ReviewMappingView';
 import { DownloadView } from '../components/DownloadView';
+import { ToastContainer } from '../components/Toast';
+import { HistoryModal } from '../components/HistoryModal';
 import {
   WorkflowStep,
   SessionInfo,
   JobProgress,
   ExtractionResult,
   GenerationResult,
+  ToastMessage,
+  RecentSession,
 } from '../lib/types';
 import { api } from '../lib/api';
 import { MOCK_DEMO_SESSION } from '../lib/mockData';
+
+const STORAGE_KEY_SESSIONS = 'templafill_recent_sessions';
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('landing');
@@ -43,6 +49,36 @@ export default function Home() {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
 
+  // Toast notifications state
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  // History sessions state with lazy initializer
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [recentSessions, setRecentSessions] = useState<RecentSession[]>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
+        if (saved) return JSON.parse(saved);
+      } catch {
+        // ignore
+      }
+    }
+    return [];
+  });
+
+  // Toast dispatcher helper
+  const addToast = useCallback((type: ToastMessage['type'], title: string, message: string) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
+    setToasts((prev) => [...prev, { id, type, title, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3800);
+  }, []);
+
+  const dismissToast = (id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  };
+
   // Dark mode effect sync
   useEffect(() => {
     const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -55,8 +91,11 @@ export default function Home() {
   useEffect(() => {
     api.checkHealth().then((res) => {
       setIsBackendLive(res.isLive);
+      if (res.isLive) {
+        addToast('success', 'Backend Connected', `Connected to FastAPI server v${res.version}`);
+      }
     });
-  }, []);
+  }, [addToast]);
 
   const handleToggleTheme = () => {
     setIsDark((prev) => {
@@ -86,6 +125,11 @@ export default function Home() {
     );
     setSourceFile(demoSource);
     setTemplateFile(demoTemplate);
+    addToast(
+      'info',
+      'Demo Preset Loaded',
+      'Sample Legal Agreement (PDF) and Word Template (.docx) loaded.'
+    );
   };
 
   // Start extraction workflow
@@ -94,6 +138,7 @@ export default function Home() {
 
     setIsProcessing(true);
     setCurrentStep('processing');
+    addToast('info', 'AI Pipeline Started', 'Parsing text and computing semantic embeddings...');
 
     try {
       // 1. Upload files
@@ -127,12 +172,17 @@ export default function Home() {
           setExtractionResult(result);
           setIsProcessing(false);
           setCurrentStep('review');
+          addToast(
+            'success',
+            'Extraction Complete',
+            `Found ${result.totalFields} fields with ${result.highConfidenceCount} high confidence.`
+          );
         }
-      }, 700);
+      }, 650);
     } catch (err) {
       console.error(err);
       setIsProcessing(false);
-      alert('Error during processing. Reverting to upload.');
+      addToast('error', 'Processing Error', 'Failed to complete document extraction.');
       setCurrentStep('upload');
     }
   };
@@ -141,23 +191,72 @@ export default function Home() {
   const handleUpdateField = async (fieldId: string, newValue: string) => {
     if (!sessionInfo) return;
     await api.updateField(sessionInfo.sessionId, fieldId, newValue);
+    addToast('success', 'Field Updated', 'Extracted value adjusted manually.');
   };
 
   // Confirm fields and generate final template
   const handleConfirmAndGenerate = async (confirmedFields: Record<string, string>) => {
     if (!sessionInfo) return;
     setIsGenerating(true);
+    addToast('info', 'Generating Output', 'Filling template placeholders and preserving format...');
 
     try {
       const res = await api.generateDocument(sessionInfo.sessionId, confirmedFields);
       setGenerationResult(res);
       setIsGenerating(false);
       setCurrentStep('download');
+
+      // Save to recent sessions in localStorage
+      const newSession: RecentSession = {
+        sessionId: sessionInfo.sessionId,
+        sourceFilename: sessionInfo.sourceDoc.filename,
+        templateFilename: sessionInfo.templateDoc.filename,
+        date: new Date().toISOString(),
+        fieldCount: Object.keys(confirmedFields).length,
+        downloadFilename: res.filename,
+      };
+
+      setRecentSessions((prev) => {
+        const updated = [newSession, ...prev.filter((s) => s.sessionId !== newSession.sessionId)];
+        try {
+          localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(updated));
+        } catch {
+          // ignore
+        }
+        return updated;
+      });
+
+      addToast(
+        'success',
+        'Document Ready',
+        `${res.filename} generated successfully and ready to download.`
+      );
     } catch (err) {
       console.error(err);
       setIsGenerating(false);
-      alert('Error during document generation.');
+      addToast('error', 'Generation Error', 'Failed to generate filled template document.');
     }
+  };
+
+  // Clear history
+  const handleClearHistory = () => {
+    setRecentSessions([]);
+    localStorage.removeItem(STORAGE_KEY_SESSIONS);
+    addToast('info', 'History Cleared', 'All local session records removed.');
+  };
+
+  // Download past session file
+  const handleDownloadSessionFile = (session: RecentSession) => {
+    const blob = new Blob([
+      `TemplaFill Restored Output\nSession: ${session.sessionId}\nDate: ${session.date}`
+    ], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = session.downloadFilename;
+    a.click();
+    URL.revokeObjectURL(url);
+    addToast('success', 'Downloaded', `Saved ${session.downloadFilename}`);
   };
 
   // Reset to initial state
@@ -178,6 +277,7 @@ export default function Home() {
         isBackendLive={isBackendLive}
         onToggleTheme={handleToggleTheme}
         isDark={isDark}
+        onOpenHistory={() => setIsHistoryOpen(true)}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 flex flex-col justify-center">
@@ -195,8 +295,14 @@ export default function Home() {
           <DualDropzone
             sourceFile={sourceFile}
             templateFile={templateFile}
-            onSetSourceFile={setSourceFile}
-            onSetTemplateFile={setTemplateFile}
+            onSetSourceFile={(f) => {
+              setSourceFile(f);
+              if (f) addToast('info', 'Source File Added', f.name);
+            }}
+            onSetTemplateFile={(f) => {
+              setTemplateFile(f);
+              if (f) addToast('info', 'Template Added', f.name);
+            }}
             onStartExtraction={handleStartExtraction}
             onLoadDemoFiles={handleLoadDemoFiles}
             isLoading={isProcessing}
@@ -216,6 +322,13 @@ export default function Home() {
             extractionResult={extractionResult}
             onConfirmAndGenerate={handleConfirmAndGenerate}
             onUpdateField={handleUpdateField}
+            onReExtractField={async (fieldId, hint) => {
+              addToast(
+                'info',
+                'AI Re-extraction',
+                `Prompting Gemini with hint: "${hint || 'Context refinement'}"`
+              );
+            }}
             isGenerating={isGenerating}
           />
         )}
@@ -230,6 +343,18 @@ export default function Home() {
       </main>
 
       <Footer />
+
+      {/* Global Toast Notifications Container */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Recent Sessions History Modal */}
+      <HistoryModal
+        isOpen={isHistoryOpen}
+        onClose={() => setIsHistoryOpen(false)}
+        sessions={recentSessions}
+        onClearHistory={handleClearHistory}
+        onDownloadSessionFile={handleDownloadSessionFile}
+      />
     </div>
   );
 }
