@@ -20,9 +20,10 @@ app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
     description="TemplaFill API — AI-powered PDF to Template extractor & filler",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    # Disable interactive docs in production to reduce attack surface (VULN-7)
+    docs_url="/docs" if settings.debug else None,
+    redoc_url="/redoc" if settings.debug else None,
+    openapi_url="/openapi.json" if settings.debug else None,
 )
 
 # ----- Performance: GZip (Task 5.2) -----
@@ -32,13 +33,13 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
-# ----- CORS -----
+# ----- CORS (VULN-9: restrict methods/headers to only what's needed) -----
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID", "Accept"],
 )
 
 # ----- Routers -----

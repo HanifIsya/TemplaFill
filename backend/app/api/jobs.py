@@ -3,15 +3,20 @@
 from __future__ import annotations
 
 import io
+import logging
 import uuid
 from pathlib import Path
 from typing import Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Query, Body
+from fastapi import APIRouter, Query, Body, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from app.core.security import get_rate_limiter, sanitize_text_input, sanitize_filename
 from app.services.jobs.manager import get_job_manager
 from app.services.jobs.models import JobStatus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -73,10 +78,22 @@ async def get_job_results(job_id: str):
 
 @router.patch("/jobs/{job_id}/fields/{field_id}", summary="Edit field value")
 async def patch_field(
+    request: Request,
     job_id: str,
     field_id: str,
     payload: dict = Body(...),
 ):
+    # Rate limit: 30 writes/minute per IP
+    client_ip = request.client.host if request.client else "unknown"
+    limiter = get_rate_limiter()
+    if not limiter.is_allowed(client_ip, "write"):
+        retry_after = limiter.retry_after(client_ip, "write")
+        return JSONResponse(
+            status_code=429,
+            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Write rate limit exceeded. Retry after {retry_after}s."}},
+            headers={"Retry-After": str(retry_after)},
+        )
+
     err = _validate_job_id(job_id)
     if err:
         return err
@@ -107,9 +124,10 @@ async def patch_field(
             # Value required for edit; allow empty string to clear?
             if value is None:
                 return _error("VALIDATION_ERROR", "value is required when action is edit", status=400)
-        # Update field
-        field.user_edited_value = str(value) if value is not None else None
-        field.extracted_value = field.user_edited_value  # for simplicity, extracted_value becomes edited value for generation
+        # Update field with sanitization (VULN-3, VULN-10)
+        clean_val = sanitize_text_input(str(value), max_len=5000) if value is not None else None
+        field.user_edited_value = clean_val
+        field.extracted_value = clean_val  # for simplicity, extracted_value becomes edited value for generation
         field.is_manually_edited = True
         field.status = "edited"
         field.confidence = 1.0
@@ -147,7 +165,7 @@ async def patch_field(
             }
         )
     elif action == "re_extract":
-        hint = payload.get("hint", "")
+        hint = sanitize_text_input(str(payload.get("hint", "")), max_len=2000)
         # Re-run extraction for this field with hint
         # Retrieve chunks again and extract with hint appended to description
         try:
@@ -203,11 +221,23 @@ async def patch_field(
                 }
             )
         except Exception as e:  # noqa: BLE001
-            return _error("EXTRACTION_ERROR", f"Re-extract failed: {e}", status=500)
+            logger.exception("Re-extract failed for field %s in job %s", field_id, job_id)
+            return _error("EXTRACTION_ERROR", "Re-extraction failed. Please try again.", status=500)
 
 
 @router.post("/jobs/{job_id}/confirm", summary="Confirm all fields and generate")
-async def confirm_fields(job_id: str, payload: dict = Body(default={})):
+async def confirm_fields(request: Request, job_id: str, payload: dict = Body(default={})):
+    # Rate limit: 30 writes/minute per IP
+    client_ip = request.client.host if request.client else "unknown"
+    limiter = get_rate_limiter()
+    if not limiter.is_allowed(client_ip, "write"):
+        retry_after = limiter.retry_after(client_ip, "write")
+        return JSONResponse(
+            status_code=429,
+            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Write rate limit exceeded. Retry after {retry_after}s."}},
+            headers={"Retry-After": str(retry_after)},
+        )
+
     err = _validate_job_id(job_id)
     if err:
         return err
@@ -257,7 +287,8 @@ async def confirm_fields(job_id: str, payload: dict = Body(default={})):
             },
         )
     except Exception as e:  # noqa: BLE001
-        return _error("GENERATION_ERROR", f"Failed to generate document: {e}", status=500)
+        logger.exception("Document generation failed for job %s", job_id)
+        return _error("GENERATION_ERROR", "Failed to generate document. Please try again.", status=500)
 
 
 @router.get("/jobs/{job_id}/download", summary="Download filled document")
@@ -289,18 +320,35 @@ async def download_document(job_id: str, type: str = Query(default="filled", des
     elif ext == ".pptx":
         media_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
-    filename = job.filled_doc_filename or f"filled_{job.job_id}{ext}"
+    # Sanitize filename for Content-Disposition to prevent header injection
+    raw_filename = job.filled_doc_filename or f"filled_{job.job_id}{ext}"
+    safe_filename = sanitize_filename(raw_filename)
+    # Use RFC 5987 encoding for non-ASCII safety
+    encoded_filename = quote(safe_filename)
     return StreamingResponse(
         io.BytesIO(job.filled_doc_bytes),
         media_type=media_type,
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{safe_filename}\"; filename*=UTF-8''{encoded_filename}",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
 @router.post("/jobs/{job_id}/fields/{field_id}/re-extract", summary="Re-extract field")
-async def re_extract_field(job_id: str, field_id: str, payload: dict = Body(default={})):
-    # Payload: {hint: string}
-    hint = payload.get("hint", "") if isinstance(payload, dict) else ""
+async def re_extract_field(request: Request, job_id: str, field_id: str, payload: dict = Body(default={})):
+    # Rate limit: 5 re-extracts/minute per IP
+    client_ip = request.client.host if request.client else "unknown"
+    limiter = get_rate_limiter()
+    if not limiter.is_allowed(client_ip, "re_extract"):
+        retry_after = limiter.retry_after(client_ip, "re_extract")
+        return JSONResponse(
+            status_code=429,
+            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Re-extract rate limit exceeded. Retry after {retry_after}s."}},
+            headers={"Retry-After": str(retry_after)},
+        )
+    # Sanitize user-provided hint text
+    hint = sanitize_text_input(str(payload.get("hint", "") if isinstance(payload, dict) else ""), max_len=2000)
     # Reuse logic from patch with re_extract action
     # Call patch_field internals but simplified
     err = _validate_job_id(job_id)
@@ -366,7 +414,8 @@ async def re_extract_field(job_id: str, field_id: str, payload: dict = Body(defa
             }
         )
     except Exception as e:  # noqa: BLE001
-        return _error("EXTRACTION_ERROR", f"Re-extract failed: {e}", status=500)
+        logger.exception("Re-extract failed for field %s in job %s", field_id, job_id)
+        return _error("EXTRACTION_ERROR", "Re-extraction failed. Please try again.", status=500)
 
 
 @router.get("/jobs/{job_id}/source/page/{page_number}", summary="Get source page content")

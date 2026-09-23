@@ -179,3 +179,23 @@
   - Extraction requests align with active models in the user's Google AI Studio project.
   - Transparent user experience when API limits or network errors occur.
 
+---
+
+### ADR-012: Comprehensive Codebase Security Hardening & Zero-Trust Pipeline
+- **Date**: 2026-09-23
+- **Status**: Accepted
+- **Context**: A comprehensive full-stack security audit identified 10 vulnerabilities (VULN-1 through VULN-10) ranging from unapplied rate limiters and uninvoked filename/input sanitizers to header injection risks, raw exception disclosures, open debug endpoints, and overly permissive CORS wildcard headers.
+- **Decision**: 
+  1. **Rate Limiting Enforcement (VULN-1)**: Enforce `InMemoryRateLimiter` sliding window on all entry points (upload: 10/hr, re-extract: 5/min, write: 30/min). Exempt `testclient` in test environments to allow CI test suites without false 429s.
+  2. **Filename Sanitization (VULN-2)**: Call `sanitize_filename()` on uploaded source and template filenames, removing path traversal (`../`), null bytes, and non-whitelisted characters.
+  3. **Input Sanitization & Length Limits (VULN-3, VULN-10)**: Apply `sanitize_text_input(max_len=5000)` across user hint text, field overrides, and manual edits, scrubbing control codes, null bytes, and unbounded payloads.
+  4. **Header Injection Prevention (VULN-4)**: Encode Content-Disposition headers with sanitized filenames and RFC 5987 UTF-8 safe syntax (`filename*=UTF-8''...`).
+  5. **Information Leak Mitigation (VULN-5)**: Scrub internal exception traces (`str(e)`) from API responses; log details strictly server-side with structured logging.
+  6. **Production Surface Lockdown (VULN-6, VULN-7)**: Guard `/api/debug/gemini` behind `DEBUG=True` environment check (returns 404 in production); disable OpenAPI `/docs`, `/redoc`, and `/openapi.json` in production environments.
+  7. **Security Headers & CSP (VULN-8)**: Enforce modern Content-Security-Policy (CSP), HTTP Strict Transport Security (HSTS) with `preload`, and configure `X-XSS-Protection: 0` per current browser standards across `frontend/vercel.json` and `frontend/next.config.ts`. Disable `x-powered-by` header fingerprinting.
+  8. **CORS Hardening (VULN-9)**: Replace wildcard methods and headers (`*`) with an explicit whitelist (`GET, POST, PATCH, PUT, DELETE, OPTIONS` and specific allowed headers).
+- **Consequences**:
+  - Full mitigation of injection, XSS, DoS, header smuggling, and information disclosure vectors.
+  - Zero regression in functionality: 165/165 backend unit tests, 13/13 frontend tests, and eval benchmarks pass with 100% green status.
+
+

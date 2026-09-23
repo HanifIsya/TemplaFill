@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 
 from fastapi import APIRouter
+from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
 
@@ -25,14 +26,23 @@ async def health_check():
 
 @router.get("/debug/gemini", summary="Debug live Gemini connection")
 async def debug_gemini():
-    """Directly test Gemini API connection from Render backend."""
+    """Directly test Gemini API connection from Render backend.
+
+    Only available when DEBUG=true (development/staging). Disabled in production.
+    """
+    # VULN-6: Prevent information disclosure in production
+    if not settings.debug:
+        return JSONResponse(
+            status_code=404,
+            content={"success": False, "error": {"code": "NOT_FOUND", "message": "Endpoint not available"}},
+        )
+
     from app.services.generation.extractor import get_extractor
     ext = get_extractor(force_fake=False)
     if ext.use_fake or not ext._client:
         return {
             "success": False,
             "error": "Client not initialized or API key missing in environment",
-            "api_key_set": bool(ext.api_key),
         }
 
     results = {}

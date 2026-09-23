@@ -7,7 +7,7 @@
 ## Last Updated
 - **Date**: 2026-09-23
 - **By**: Antigravity
-- **Summary**: Removed auth login modal/controls and theme toggling per user request, streamlining the application into a pure guest-first industrial dark tool. Replaced all Gemini 2.0 mentions with Gemini 3.7 / 3.8 Flash. Enriched in-app HelpModal into a 5-tab comprehensive user guide with template syntax, dual AI + heuristic engine resilience, and confidence levels. Created detailed root README.md for the GitHub repository. All 165 backend tests and 13 frontend tests green, Next.js build passes cleanly.
+- **Summary**: Completed comprehensive full-stack security audit and hardening (VULN-1 through VULN-10). Applied rate limiting on upload (10/hr), re-extract (5/min), and write endpoints (30/min). Active sanitization for uploaded filenames (path traversal prevention) and user hints/payloads. Hardened Content-Disposition headers with RFC 5987 UTF-8 safe encoding. Suppressed internal exception leakage in API responses. Guarded debug endpoints and disabled OpenAPI docs in production. Added strict CSP, HSTS (with preload), and disabled x-powered-by fingerprinting across Vercel and Next.js configs. Logged ADR-012 in DECISIONS.md. Verified with 165/165 backend pytest passing, 13/13 frontend tests passing, and Next.js production build cleanly passing.
 
 ---
 

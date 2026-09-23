@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+from app.core.security import get_rate_limiter, sanitize_filename
 from app.services.jobs.manager import get_job_manager
 
 router = APIRouter()
@@ -27,10 +28,21 @@ def _error(code: str, message: str, details: dict | None = None, status: int = 4
 
 @router.post("/upload", summary="Upload source PDF and template", status_code=202)
 async def upload_files(
+    request: Request,
     background_tasks: BackgroundTasks,
     source_file: UploadFile = File(..., description="Source PDF"),
     template_file: UploadFile = File(..., description="Template .docx/.xlsx/.pptx"),
 ):
+    # Rate limit: 10 uploads/hour per IP
+    client_ip = request.client.host if request.client else "unknown"
+    limiter = get_rate_limiter()
+    if not limiter.is_allowed(client_ip, "upload"):
+        retry_after = limiter.retry_after(client_ip, "upload")
+        return JSONResponse(
+            status_code=429,
+            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Upload rate limit exceeded. Retry after {retry_after}s."}},
+            headers={"Retry-After": str(retry_after)},
+        )
     # Validate presence (FastAPI already ensures required, but check filename)
     if not source_file.filename:
         return _error("VALIDATION_ERROR", "source_file is required", status=400)
@@ -87,13 +99,17 @@ async def upload_files(
     if not template_bytes.startswith(b"PK"):
         return _error("VALIDATION_ERROR", "template_file does not appear to be a valid Office document (missing PK header)", status=400)
 
-    # Create job
+    # Sanitize filenames to prevent path traversal, header injection, XSS
+    safe_source_name = sanitize_filename(source_file.filename or "source.pdf")
+    safe_template_name = sanitize_filename(template_file.filename or "template.docx")
+
+    # Create job with sanitized filenames
     manager = get_job_manager()
     job = await manager.create_job(
         source_bytes=source_bytes,
-        source_filename=source_file.filename,
+        source_filename=safe_source_name,
         template_bytes=template_bytes,
-        template_filename=template_file.filename,
+        template_filename=safe_template_name,
     )
 
     # Start background processing
