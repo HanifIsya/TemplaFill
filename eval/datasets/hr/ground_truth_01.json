@@ -1,0 +1,49 @@
+{
+  "dataset_id": "hr_cv_01",
+  "source_file": "cv_sample_01.pdf",
+  "template_file": "offer_letter_template.docx",
+  "fields": [
+    {
+      "field_name": "full_name",
+      "placeholder": "{{full_name}}",
+      "expected_value": "John Doe",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "email",
+      "placeholder": "{{email}}",
+      "expected_value": "john.doe@example.com",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "phone_number",
+      "placeholder": "{{phone_number}}",
+      "expected_value": "0812-3456-7890",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "position",
+      "placeholder": "{{position}}",
+      "expected_value": "Software Engineer",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "skills",
+      "placeholder": "{{skills}}",
+      "expected_value": "Python, FastAPI, React",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "address",
+      "placeholder": "{{address}}",
+      "expected_value": null,
+      "source_page": null,
+      "is_present_in_source": false
+    }
+  ]
+}

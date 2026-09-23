@@ -1,0 +1,42 @@
+{
+  "dataset_id": "legal_01",
+  "source_file": "contract_01.pdf",
+  "template_file": "summary_template.docx",
+  "fields": [
+    {
+      "field_name": "contract_number",
+      "placeholder": "{{contract_number}}",
+      "expected_value": "CTR-2026-889",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "signing_date",
+      "placeholder": "{{signing_date}}",
+      "expected_value": "2026-08-15",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "party_name",
+      "placeholder": "{{party_name}}",
+      "expected_value": "PT Maju Jaya",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "contract_value",
+      "placeholder": "{{contract_value}}",
+      "expected_value": "$50,000",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "witness_name",
+      "placeholder": "{{witness_name}}",
+      "expected_value": null,
+      "source_page": null,
+      "is_present_in_source": false
+    }
+  ]
+}

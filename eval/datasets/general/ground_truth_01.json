@@ -1,0 +1,42 @@
+{
+  "dataset_id": "general_01",
+  "source_file": "report_01.pdf",
+  "template_file": "brief_template.docx",
+  "fields": [
+    {
+      "field_name": "company_name",
+      "placeholder": "{{company_name}}",
+      "expected_value": "IndoTech Solutions",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "report_date",
+      "placeholder": "{{report_date}}",
+      "expected_value": "2026-09-01",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "total_employees",
+      "placeholder": "{{total_employees}}",
+      "expected_value": "150",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "ceo_name",
+      "placeholder": "{{ceo_name}}",
+      "expected_value": "Budi Santoso",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "revenue",
+      "placeholder": "{{revenue}}",
+      "expected_value": null,
+      "source_page": null,
+      "is_present_in_source": false
+    }
+  ]
+}

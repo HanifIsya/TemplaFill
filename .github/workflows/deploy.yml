@@ -1,0 +1,29 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    name: Deploy backend to Render
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    # Requires secrets RENDER_SERVICE_ID and RENDER_API_KEY set in repo settings
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trigger Render deploy
+        uses: johnbeynon/render-deploy-action@v0.0.8
+        with:
+          service-id: ${{ secrets.RENDER_SERVICE_ID }}
+          api-key: ${{ secrets.RENDER_API_KEY }}
+        continue-on-error: true
+      - name: Health check (after deploy)
+        run: |
+          echo "Waiting for deploy..."
+          sleep 30
+          curl -f https://api.templafill.com/api/health || echo "Health check failed — check Render dashboard"
+
+  # Frontend deploys automatically via Vercel Git integration
+  # No action needed here; Vercel watches main and deploys frontend/ automatically

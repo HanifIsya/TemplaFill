@@ -1,0 +1,42 @@
+{
+  "dataset_id": "education_01",
+  "source_file": "transcript_01.pdf",
+  "template_file": "certificate_template.docx",
+  "fields": [
+    {
+      "field_name": "student_name",
+      "placeholder": "{{student_name}}",
+      "expected_value": "Alice Smith",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "gpa",
+      "placeholder": "{{gpa}}",
+      "expected_value": "3.85",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "graduation_date",
+      "placeholder": "{{graduation_date}}",
+      "expected_value": "2026-06-20",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "major",
+      "placeholder": "{{major}}",
+      "expected_value": "Computer Science",
+      "source_page": 1,
+      "is_present_in_source": true
+    },
+    {
+      "field_name": "honors",
+      "placeholder": "{{honors}}",
+      "expected_value": null,
+      "source_page": null,
+      "is_present_in_source": false
+    }
+  ]
+}
