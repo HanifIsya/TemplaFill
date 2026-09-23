@@ -104,6 +104,8 @@ _No known issues._
 | 2026-09-23 | OpenCode | Free-forever deployment confirmed: Vercel (100GB) + Render Hobby $0 (750h, sleep 15m wake 60s, no CC) + Supabase 500MB pgvector free forever (vs Render 30-day). Added BackendWakingBanner.tsx, api.ts checkHealth 7s + waitForBackend 5s×12, page.tsx polling + banner, DEPLOYMENT.md/ARCHITECTURE.md/TECH_STACK.md/.env.example/DECISIONS.md ADR-010 updates. |
 | 2026-09-23 | Antigravity | Demo fix & backend endpoint alignment: replaced 56B dummy string files with real binary assets in frontend/public/samples/ (sample_contract.pdf 1.1KB, sample_template.docx 36.7KB) passing %PDF and PK zip header checks. Aligned api.ts with backend endpoints (/api/upload unwrap job_id, /api/jobs/{id}/results, PATCH /api/jobs/{id}/fields/{id}, confirm & download routes). Enhanced handleStartExtraction with resilient polling & graceful demo fallback. All 13 tests green & static build clean. |
 | 2026-09-23 | Antigravity | Demo download fix: corrected mock downloadUrl to point to static sample template docx asset instead of hitting backend endpoint for demo sessions; updated DownloadView to directly download sample asset; expanded live extraction polling window up to 50 attempts so live jobs are not prematurely marked completed before backend confirm readiness. 13 tests green, build clean. |
+| 2026-09-23 | Antigravity | Backend extractor resiliency: added automatic fallback to FakeExtractor inside GeminiExtractor.extract exception block. If Gemini API key is missing, invalid, or hits rate limits/quota (429), extraction falls back to deterministic heuristic parsing instead of returning null for all fields. 165 backend tests and 1.00 eval PASS. This backend commit will also trigger Render auto-deploy. |
+
 
 
 

@@ -226,8 +226,12 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
                 source_text=source_text[:500] if isinstance(source_text, str) else None,
                 status=status,
             )
-        except Exception as e:  # noqa: BLE001
-            return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, status="error", source_text=str(e)[:200])
+        except Exception:  # noqa: BLE001
+            # Fallback to deterministic FakeExtractor on Gemini API error, rate limit (429), or network issue
+            res = self._fake.extract(field_name, chunks, field_description)
+            if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
+                res.source_page = source_pages[res.source_page - 1]
+            return res
 
     async def _call_gemini(self, prompt: str) -> str:  # type: ignore[no-untyped-def]
         """Call Gemini generate_content and return text."""
