@@ -7,15 +7,15 @@
 ## Last Updated
 - **Date**: 2026-09-23
 - **By**: OpenCode
-- **Summary**: Phase 1 pipeline complete — Tasks 1.3-1.14 done on feat/oc-backend-scaffold: chunker (recursive 800/100 + metadata), vector_store (InMemory+PgVector stub), embedder (text-embedding-004 768d, fake fallback), retriever (top-K cosine), extractor (Gemini JSON + Fake), parser (docx/xlsx/pptx 5 placeholder patterns), mapper (exact/fuzzy/synonym), generator (preserve formatting). 140 pytest green (was 45) across 8 test suites. Ready for Phase 2 API layer.
+- **Summary**: Phase 2 API layer complete — Tasks 2.1-2.9 done on feat/oc-backend-scaffold: POST /api/upload (multipart validation), job manager (queued→processing→extracting→mapping→completed), GET jobs/results/source/page, PATCH fields + POST re-extract, POST confirm, GET download. 25 API tests, 165 total pytest green. Ready for Phase 4 eval & Phase 5 polish.
 
 ---
 
 ## Current Project State
 
-### Overall Status: 🟢 Phase 1 Complete — Core Backend Pipeline ✅
+### Overall Status: 🟢 Phase 2 Complete — API Layer ✅ (165 tests green)
 
-Phase 0 & Phase 1 (Tasks 0.3, 1.1-1.14) done. 140 tests green. Proceeding to Phase 2 API layer (file upload, jobs, mapping preview, generation).
+Phase 0, Phase 1 (1.1-1.14) & Phase 2 (2.1-2.9) done. Next: Phase 4 eval & Phase 5 polish/deploy.
 
 ### What Exists
 - [x] `AGENTS.md` — Agent coordination contract (root)
@@ -37,13 +37,13 @@ Phase 0 & Phase 1 (Tasks 0.3, 1.1-1.14) done. 140 tests green. Proceeding to Pha
 | Agent | Task | Files | Started |
 |-------|------|-------|---------|
 | Antigravity | Phase 3 Completed: Frontend scaffold & UI views verified (lint/build 100% green, pushed) | `frontend/` | 2026-09-23 |
-| OpenCode | Phase 2: API layer (upload, jobs, mapping, generation endpoints) | `backend/app/api/` | 2026-09-23 |
+| OpenCode | Phase 2 Completed: 165 tests green, pushed | `backend/app/api/` + `backend/app/services/jobs/` | 2026-09-23 |
 
 ### What's Next
-1. ✅ OpenCode Phase 1 done — 140/140 tests green, pushed to `feat/oc-backend-scaffold`.
-2. ✅ Antigravity Phase 0 & Phase 3 (Tasks 3.1-3.7, 3.9) done — Lint & Turbopack build 100% green, pushed to `feat/ag-frontend-scaffold`.
-3. OpenCode proceeding with Phase 2 API (endpoints matching `API.md`).
-4. Once OpenCode merges Phase 2 API into `develop` or `main`, Antigravity will run end-to-end integration tests between Frontend and Backend API!
+1. ✅ OpenCode Phase 1 done — 140/140 tests green, pushed.
+2. ✅ OpenCode Phase 2 done — 25 API tests (upload/status/results/patch/re-extract/confirm/download/source page), 165 total green, pushed to `feat/oc-backend-scaffold`.
+3. ✅ Antigravity Phase 0 & Phase 3 (100% Complete) — Next.js 14+ app, Design System (Midnight Slate / Electric Indigo), Dual Dropzone, Processing View, Split & Table Review with Citation Modal, Re-extract Modal, Add Field Modal, Download View, Toast Notifications, LocalStorage History, and 5/5 unit tests green. Pushed to `feat/ag-frontend-scaffold` (commits `6941de2`, `f4c0c2a`, `c7ca6ae`).
+4. Next: OpenCode Phase 4 eval suite + E2E integration test connecting frontend with backend API.
 
 ---
 
@@ -90,3 +90,4 @@ _No known issues._
 | 2026-09-23 | OpenCode | Task 0.3 scaffold complete: FastAPI app with CORS + GET /api/health, pydantic-settings config, API stubs (upload/jobs), services skeleton, requirements.txt/pyproject.toml, 8 pytest tests passing. Branch feat/oc-backend-scaffold. |
 | 2026-09-23 | OpenCode | Task 1.1 & 1.2 extraction pipeline done: text_extractor.py (PyMuPDF), table_extractor.py (pdfplumber), pdf_extractor.py (combined orchestrator), models.py (Pydantic), exceptions.py, 37 new extraction tests (45 total green). |
 | 2026-09-23 | OpenCode | Phase 1 pipeline complete: chunker.py (recursive semantic 800/100), vector_store (InMemory/PgVector), embedder (768d fake fallback), retriever (top-K), extractor (Gemini JSON + Fake), parser (docx/xlsx/pptx 5 placeholder types), mapper (exact/fuzzy/synonym), generator (preserve formatting) — 95 new tests, 140 total green on feat/oc-backend-scaffold. |
+| 2026-09-23 | OpenCode | Phase 2 API layer complete: job manager (in-memory queued→completed), services/jobs/models, POST upload (415/413 validation), GET jobs/results, PATCH fields (edit/skip/confirm/re_extract), POST confirm (202), GET download (streaming), POST re-extract, GET source/page, 25 API tests, 165 total green on feat/oc-backend-scaffold. |
