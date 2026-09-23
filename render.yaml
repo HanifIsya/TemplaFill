@@ -1,0 +1,32 @@
+# Render Blueprint Specification for TemplaFill Backend
+# Reference: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: templafill-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    plan: free
+    autoDeploy: true
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: CORS_ORIGINS
+        value: "http://localhost:3000"
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: UPLOAD_DIR
+        value: /tmp/uploads
+      - key: GEMINI_MODEL
+        value: gemini-2.0-flash
+      - key: GEMINI_EMBEDDING_MODEL
+        value: text-embedding-004
