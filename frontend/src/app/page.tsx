@@ -10,7 +10,6 @@ import { ReviewMappingView } from '../components/ReviewMappingView';
 import { DownloadView } from '../components/DownloadView';
 import { ToastContainer } from '../components/Toast';
 import { HistoryModal } from '../components/HistoryModal';
-import { AuthModal } from '../components/AuthModal';
 import { HelpModal } from '../components/HelpModal';
 import { BackendWakingBanner } from '../components/BackendWakingBanner';
 import {
@@ -21,7 +20,6 @@ import {
   GenerationResult,
   ToastMessage,
   RecentSession,
-  UserAccount,
 } from '../lib/types';
 import { api } from '../lib/api';
 import { MOCK_DEMO_SESSION } from '../lib/mockData';
@@ -30,17 +28,12 @@ const STORAGE_KEY_SESSIONS = 'templafill_recent_sessions';
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('landing');
-  const [isDark, setIsDark] = useState<boolean>(false);
   const [isBackendLive, setIsBackendLive] = useState<boolean>(false);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'waking' | 'live' | 'offline' | 'mock'>('checking');
   const [wakeRetries, setWakeRetries] = useState<number>(0);
 
-  // Authentication & User Session
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  // User Guide Modal state
   const [isHelpOpen, setIsHelpOpen] = useState(false);
-  const [user, setUser] = useState<UserAccount | null>(() => {
-    return api.getStoredUser() || api.getAnonymousUser();
-  });
 
   // Uploaded files
   const [sourceFile, setSourceFile] = useState<File | null>(null);
@@ -92,14 +85,6 @@ export default function Home() {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   };
 
-  // Dark mode effect sync
-  useEffect(() => {
-    const isSystemDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    if (isSystemDark) {
-      document.documentElement.classList.add('dark');
-    }
-  }, []);
-
   // Check backend health on mount — with Render Hobby cold-start handling (sleep 15 min, wake ~60s)
   const checkBackend = useCallback(async () => {
     setBackendStatus('checking');
@@ -140,18 +125,6 @@ export default function Home() {
   useEffect(() => {
     checkBackend();
   }, [checkBackend]);
-
-  const handleToggleTheme = () => {
-    setIsDark((prev) => {
-      const next = !prev;
-      if (next) {
-        document.documentElement.classList.add('dark');
-      } else {
-        document.documentElement.classList.remove('dark');
-      }
-      return next;
-    });
-  };
 
   // Load demo preset files
   const handleLoadDemoFiles = async () => {
@@ -403,35 +376,13 @@ export default function Home() {
     setCurrentStep('upload');
   };
 
-  // Authentication handlers
-  const handleAuthSuccess = (authedUser: UserAccount) => {
-    setUser(authedUser);
-    addToast(
-      'success',
-      authedUser.isAnonymous ? 'Guest Mode Active' : 'Account Connected',
-      `Welcome ${authedUser.name} (${authedUser.tier.toUpperCase()} tier)`
-    );
-  };
-
-  const handleSignOut = () => {
-    api.clearUserSession();
-    const guest = api.getAnonymousUser();
-    setUser(guest);
-    addToast('info', 'Signed Out', 'Switched to Anonymous Guest mode.');
-  };
-
   return (
-    <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-slate-950">
+    <div className="min-h-screen flex flex-col bg-slate-950 text-slate-100">
       <Navbar
         currentStep={currentStep}
         onNavigateStep={setCurrentStep}
         isBackendLive={isBackendLive}
-        onToggleTheme={handleToggleTheme}
-        isDark={isDark}
         onOpenHistory={() => setIsHistoryOpen(true)}
-        user={user}
-        onOpenAuth={() => setIsAuthOpen(true)}
-        onSignOut={handleSignOut}
         onOpenHelp={() => setIsHelpOpen(true)}
       />
       <BackendWakingBanner status={backendStatus} retryCount={wakeRetries} onRetry={checkBackend} />
@@ -520,13 +471,6 @@ export default function Home() {
         sessions={recentSessions}
         onClearHistory={handleClearHistory}
         onDownloadSessionFile={handleDownloadSessionFile}
-      />
-
-      {/* User Authentication Modal */}
-      <AuthModal
-        isOpen={isAuthOpen}
-        onClose={() => setIsAuthOpen(false)}
-        onAuthSuccess={handleAuthSuccess}
       />
 
       {/* Interactive User Guide Modal */}

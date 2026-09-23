@@ -36,7 +36,7 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({
     },
     {
       num: 4,
-      title: 'Structured Extraction via Gemini 2.0',
+      title: 'Structured Extraction via Gemini 3.7 / 3.8 Flash',
       description: 'Retrieving relevant candidate chunks via vector cosine similarity and scoring confidence.',
       threshold: 100,
     },

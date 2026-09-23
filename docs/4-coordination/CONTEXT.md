@@ -6,8 +6,8 @@
 
 ## Last Updated
 - **Date**: 2026-09-23
-- **By**: OpenCode
-- **Summary**: Free-forever stack confirmed (Vercel+Render Hobby+Supabase) per user 2026-09-23 — implemented Render cold-start handling: BackendWakingBanner.tsx + api.ts checkHealth/waitForBackend (7s probe 5s×12), page.tsx polling, lightweight GET /api/health for wake detection, plus docs updates (DEPLOYMENT.md, ARCHITECTURE.md infra diagram, TECH_STACK.md, .env.example Supabase URL, DECISIONS.md ADR-010). All phases 0-5 remain 100% complete, 165 backend + 13 frontend tests green.
+- **By**: Antigravity
+- **Summary**: Removed auth login modal/controls and theme toggling per user request, streamlining the application into a pure guest-first industrial dark tool. Replaced all Gemini 2.0 mentions with Gemini 3.7 / 3.8 Flash. Enriched in-app HelpModal into a 5-tab comprehensive user guide with template syntax, dual AI + heuristic engine resilience, and confidence levels. Created detailed root README.md for the GitHub repository. All 165 backend tests and 13 frontend tests green, Next.js build passes cleanly.
 
 ---
 
