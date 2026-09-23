@@ -207,7 +207,7 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
         response: Optional[str] = None
 
         candidate_models: list[str] = []
-        for m in [self.model, "gemini-3.7-flash", "gemini-3.8-flash"]:
+        for m in [self.model, "gemini-3.8-flash", "gemini-3.7-flash"]:
             if m and m not in candidate_models and m not in ("gemini-2.0-flash", "gemini-1.5-flash"):
                 candidate_models.append(m)
 
@@ -221,6 +221,7 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
                         break
                 except Exception as e:
                     last_error = e
+                    print(f"[GeminiExtractor] Model {candidate} attempt {attempt+1} failed: {e}")
                     err_str = str(e).lower()
                     # On 503 ServiceUnavailable or 429 RateLimit, backoff briefly and retry
                     if any(x in err_str for x in ("503", "unavailable", "overload", "429", "rate")):
