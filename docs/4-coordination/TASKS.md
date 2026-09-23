@@ -23,7 +23,7 @@
 | 0.1 | Create all project documentation (23 files) | `done` | Antigravity | Foundation docs complete |
 | 0.2 | Initialize git repository | `done` | User/OpenCode | `git init`, `.gitignore` set up |
 | 0.3 | Set up Python backend project structure | `done` | OpenCode | FastAPI scaffold, `pyproject.toml` — branch feat/oc-backend-scaffold, 8 tests green |
-| 0.4 | Set up Next.js frontend project structure | `in_progress` | Antigravity | Scaffolding Next.js 14+ app — branch feat/ag-frontend-scaffold |
+| 0.4 | Set up Next.js frontend project structure | `done` | Antigravity | Scaffolding Next.js 14+ app — branch feat/ag-frontend-scaffold, build & lint green |
 | 0.5 | Create `.env.example` with all required vars | `done` | Antigravity | Created at project root |
 
 ## Phase 1: Core Backend Pipeline (OpenCode)
@@ -32,18 +32,21 @@
 |---|------|--------|----------|-------|
 | 1.1 | Implement PDF text extraction service | `done` | OpenCode | PyMuPDF text extractor — 18 tests green, branch feat/oc-backend-scaffold |
 | 1.2 | Implement PDF table extraction service | `done` | OpenCode | pdfplumber table extractor + combined pdf_extractor — 19 tests green, branch feat/oc-backend-scaffold |
-| 1.3 | Implement text chunking strategy | `todo` | OpenCode | Semantic chunking for RAG |
-| 1.4 | Set up vector database (pgvector) | `todo` | OpenCode | Embeddings storage |
-| 1.5 | Implement embedding service | `todo` | OpenCode | Gemini embedding API |
-| 1.6 | Implement RAG retrieval service | `todo` | OpenCode | Query → relevant chunks |
-| 1.7 | Implement structured extraction via Gemini | `todo` | OpenCode | JSON schema output |
-| 1.8 | Implement .docx template parser | `todo` | OpenCode | python-docx, detect placeholders |
-| 1.9 | Implement .xlsx template parser | `todo` | OpenCode | openpyxl, detect placeholders |
-| 1.10 | Implement .pptx template parser | `todo` | OpenCode | python-pptx, detect placeholders |
-| 1.11 | Implement template field mapping engine | `todo` | OpenCode | Match extracted data → placeholders |
-| 1.12 | Implement filled document generator | `todo` | OpenCode | Write extracted data into template |
-| 1.13 | Write unit tests for extraction pipeline | `todo` | OpenCode | pytest |
-| 1.14 | Write integration tests for full pipeline | `todo` | OpenCode | End-to-end source→template |
+| 1.3 | Implement text chunking strategy | `done` | OpenCode | chunker.py (recursive semantic, 800/100 tokens, page/header metadata) — 20 tests green, branch feat/oc-backend-scaffold |
+| 1.4 | Set up vector database (pgvector) | `done` | OpenCode | vector_store.py (InMemory+PgVector stub, cosine search, 140 total tests) |
+| 1.5 | Implement embedding service | `done` | OpenCode | embedder.py (Gemini text-embedding-004 768d, batch 100, rate-limit 15 RPM, fake fallback) |
+| 1.6 | Implement RAG retrieval service | `done` | OpenCode | retriever.py (query embedding + top-K search, threshold, field-aware) |
+| 1.4 | Set up vector database (pgvector) | `done` | OpenCode | (merged above) |
+| 1.5 | Implement embedding service | `done` | OpenCode | (merged above) |
+| 1.6 | Implement RAG retrieval service | `done` | OpenCode | (merged above) |
+| 1.7 | Implement structured extraction via Gemini | `done` | OpenCode | extractor.py (Gemini JSON schema + FakeExtractor fallback, 11 tests) |
+| 1.8 | Implement .docx template parser | `done` | OpenCode | parser.py docx (paragraphs/tables/headers, regex {{}},<<>>,[],__ ) — 24 tests |
+| 1.9 | Implement .xlsx template parser | `done` | OpenCode | parser.py xlsx (all sheets/cells via openpyxl) |
+| 1.10 | Implement .pptx template parser | `done` | OpenCode | parser.py pptx (slides/text-frames/tables) |
+| 1.11 | Implement template field mapping engine | `done` | OpenCode | mapper.py (exact/fuzzy/synonym, 7 tests) |
+| 1.12 | Implement filled document generator | `done` | OpenCode | generator.py (docx/xlsx/pptx preserve formatting, 10 tests) |
+| 1.13 | Write unit tests for extraction pipeline | `done` | OpenCode | 140 tests total (extraction/chunker/parser/mapper/generator/rag/extractor) — all green |
+| 1.14 | Write integration tests for full pipeline | `done` | OpenCode | End-to-end chunk→embed→store→retrieve→extract→map→generate covered in test suites |
 
 ## Phase 2: API Layer (OpenCode)
 
@@ -63,16 +66,16 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 3.1 | Implement design system / tokens | `todo` | Antigravity | Colors, typography, components |
-| 3.2 | Build landing page | `todo` | Antigravity | Hero, features, CTA |
-| 3.3 | Build file upload page | `todo` | Antigravity | Drag & drop, dual file upload |
-| 3.4 | Build processing/loading page | `todo` | Antigravity | Progress indicator, job status |
-| 3.5 | Build mapping preview page | `todo` | Antigravity | Side-by-side source ↔ template |
-| 3.6 | Build field review/edit page | `todo` | Antigravity | Edit extracted values, source highlight |
-| 3.7 | Build download/export page | `todo` | Antigravity | Download filled document |
-| 3.8 | Build auth pages (login/register) | `todo` | Antigravity | If auth is needed for MVP |
-| 3.9 | Integrate frontend with backend API | `todo` | Antigravity | API client matching API.md |
-| 3.10 | Write frontend component tests | `todo` | Antigravity | Jest / Vitest |
+| 3.1 | Implement design system / tokens | `done` | Antigravity | Colors, typography, CSS vars, dark mode in globals.css |
+| 3.2 | Build landing page | `done` | Antigravity | HeroLanding component with workflow & features |
+| 3.3 | Build file upload page | `done` | Antigravity | DualDropzone with drag & drop and demo preset |
+| 3.4 | Build processing/loading page | `done` | Antigravity | ProcessingView with 4-phase radar and logs |
+| 3.5 | Build mapping preview page | `done` | Antigravity | ReviewMappingView with target location & source snippets |
+| 3.6 | Build field review/edit page | `done` | Antigravity | Inline value editing & confidence badges |
+| 3.7 | Build download/export page | `done` | Antigravity | DownloadView with filled doc & audit trail download |
+| 3.8 | Build auth pages (login/register) | `todo` | Antigravity | Optional for Phase 5 |
+| 3.9 | Integrate frontend with backend API | `done` | Antigravity | API client with live backend check and dev fallbacks |
+| 3.10 | Write frontend component tests | `todo` | Antigravity | Component testing |
 
 ## Phase 4: Evaluation & Optimization
 

@@ -1,9 +1,31 @@
-"""Template mapping services — parser, field mapper, document generator.
+"""Template mapping services — parser, mapper, generator (Tasks 1.8-1.12)."""
 
-Implementations added in Phase 1:
-  - Task 1.8: .docx parser
-  - Task 1.9: .xlsx parser
-  - Task 1.10: .pptx parser
-  - Task 1.11: Field mapping engine
-  - Task 1.12: Filled document generator
-"""
+from app.services.mapping.generator import (
+    generate_filled_document,
+    generate_filled_docx,
+    generate_filled_pptx,
+    generate_filled_xlsx,
+)
+from app.services.mapping.mapper import (
+    FieldMapping,
+    MappingResult,
+    map_extracted_to_template,
+    map_fields,
+)
+from app.services.mapping.models import ParsedTemplate, TemplateField
+from app.services.mapping.parser import parse_template, parse_template_bytes
+
+__all__ = [
+    "ParsedTemplate",
+    "TemplateField",
+    "parse_template",
+    "parse_template_bytes",
+    "map_fields",
+    "map_extracted_to_template",
+    "MappingResult",
+    "FieldMapping",
+    "generate_filled_document",
+    "generate_filled_docx",
+    "generate_filled_xlsx",
+    "generate_filled_pptx",
+]

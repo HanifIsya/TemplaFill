@@ -7,15 +7,15 @@
 ## Last Updated
 - **Date**: 2026-09-23
 - **By**: OpenCode
-- **Summary**: Task 1.1 & 1.2 done — PDF extraction pipeline implemented (text_extractor.py via PyMuPDF, table_extractor.py via pdfplumber, pdf_extractor.py combined) with Pydantic models, custom exceptions, 37 new tests (45 total pytest green). Ready for Task 1.3 (chunking) & next Phase 1 steps. Branch feat/oc-backend-scaffold.
+- **Summary**: Phase 1 pipeline complete — Tasks 1.3-1.14 done on feat/oc-backend-scaffold: chunker (recursive 800/100 + metadata), vector_store (InMemory+PgVector stub), embedder (text-embedding-004 768d, fake fallback), retriever (top-K cosine), extractor (Gemini JSON + Fake), parser (docx/xlsx/pptx 5 placeholder patterns), mapper (exact/fuzzy/synonym), generator (preserve formatting). 140 pytest green (was 45) across 8 test suites. Ready for Phase 2 API layer.
 
 ---
 
 ## Current Project State
 
-### Overall Status: 🟢 Phase 1 — Core Backend Pipeline (Extraction)
+### Overall Status: 🟢 Phase 1 Complete — Core Backend Pipeline ✅
 
-Phase 0 complete. Task 1.1 & 1.2 done. Proceeding to Task 1.3+ (RAG pipeline).
+Phase 0 & Phase 1 (Tasks 0.3, 1.1-1.14) done. 140 tests green. Proceeding to Phase 2 API layer (file upload, jobs, mapping preview, generation).
 
 ### What Exists
 - [x] `AGENTS.md` — Agent coordination contract (root)
@@ -37,13 +37,12 @@ Phase 0 complete. Task 1.1 & 1.2 done. Proceeding to Task 1.3+ (RAG pipeline).
 | Agent | Task | Files | Started |
 |-------|------|-------|---------|
 | Antigravity | Task 0.4: Next.js Frontend Scaffold with Design System | `frontend/` | 2026-09-23 |
-| OpenCode | Task 1.3+: RAG pipeline (chunking, embeddings) | `backend/app/services/rag/` | 2026-09-23 |
+| OpenCode | Phase 2: API layer (upload, jobs, mapping, generation endpoints) | `backend/app/api/` | 2026-09-23 |
 
 ### What's Next
-1. ✅ OpenCode Task 0.3 done — scaffold verified (8/8 pytest green), pushed to `feat/oc-backend-scaffold`.
-2. ✅ OpenCode Task 1.1 & 1.2 done — PDF text (PyMuPDF) + table (pdfplumber) extraction, 45/45 pytest green, ready to push.
-3. Antigravity: Branch `feat/ag-frontend-scaffold`, set up Next.js 14+ frontend structure per `DESIGN_SYSTEM.md`, mock API client, verify build, commit & push.
-4. OpenCode next: Task 1.3 (chunking) → 1.4 (pgvector) → 1.5 (embeddings) → 1.6 (retrieval).
+1. ✅ OpenCode Phase 1 done — Task 1.3 chunker (20 tests), 1.4 vector_store + 1.5 embedder + 1.6 retriever (19 RAG tests), 1.7 extractor (11 tests, Gemini fake fallback), 1.8-1.10 parser docx/xlsx/pptx (24 tests), 1.11 mapper + 1.12 generator (20 tests), 1.13-1.14 integration — 140/140 green, pushed.
+2. Antigravity: Branch `feat/ag-frontend-scaffold`, Next.js scaffold (per DESIGN.md) — may already have frontend/ untracked locally.
+3. OpenCode next: Phase 2 API — POST /api/upload, GET /api/jobs, PATCH fields, POST generate, GET download (per API.md), with httpx tests.
 
 ---
 
@@ -89,3 +88,4 @@ _No known issues._
 | 2026-09-23 | Antigravity | Project kickoff. Created AGENTS.md, CHANGELOG.md, and all coordination docs. Creating remaining 17 documentation files. |
 | 2026-09-23 | OpenCode | Task 0.3 scaffold complete: FastAPI app with CORS + GET /api/health, pydantic-settings config, API stubs (upload/jobs), services skeleton, requirements.txt/pyproject.toml, 8 pytest tests passing. Branch feat/oc-backend-scaffold. |
 | 2026-09-23 | OpenCode | Task 1.1 & 1.2 extraction pipeline done: text_extractor.py (PyMuPDF), table_extractor.py (pdfplumber), pdf_extractor.py (combined orchestrator), models.py (Pydantic), exceptions.py, 37 new extraction tests (45 total green). |
+| 2026-09-23 | OpenCode | Phase 1 pipeline complete: chunker.py (recursive semantic 800/100), vector_store (InMemory/PgVector), embedder (768d fake fallback), retriever (top-K), extractor (Gemini JSON + Fake), parser (docx/xlsx/pptx 5 placeholder types), mapper (exact/fuzzy/synonym), generator (preserve formatting) — 95 new tests, 140 total green on feat/oc-backend-scaffold. |

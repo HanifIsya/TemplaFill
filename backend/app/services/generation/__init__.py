@@ -1,5 +1,5 @@
-"""LLM generation services — structured extraction via Gemini.
+"""Generation services — structured extraction via Gemini (Task 1.7)."""
 
-Implementations added in Phase 1:
-  - Task 1.7: Structured extraction with JSON schema output
-"""
+from app.services.generation.extractor import ExtractionResult, FakeExtractor, GeminiExtractor, get_extractor
+
+__all__ = ["ExtractionResult", "FakeExtractor", "GeminiExtractor", "get_extractor"]
