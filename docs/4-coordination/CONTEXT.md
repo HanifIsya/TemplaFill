@@ -6,8 +6,8 @@
 
 ## Last Updated
 - **Date**: 2026-09-23
-- **By**: Antigravity
-- **Summary**: All remaining frontend and collaborative tasks completed: Task 3.8 (AuthModal & session state), Task 5.7 (HelpModal & USER_GUIDE.md), Task 5.5 (vercel.json & deployment readiness), Tasks 5.1 & 5.2 (Security & Performance joint sign-off in SECURITY.md and DECISIONS.md), and Task 5.6 (Automated E2E integration test suite, 13/13 tests green). All test suites (165 backend, 13 frontend, 5 eval datasets) pass 100%.
+- **By**: OpenCode
+- **Summary**: Free-forever stack confirmed (Vercel+Render Hobby+Supabase) per user 2026-09-23 — implemented Render cold-start handling: BackendWakingBanner.tsx + api.ts checkHealth/waitForBackend (7s probe 5s×12), page.tsx polling, lightweight GET /api/health for wake detection, plus docs updates (DEPLOYMENT.md, ARCHITECTURE.md infra diagram, TECH_STACK.md, .env.example Supabase URL, DECISIONS.md ADR-010). All phases 0-5 remain 100% complete, 165 backend + 13 frontend tests green.
 
 ---
 
@@ -101,5 +101,6 @@ _No known issues._
 | 2026-09-23 | OpenCode | Phase 5 polish complete: CI/CD (.github/workflows/ci.yml with backend 165 tests/coverage + frontend lint/build + eval + docker, deploy.yml for Render), security (SecurityHeadersMiddleware CSP/HSTS, RequestId, sanitize_filename, magic validation, InMemoryRateLimiter 10/h 60/m), GZipMiddleware, Dockerfile (3.11-slim, non-root, HEALTHCHECK), docker-compose.yml (pgvector/pg16 + redis + backend), 165 tests green. |
 | 2026-09-23 | Antigravity | Phase 3 frontend complete: Next.js 14+ App Router, IBM Plex typography, solid high-contrast theme (zero AI design tropes), Dual Dropzone with drag & drop + demo presets, Processing View with real-time stage tracker, Split & Table Review views, Citation Modal, Re-extract Modal, Add Field Modal, Download View with filled docs & audit summary, Toast alerts, LocalStorage history, 5/5 unit tests green. Branch feat/ag-frontend-scaffold merged into main. |
 | 2026-09-23 | Antigravity | Remaining tasks complete: AuthModal (3.8), HelpModal + USER_GUIDE.md (5.7), vercel.json + build pass (5.5), joint Security & Performance review sign-off (5.1/5.2) in SECURITY.md and DECISIONS.md (ADR-008, ADR-009), and full-flow automated E2E integration test suite in e2e.test.mjs (5.6, 13/13 tests green). All phases 0-5 100% complete and production ready. |
+| 2026-09-23 | OpenCode | Free-forever deployment confirmed: Vercel (100GB) + Render Hobby $0 (750h, sleep 15m wake 60s, no CC) + Supabase 500MB pgvector free forever (vs Render 30-day). Added BackendWakingBanner.tsx, api.ts checkHealth 7s + waitForBackend 5s×12, page.tsx polling + banner, DEPLOYMENT.md/ARCHITECTURE.md/TECH_STACK.md/.env.example/DECISIONS.md ADR-010 updates. |
 
 

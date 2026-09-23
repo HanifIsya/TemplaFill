@@ -19,28 +19,87 @@ class ApiClient {
     this.baseUrl = baseUrl;
   }
 
-  async checkHealth(): Promise<{ status: string; version: string; isLive: boolean }> {
+  async checkHealth(options: { timeoutMs?: number } = {}): Promise<{
+    status: string;
+    version: string;
+    isLive: boolean;
+    isWaking?: boolean;
+    error?: string;
+  }> {
+    const timeoutMs = options.timeoutMs ?? 7000; // Render cold start ~60s, but single probe 7s to allow retry loop outside
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
       const res = await fetch(`${this.baseUrl}/health`, {
         signal: controller.signal,
+        // Render may return 502/503 while waking; we treat any 2xx as live
+        cache: 'no-store',
       });
       clearTimeout(timeoutId);
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        // API returns {success:true, data:{status, version}} ; handle both shapes
+        const version = (data as any)?.data?.version || (data as any)?.version || '0.1.0';
         this.isBackendAvailable = true;
-        return { status: 'healthy', version: data.version || '0.1.0', isLive: true };
+        return { status: 'healthy', version, isLive: true };
       }
-    } catch {
-      // Backend not yet reachable (e.g. running in mock/demo mode during initial frontend dev)
+      // 502/503/504 often means Render is waking or booting
+      if ([502, 503, 504].includes(res.status)) {
+        this.isBackendAvailable = false;
+        return { status: 'waking', version: '0.1.0', isLive: false, isWaking: true, error: `Backend waking (HTTP ${res.status})` };
+      }
+    } catch (e: any) {
+      const msg = e?.name === 'AbortError' ? 'Health check timed out (Render may be waking)' : String(e?.message || e);
+      // Timeout after 15 min idle is expected for Render Hobby
+      const isWaking = msg.includes('timed out') || msg.includes('Failed to fetch') || msg.includes('NetworkError');
+      this.isBackendAvailable = false;
+      return {
+        status: isWaking ? 'waking' : 'mock_mode',
+        version: '0.1.0-dev',
+        isLive: false,
+        isWaking,
+        error: msg,
+      };
     }
     this.isBackendAvailable = false;
     return { status: 'mock_mode', version: '0.1.0-dev', isLive: false };
   }
 
+  /** Poll until backend is live or maxRetries exceeded — for Render cold start (Hobby sleeps 15 min, wake ~60s). */
+  async waitForBackend(maxRetries: number = 12, intervalMs: number = 5000): Promise<{ isLive: boolean; attempts: number }> {
+    for (let i = 0; i < maxRetries; i++) {
+      const health = await this.checkHealth({ timeoutMs: 8000 });
+      if (health.isLive) return { isLive: true, attempts: i + 1 };
+      if (!health.isWaking && health.status === 'mock_mode') {
+        // Not waking, just offline/mock — don't keep polling aggressively
+        if (i >= 2) return { isLive: false, attempts: i + 1 };
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return { isLive: false, attempts: maxRetries };
+  }
+
   async uploadFiles(sourceFile: File, templateFile: File): Promise<SessionInfo> {
-    const health = await this.checkHealth();
+    const health = await this.checkHealth({ timeoutMs: 8000 });
+    // If backend is waking, give it a short grace window (Render cold start) before falling back to mock
+    // The UI layer (BackendWakingBanner) already polls, but we also do one extra wait here for direct uploads
+    if (!health.isLive && health.isWaking) {
+      const waited = await this.waitForBackend(6, 5000);
+      if (waited.isLive) {
+        // Re-check and proceed to live upload
+        const retryHealth = await this.checkHealth();
+        if (retryHealth.isLive) {
+          const formData = new FormData();
+          formData.append('source_file', sourceFile);
+          formData.append('template_file', templateFile);
+          const res = await fetch(`${this.baseUrl}/upload`, { method: 'POST', body: formData });
+          if (res.ok) return await res.json();
+          throw new Error(`Upload failed: ${res.statusText}`);
+        }
+      }
+      // Still waking — throw specific error so UI can show banner instead of silent mock fallback
+      throw new Error('Backend is waking up (Render Hobby cold start ~60s). Please wait and retry — or use mock demo mode.');
+    }
     if (health.isLive) {
       const formData = new FormData();
       formData.append('source_file', sourceFile);

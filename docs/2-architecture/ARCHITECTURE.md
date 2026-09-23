@@ -222,15 +222,16 @@ sequenceDiagram
 
 ---
 
-## Infrastructure Architecture
+## Infrastructure Architecture — Free-Forever Choice: Vercel + Render Hobby + Supabase
 
 ```mermaid
 graph LR
-    subgraph Production ["Production Environment"]
-        VERCEL[Vercel - Frontend]
-        CLOUD[Cloud Server - Backend]
-        PG[(PostgreSQL + pgvector)]
-        S3[Object Storage - Files]
+    subgraph Production ["Production (Free Forever)"]
+        VERCEL[Vercel - Frontend<br/>Hobby 100GB/mo]
+        RENDER[Render Hobby<br/>0.1 CPU 512MB<br/>sleep 15m wake 60s]
+        SUPABASE[Supabase Postgres<br/>500MB + pgvector<br/>free forever]
+        SUPASTORAGE[Supabase Storage<br/>1GB free]
+        UPSTASH[Upstash Redis<br/>10k cmd/day]
     end
 
     subgraph Dev ["Development"]
@@ -239,15 +240,26 @@ graph LR
         LOCALFS[Local File System]
     end
 
-    VERCEL -->|API calls| CLOUD
-    CLOUD --> PG
-    CLOUD --> S3
-    CLOUD -->|API| GEMINI[Gemini API]
+    USER([User]) --> VERCEL
+    VERCEL -->|API Proxy<br/>/api/health poll| RENDER
+    RENDER -->|BackgroundTasks<br/>no separate worker| RENDER
+    RENDER --> SUPABASE
+    RENDER --> SUPASTORAGE
+    RENDER --> UPSTASH
+    RENDER -->|API| GEMINI[Gemini API]
 
     LOCAL --> SQLITE
     LOCAL --> LOCALFS
     LOCAL -->|API| GEMINI
+
+    style RENDER fill:#fff3cd,stroke:#856404
+    style SUPABASE fill:#d4edda,stroke:#155724
 ```
+
+**Notes:**
+- Render Hobby `$0` (750h/mo, no CC) sleeps after 15 min idle; cold start ~60s handled via `frontend/src/components/BackendWakingBanner.tsx:1` + `frontend/src/lib/api.ts:22` `checkHealth()`/`waitForBackend()` polling 5s×12 + `GET /api/health` lightweight (no DB) per `DEPLOYMENT.md`.
+- Supabase Postgres chosen over Render Postgres (1 GB/30-day expiry) for free-forever retention; `CREATE EXTENSION vector` per `DEPLOYMENT.md:93`.
+- Single Render web service (no separate Celery worker) to stay within 750h free quota — `BackgroundTasks` in `app/services/jobs/manager.py:1`.
 
 ---
 

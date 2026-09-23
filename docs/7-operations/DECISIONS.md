@@ -147,3 +147,20 @@
   - Safe for public staging and demonstration.
   - Full adherence to zero persistent storage and GDPR ephemeral data requirements.
 
+---
+
+### ADR-010: Free-Forever Stack — Vercel + Render Hobby + Supabase (2026-09-23)
+- **Date**: 2026-09-23
+- **Status**: Accepted
+- **Context**: User asked if Render Hobby free tier is viable forever and requested Vercel (frontend) + Render (backend) + Supabase (DB) as free-forever deployment, with handling for Render 15-min sleep / ~60s cold start. Need sustainable $0/mo without expiry vs Render Postgres 30-day expiry.
+- **Decision**: Adopt Vercel Hobby (100 GB) + Render Hobby $0 (512 MB/0.1 CPU, 750h/mo, sleep 15m, wake ~60s, no CC) + Supabase Postgres 500 MB + pgvector (free forever, 50k MAU, 1 GB storage) + Upstash Redis 10k/day (or in-memory fallback). Single Render web service using `BackgroundTasks` (not separate Celery worker) to stay within 750h. Implement frontend cold-start UX: `frontend/src/components/BackendWakingBanner.tsx` + `frontend/src/lib/api.ts:22` `checkHealth()` with 7s timeout, `isWaking` detection for 502/503/timeout, `waitForBackend()` 5s×12 poll (60s), `frontend/src/app/page.tsx:100` polling + banner `Backend is waking up — Render Hobby sleeps after 15 min idle — Retrying 3/12` + `Retry now` + upload guard that throws `Backend is waking up…` instead of silent mock. Backend health `GET /api/health` lightweight (no DB) for fast wake detection. Documented in `DEPLOYMENT.md`, `ARCHITECTURE.md` infra diagram, `TECH_STACK.md` deployment row, `.env.example` Supabase pooling URL.
+- **Alternatives Considered**:
+  - Render Postgres free (1 GB/30-day expiry) — not free forever, data deleted after 30 days, unsuitable for retention
+  - Full Supabase Edge Functions (Deno) — cannot run `PyMuPDF`/`pdfplumber` (need Python), would require JS pdf libs with 30-40% lower table accuracy, 10s/150 MB Edge limit
+  - Railway/ Fly.io — also free but Render Hobby has simplest git-push deploy and no CC
+- **Consequences**:
+  - $0/mo indefinitely for MVP/prototype (1 web service ~720h/mo within 750h). Supabase DB free forever vs Render 30-day.
+  - Cold start UX handled explicitly — no silent data loss, user sees waking state and can retry or use mock demo mode.
+  - UptimeRobot 5-min `GET /api/health` ping optional to keep warm (12 req/hour < quota, 720 req/month).
+  - If traffic grows beyond free 750h or 15-min sleep becomes UX issue, upgrade to Render Starter $7 (always-on) — single config change, no code.
+

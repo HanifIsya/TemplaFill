@@ -12,6 +12,7 @@ import { ToastContainer } from '../components/Toast';
 import { HistoryModal } from '../components/HistoryModal';
 import { AuthModal } from '../components/AuthModal';
 import { HelpModal } from '../components/HelpModal';
+import { BackendWakingBanner } from '../components/BackendWakingBanner';
 import {
   WorkflowStep,
   SessionInfo,
@@ -31,6 +32,8 @@ export default function Home() {
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('landing');
   const [isDark, setIsDark] = useState<boolean>(false);
   const [isBackendLive, setIsBackendLive] = useState<boolean>(false);
+  const [backendStatus, setBackendStatus] = useState<'checking' | 'waking' | 'live' | 'offline' | 'mock'>('checking');
+  const [wakeRetries, setWakeRetries] = useState<number>(0);
 
   // Authentication & User Session
   const [isAuthOpen, setIsAuthOpen] = useState(false);
@@ -97,15 +100,46 @@ export default function Home() {
     }
   }, []);
 
-  // Check backend health on mount
-  useEffect(() => {
-    api.checkHealth().then((res) => {
-      setIsBackendLive(res.isLive);
-      if (res.isLive) {
-        addToast('success', 'Backend Connected', `Connected to FastAPI server v${res.version}`);
+  // Check backend health on mount — with Render Hobby cold-start handling (sleep 15 min, wake ~60s)
+  const checkBackend = useCallback(async () => {
+    setBackendStatus('checking');
+    const res = await api.checkHealth({ timeoutMs: 7000 });
+    if (res.isLive) {
+      setIsBackendLive(true);
+      setBackendStatus('live');
+      setWakeRetries(0);
+      addToast('success', 'Backend Connected', `Connected to FastAPI server v${res.version}`);
+      return;
+    }
+    if (res.isWaking) {
+      setIsBackendLive(false);
+      setBackendStatus('waking');
+      addToast('info', 'Backend is waking up', 'Render Hobby sleeps after 15 min idle — cold start ~60s. Polling…');
+      // Poll for up to 12×5s = 60s
+      for (let i = 1; i <= 12; i++) {
+        setWakeRetries(i);
+        await new Promise((r) => setTimeout(r, 5000));
+        const retry = await api.checkHealth({ timeoutMs: 8000 });
+        if (retry.isLive) {
+          setIsBackendLive(true);
+          setBackendStatus('live');
+          setWakeRetries(0);
+          addToast('success', 'Backend Live', `Woke after ${i * 5}s — v${retry.version}`);
+          return;
+        }
       }
-    });
+      setBackendStatus('offline');
+      addToast('error', 'Backend still offline', 'Render may still be booting or quota exceeded (750h/mo Hobby). You can still try mock demo mode.');
+      return;
+    }
+    // Mock/offline
+    setIsBackendLive(false);
+    setBackendStatus('mock');
   }, [addToast]);
+
+  useEffect(() => {
+    checkBackend();
+  }, [checkBackend]);
 
   const handleToggleTheme = () => {
     setIsDark((prev) => {
@@ -310,6 +344,7 @@ export default function Home() {
         onSignOut={handleSignOut}
         onOpenHelp={() => setIsHelpOpen(true)}
       />
+      <BackendWakingBanner status={backendStatus} retryCount={wakeRetries} onRetry={checkBackend} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8 flex flex-col justify-center">
         {currentStep === 'landing' && (

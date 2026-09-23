@@ -18,12 +18,12 @@
 | **ORM** | SQLAlchemy | 2.0+ | Async support, mature, flexible |
 | **LLM** | Gemini API (free plan) | gemini-2.0-flash | Free tier, structured output, function calling, fast |
 | **Embeddings** | Gemini Embedding API | text-embedding-004 | Free tier, 768 dimensions, good quality |
-| **Job Queue** | Celery + Redis | 5.x | Async task processing for long PDF extractions |
-| **File Storage** | Local FS (dev) / S3-compatible (prod) | — | Simple for dev, scalable for prod |
+| **Job Queue** | FastAPI BackgroundTasks (MVP) / Celery + Redis (scale) | 5.x | MVP uses BackgroundTasks to stay within Render Hobby 750h (no separate worker); scale to Celery when >$7 |
+| **File Storage** | Local FS (dev) / Supabase Storage 1 GB free (prod) | — | MVP local FS (24h auto-delete), prod Supabase Storage unified with DB per free-forever choice |
 | **Auth** | NextAuth.js (frontend) + JWT (API) | 5.x | Simple auth, multiple providers |
-| **Deployment (FE)** | Vercel | — | Free tier, automatic deployments, edge network |
-| **Deployment (BE)** | Railway / Render / VPS | — | Easy Python hosting, free tier available |
-| **CI/CD** | GitHub Actions | — | Free for public repos, integrated with GitHub |
+| **Deployment (FE)** | Vercel Hobby | — | Free 100 GB/mo, auto-deploy from Git, `vercel.json` headers, global edge |
+| **Deployment (BE)** | **Render Hobby `$0` + Supabase Postgres** | — | **Free-forever choice per 2026-09-23**: Render Hobby 512 MB/0.1 CPU 750h (sleep 15m wake 60s) + Supabase 500 MB pgvector free forever (no 30-day expiry) — see `DEPLOYMENT.md` for booting banner handling via `BackendWakingBanner.tsx` |
+| **CI/CD** | GitHub Actions | — | Free for public repos, `ci.yml` + `deploy.yml` (Render deploy) |
 
 ---
 
@@ -160,5 +160,5 @@
 | OpenAI API | No free tier; Gemini free plan is sufficient for MVP |
 | Django | FastAPI is lighter, async-native, better for API-first architecture |
 | MongoDB | PostgreSQL + pgvector handles both relational data AND vectors in one DB |
-| Supabase | Good option but we want more control over the backend; may consider for auth later |
+| Supabase (full backend) | Edge Functions Deno cannot run PyMuPDF/pdfplumber (need Python) — keep FastAPI for pipeline, use Supabase only for Postgres+pgvector/Auth/Storage (hybrid) |
 | tRPC | Adds coupling between frontend/backend; REST is simpler for multi-team (multi-agent) development |
