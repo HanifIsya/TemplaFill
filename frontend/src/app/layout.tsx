@@ -26,8 +26,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full`}>
-      <body className="min-h-full flex flex-col font-sans antialiased">{children}</body>
+    <html
+      lang="en"
+      className={`${ibmPlexSans.variable} ${ibmPlexMono.variable} h-full`}
+      suppressHydrationWarning
+    >
+      <body
+        className="min-h-full flex flex-col font-sans antialiased"
+        suppressHydrationWarning
+      >
+        {children}
+      </body>
     </html>
   );
 }
