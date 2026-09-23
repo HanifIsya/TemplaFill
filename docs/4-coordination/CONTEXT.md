@@ -7,15 +7,21 @@
 ## Last Updated
 - **Date**: 2026-09-23
 - **By**: OpenCode
-- **Summary**: Phase 5 polish complete — Tasks 5.1-5.4 done on feat/oc-backend-scaffold: CI/CD (.github/workflows/ci.yml 165 tests + deploy.yml), security (SecurityHeaders + RequestId + sanitize + rate limiter), GZip, Dockerfile (python:3.11-slim, HEALTHCHECK, non-root), docker-compose.yml (pgvector+redis+backend), 165 tests green. Phase 3 frontend done by Antigravity; remaining 5.5-5.7 deploy/E2E for Both pending staging.
+- **Summary**: Full-stack integration complete. OpenCode completed Phases 1, 2, 4, and 5 (165 backend tests, eval PASS, Docker, security, CI/CD). Antigravity completed Phases 0 and 3 (Next.js 14+ frontend, IBM Plex design system, all modals & views, 5/5 tests green). Merged cleanly to main.
 
 ---
 
 ## Current Project State
 
-### Overall Status: 🟢 Phase 5 Polish Complete — CI/CD, Security, Docker ✅ (165 tests, eval PASS, docker ready)
+### Overall Status: 🟢 Full-Stack Application Complete & Unified on Main ✅
 
-Phase 0-2 & 4-5 (backend) done. 5 datasets, eval 1.00 PASS, security headers, GZip, Dockerfile & compose. Next: Deploy to staging + E2E (5.5-5.7 Both).
+All core phases completed:
+- Phase 0: Foundation documentation & project scaffolds ✅
+- Phase 1: Core backend extraction & RAG pipeline (140 tests) ✅
+- Phase 2: FastAPI API layer (25 API tests, 165 total pytest green) ✅
+- Phase 3: Next.js frontend with IBM Plex design system & all workflows ✅
+- Phase 4: Evaluation suite (5 datasets, run_eval.py PASS 1.00) ✅
+- Phase 5: Polish, CI/CD, security headers, Docker, and compose ✅
 
 ### What Exists
 - [x] `AGENTS.md` — Agent coordination contract (root)
@@ -29,23 +35,22 @@ Phase 0-2 & 4-5 (backend) done. 5 datasets, eval 1.00 PASS, security headers, GZ
 - [x] `docs/5-quality/*` — EVAL, FEEDBACK_LOOP, TESTING
 - [x] `docs/6-security/*` — SECURITY, DATA_PRIVACY
 - [x] `docs/7-operations/*` — SETUP, DEPLOYMENT, DECISIONS
-- [x] `frontend/` — Next.js 14+ App with Design System, Dual Dropzone, Processing, Review, and Download UI ✅ branch feat/ag-frontend-scaffold
-- [x] `backend/` — FastAPI backend (165 tests, Phase 1+2) ✅ branch feat/oc-backend-scaffold
-- [x] `eval/` — Evaluation suite with 5 datasets + run_eval.py ✅ feat/oc-backend-scaffold (eval PASS 1.00)
+- [x] `frontend/` — Next.js 14+ App with Design System, Dual Dropzone, Processing, Review, and Download UI ✅
+- [x] `backend/` — FastAPI backend (165 tests, Phase 1+2) ✅
+- [x] `eval/` — Evaluation suite with 5 datasets + run_eval.py (eval PASS 1.00) ✅
 
 ### What's Being Worked On Right Now
 | Agent | Task | Files | Started |
 |-------|------|-------|---------|
-| Antigravity | Phase 3 Completed: Frontend scaffold & UI views verified (lint/build 100% green, pushed) | `frontend/` | 2026-09-23 |
-| OpenCode | Phase 5 Completed: CI/CD + security + Docker, 165 tests green, pushed | `.github/workflows/` + `backend/Dockerfile` + `docker-compose.yml` + `app/core/security.py` | 2026-09-23 |
+| Antigravity | Main branch unification & full-stack repository merge | All | 2026-09-23 |
 
 ### What's Next
-1. ✅ OpenCode Phase 1 done — 140/140 tests green, pushed.
-2. ✅ OpenCode Phase 2 done — 25 API tests, 165 total green, pushed.
+1. ✅ OpenCode Phase 1 done — 140/140 tests green.
+2. ✅ OpenCode Phase 2 done — 25 API tests, 165 total green.
 3. ✅ OpenCode Phase 4 done — 5 datasets, eval 1.00 PASS (halluc 0.00).
-4. ✅ OpenCode Phase 5 done — CI (165 tests, eval, docker), security headers + rate limit, GZip, Dockerfile & compose ready for Render/Railway.
-5. ✅ Antigravity Phase 3 done — 100% frontend complete.
-6. Next: Both agents E2E staging test after merge to develop/main (Tasks 5.6-5.7).
+4. ✅ OpenCode Phase 5 done — CI (165 tests, eval, docker), security headers + rate limit, GZip, Dockerfile & compose ready.
+5. ✅ Antigravity Phase 3 done — 100% frontend complete (5/5 tests green, build green).
+6. Next: Deploy frontend to Vercel and backend to Render/Railway (Tasks 5.5-5.7).
 
 ---
 
@@ -95,3 +100,5 @@ _No known issues._
 | 2026-09-23 | OpenCode | Phase 2 API layer complete: job manager (in-memory queued→completed), services/jobs/models, POST upload (415/413 validation), GET jobs/results, PATCH fields (edit/skip/confirm/re_extract), POST confirm (202), GET download (streaming), POST re-extract, GET source/page, 25 API tests, 165 total green on feat/oc-backend-scaffold. |
 | 2026-09-23 | OpenCode | Phase 4 eval complete: generated 5 datasets (hr/finance/education/legal/general) via scripts/generate_eval_datasets.py, implemented eval/run_eval.py (precision/recall/F1/hallucination/not_found/placeholder), baseline 0.79→1.00 after FakeExtractor optimization (term scoring + distinctive guard), 165 tests still green, results in eval/results/eval_run_*.json, overall PASS. |
 | 2026-09-23 | OpenCode | Phase 5 polish complete: CI/CD (.github/workflows/ci.yml with backend 165 tests/coverage + frontend lint/build + eval + docker, deploy.yml for Render), security (SecurityHeadersMiddleware CSP/HSTS, RequestId, sanitize_filename, magic validation, InMemoryRateLimiter 10/h 60/m), GZipMiddleware, Dockerfile (3.11-slim, non-root, HEALTHCHECK), docker-compose.yml (pgvector/pg16 + redis + backend), 165 tests green. |
+| 2026-09-23 | Antigravity | Phase 3 frontend complete: Next.js 14+ App Router, IBM Plex typography, solid high-contrast theme (zero AI design tropes), Dual Dropzone with drag & drop + demo presets, Processing View with real-time stage tracker, Split & Table Review views, Citation Modal, Re-extract Modal, Add Field Modal, Download View with filled docs & audit summary, Toast alerts, LocalStorage history, 5/5 unit tests green. Branch feat/ag-frontend-scaffold merged into main. |
+

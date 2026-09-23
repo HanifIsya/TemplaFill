@@ -1,0 +1,112 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Solid High-Contrast Neutral (Light Mode) */
+    --bg-page: #F8FAFC;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #F1F5F9;
+    --border-base: #E2E8F0;
+    --border-strong: #CBD5E1;
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #64748B;
+
+    /* Technical Solid Blue Accent (No gradients) */
+    --accent-base: #1D4ED8;
+    --accent-hover: #1E40AF;
+    --accent-subtle: #EFF6FF;
+    --accent-border: #BFDBFE;
+
+    /* Solid Semantic Indicators */
+    --success-text: #065F46;
+    --success-bg: #ECFDF5;
+    --success-border: #A7F3D0;
+    --warning-text: #92400E;
+    --warning-bg: #FFFBEB;
+    --warning-border: #FDE68A;
+    --error-text: #991B1B;
+    --error-bg: #FEF2F2;
+    --error-border: #FECACA;
+  }
+
+  .dark {
+    /* High-Contrast Technical Charcoal & Slate (Dark Mode) */
+    --bg-page: #0B0F17;
+    --bg-surface: #111827;
+    --bg-elevated: #1A2234;
+    --border-base: #263245;
+    --border-strong: #374761;
+    --text-primary: #F8FAFC;
+    --text-secondary: #CBD5E1;
+    --text-muted: #8493A8;
+
+    /* Solid Blue Accent in Dark Mode */
+    --accent-base: #3B82F6;
+    --accent-hover: #2563EB;
+    --accent-subtle: #172554;
+    --accent-border: #1E3A8A;
+
+    /* High-Contrast Semantic in Dark Mode */
+    --success-text: #34D399;
+    --success-bg: #064E3B;
+    --success-border: #059669;
+    --warning-text: #FBBF24;
+    --warning-bg: #78350F;
+    --warning-border: #D97706;
+    --error-text: #F87171;
+    --error-bg: #7F1D1D;
+    --error-border: #DC2626;
+  }
+}
+
+body {
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  min-height: 100vh;
+}
+
+/* Solid high-contrast container surface (replaces glassmorphism) */
+.solid-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+}
+
+.dark .solid-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-base);
+  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.4);
+}
+
+/* Snappy solid button utility - no opacity fading */
+.btn-primary {
+  background-color: var(--accent-base);
+  color: #FFFFFF;
+  border: 1px solid transparent;
+  font-weight: 600;
+  transition: background-color 0.12s ease, transform 0.08s ease;
+}
+
+.btn-primary:hover {
+  background-color: var(--accent-hover);
+}
+
+.btn-primary:active {
+  transform: translateY(1px);
+}
+
+.btn-secondary {
+  background-color: var(--bg-surface);
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  font-weight: 500;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-elevated);
+  border-color: var(--text-muted);
+}
