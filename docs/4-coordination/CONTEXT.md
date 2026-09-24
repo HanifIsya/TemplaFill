@@ -7,7 +7,7 @@
 ## Last Updated
 - **Date**: 2026-09-24
 - **By**: Antigravity
-- **Summary**: Implemented automatic fallback notification system and engine source tracking across the full stack. Resolved Gemini API 429 and 404 token issues via Single-Prompt Batch Extraction (`extract_batch`). Added backend tracking of `extracted_by` ("gemini" | "heuristic" | "manual"), `has_fallback`, and `fallback_reason`. Updated frontend with prominent fallback alerts, toasts, per-field badges (`[Gemini AI]` vs `[Fallback]`), and inspector diagnostics. Documented in ADR-014. Verified with 167/167 backend pytest, 13/13 frontend tests, and 1.00 eval suite PASS.
+- **Summary**: Overhauled Review Mapping UI/UX: transformed ambiguous confirm/confirmed button into explicit dual-state status action (`[✓ Confirmed]` emerald vs `[◌ Unconfirmed / Click to Confirm]` amber with animated icon), added dedicated Confirmation column to Table View, left-accent status coloring, Unconfirmed/Confirmed tab filters with real-time counters, dynamic bulk confirmation actions (`Confirm All High (${count})` / `Confirm All Remaining`), clear footer status explaining optional confirmation behavior, and confirmed indicators in CitationModal. Passed Next.js production build and all 13 frontend tests.
 
 ---
 

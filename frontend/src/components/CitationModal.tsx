@@ -78,17 +78,24 @@ export const CitationModal: React.FC<CitationModalProps> = ({ field, onClose, on
           >
             Close
           </button>
-          {onConfirmField && !field.isConfirmed && (
-            <button
-              onClick={() => {
-                onConfirmField(field.id);
-                onClose();
-              }}
-              className="px-4 py-1.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium flex items-center gap-1.5 cursor-pointer"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Confirm Value</span>
-            </button>
+          {field.isConfirmed ? (
+            <span className="px-3 py-1.5 rounded bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-medium font-mono text-[11px] flex items-center gap-1.5 border border-emerald-300 dark:border-emerald-800">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+              <span>Already Confirmed</span>
+            </span>
+          ) : (
+            onConfirmField && (
+              <button
+                onClick={() => {
+                  onConfirmField(field.id);
+                  onClose();
+                }}
+                className="px-4 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>Confirm Value</span>
+              </button>
+            )
           )}
         </div>
       </div>

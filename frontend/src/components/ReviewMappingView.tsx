@@ -12,6 +12,10 @@ import {
   CheckCheck,
   AlertTriangle,
   Sparkles,
+  CircleDashed,
+  Ban,
+  RotateCcw,
+  Edit3,
 } from 'lucide-react';
 import { FieldMapping, ExtractionResult } from '../lib/types';
 import { CitationModal } from './CitationModal';
@@ -33,7 +37,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
   onReExtractField,
   isGenerating = false,
 }) => {
-  const [filter, setFilter] = useState<'all' | 'review' | 'confirmed' | 'skipped'>('all');
+  const [filter, setFilter] = useState<'all' | 'unconfirmed' | 'confirmed' | 'review' | 'skipped'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'split'>('table');
 
@@ -94,8 +98,18 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
     );
   };
 
+  const confirmAllHigh = () => {
+    setFields((prev) =>
+      prev.map((f) =>
+        f.confidenceLevel === 'high' && !f.isSkipped ? { ...f, isConfirmed: true } : f
+      )
+    );
+  };
+
   const confirmAll = () => {
-    setFields((prev) => prev.map((f) => ({ ...f, isConfirmed: true })));
+    setFields((prev) =>
+      prev.map((f) => (!f.isSkipped ? { ...f, isConfirmed: true } : f))
+    );
   };
 
   const handleAddField = (newField: FieldMapping) => {
@@ -141,16 +155,22 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
 
     if (!matchesSearch) return false;
 
-    if (filter === 'review') return (f.confidenceLevel !== 'high' || !f.isConfirmed) && !f.isSkipped;
+    if (filter === 'unconfirmed') return !f.isConfirmed && !f.isSkipped;
     if (filter === 'confirmed') return f.isConfirmed && !f.isSkipped;
+    if (filter === 'review') return (f.confidenceLevel !== 'high' || !f.isConfirmed) && !f.isSkipped;
     if (filter === 'skipped') return f.isSkipped;
     return true;
   });
 
+  const activeFields = fields.filter((f) => !f.isSkipped);
+  const activeCount = activeFields.length;
   const highCount = fields.filter((f) => f.confidenceLevel === 'high' && !f.isSkipped).length;
   const mediumCount = fields.filter((f) => f.confidenceLevel === 'medium' && !f.isSkipped).length;
   const lowCount = fields.filter((f) => f.confidenceLevel === 'low' && !f.isSkipped).length;
   const skippedCount = fields.filter((f) => f.isSkipped).length;
+  const confirmedCount = fields.filter((f) => f.isConfirmed && !f.isSkipped).length;
+  const unconfirmedCount = fields.filter((f) => !f.isConfirmed && !f.isSkipped).length;
+  const unconfirmedHighCount = fields.filter((f) => f.confidenceLevel === 'high' && !f.isConfirmed && !f.isSkipped).length;
 
   const handleGenerateClick = () => {
     const overrides: Record<string, string> = {};
@@ -210,6 +230,45 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
     return null;
   };
 
+  const renderConfirmButton = (field: FieldMapping, compact: boolean = false) => {
+    if (field.isConfirmed) {
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            toggleConfirm(field.id);
+          }}
+          title="Status: Dikonfirmasi (Confirmed). Klik untuk membatalkan konfirmasi."
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded font-semibold font-mono text-[11px] transition-all cursor-pointer bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white border border-emerald-600 shadow-xs ${
+            compact ? 'text-[10px] px-2 py-0.5' : ''
+          }`}
+        >
+          <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+          <span>Confirmed</span>
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          toggleConfirm(field.id);
+        }}
+        title="Status: Belum Dikonfirmasi (Unconfirmed). Klik untuk mengonfirmasi nilai ini."
+        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded font-medium font-mono text-[11px] transition-all cursor-pointer border border-amber-300 dark:border-amber-700/80 bg-amber-50/60 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 hover:bg-emerald-50 hover:border-emerald-500 hover:text-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300 active:scale-95 group ${
+          compact ? 'text-[10px] px-2 py-0.5' : ''
+        }`}
+      >
+        <CircleDashed className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
+        <span className="group-hover:hidden">Unconfirmed</span>
+        <span className="hidden group-hover:inline font-semibold">Click to Confirm</span>
+      </button>
+    );
+  };
+
   const activeSplitField = fields.find((f) => f.id === selectedFieldId) || fields[0];
 
   return (
@@ -230,10 +289,20 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           <div className="px-2.5 py-1 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
             Total: <span className="font-bold">{fields.length}</span>
           </div>
-          <div className="px-2.5 py-1 rounded border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+          <div className="px-2.5 py-1 rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 flex items-center gap-1 font-semibold">
+            <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+            <span>Confirmed: {confirmedCount}/{activeCount}</span>
+          </div>
+          {unconfirmedCount > 0 && (
+            <div className="px-2.5 py-1 rounded border border-amber-200 dark:border-amber-800/80 bg-amber-50/80 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 flex items-center gap-1">
+              <CircleDashed className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+              <span>Unconfirmed: {unconfirmedCount}</span>
+            </div>
+          )}
+          <div className="px-2.5 py-1 rounded border border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300">
             High: <span className="font-bold">{highCount}</span>
           </div>
-          <div className="px-2.5 py-1 rounded border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+          <div className="px-2.5 py-1 rounded border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300">
             Review: <span className="font-bold">{mediumCount}</span>
           </div>
           <div className="px-2.5 py-1 rounded border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-300">
@@ -352,6 +421,28 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
               All Fields ({fields.length})
             </button>
             <button
+              onClick={() => setFilter('unconfirmed')}
+              className={`px-2.5 py-1 rounded font-medium cursor-pointer flex items-center gap-1 ${
+                filter === 'unconfirmed'
+                  ? 'bg-amber-700 text-white dark:bg-amber-400 dark:text-slate-950'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <CircleDashed className="w-3 h-3 text-amber-500" />
+              <span>Unconfirmed ({unconfirmedCount})</span>
+            </button>
+            <button
+              onClick={() => setFilter('confirmed')}
+              className={`px-2.5 py-1 rounded font-medium cursor-pointer flex items-center gap-1 ${
+                filter === 'confirmed'
+                  ? 'bg-emerald-700 text-white dark:bg-emerald-400 dark:text-slate-950'
+                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              <Check className="w-3 h-3 text-emerald-500" />
+              <span>Confirmed ({confirmedCount})</span>
+            </button>
+            <button
               onClick={() => setFilter('review')}
               className={`px-2.5 py-1 rounded font-medium cursor-pointer ${
                 filter === 'review'
@@ -360,16 +451,6 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
               }`}
             >
               Needs Review ({mediumCount + lowCount})
-            </button>
-            <button
-              onClick={() => setFilter('confirmed')}
-              className={`px-2.5 py-1 rounded font-medium cursor-pointer ${
-                filter === 'confirmed'
-                  ? 'bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900'
-                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
-              }`}
-            >
-              Confirmed
             </button>
             {skippedCount > 0 && (
               <button
@@ -385,13 +466,32 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
             )}
           </div>
 
-          <button
-            onClick={confirmAll}
-            className="text-blue-700 dark:text-blue-400 font-medium hover:underline flex items-center gap-1 cursor-pointer"
-          >
-            <CheckCheck className="w-3.5 h-3.5" />
-            <span>Confirm All High Confidence</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {unconfirmedHighCount > 0 ? (
+              <button
+                onClick={confirmAllHigh}
+                className="text-blue-700 dark:text-blue-400 font-medium hover:underline flex items-center gap-1 cursor-pointer text-xs"
+                title="Konfirmasi semua field berakurasi tinggi sekaligus"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span>Confirm All High ({unconfirmedHighCount})</span>
+              </button>
+            ) : unconfirmedCount > 0 ? (
+              <button
+                onClick={confirmAll}
+                className="text-emerald-700 dark:text-emerald-400 font-medium hover:underline flex items-center gap-1 cursor-pointer text-xs"
+                title="Konfirmasi semua sisa field sekaligus"
+              >
+                <CheckCheck className="w-3.5 h-3.5" />
+                <span>Confirm All Remaining ({unconfirmedCount})</span>
+              </button>
+            ) : (
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium flex items-center gap-1 text-xs">
+                <Check className="w-3.5 h-3.5" />
+                <span>All Active Fields Confirmed</span>
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -422,9 +522,13 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                   &ldquo;{activeSplitField.sourceSnippet || 'No contextual quote recorded.'}&rdquo;
                 </div>
 
-                <div className="p-3 rounded border border-slate-200 dark:border-slate-800 space-y-1.5">
+                <div className="p-3 rounded border border-slate-200 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Engine:</span>
+                    <span className="text-slate-500">Status Konfirmasi:</span>
+                    <div>{renderConfirmButton(activeSplitField)}</div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-slate-500">Mesin Ekstraksi:</span>
                     <div>{getEngineBadge(activeSplitField)}</div>
                   </div>
                   {activeSplitField.fallbackReason && (
@@ -434,7 +538,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                   )}
                   <div className="flex items-center justify-between">
                     <span className="text-slate-500">Extracted:</span>
-                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    <span className="font-semibold text-slate-900 dark:text-slate-100 max-w-[180px] truncate" title={activeSplitField.extractedValue}>
                       {activeSplitField.extractedValue || 'None'}
                     </span>
                   </div>
@@ -446,9 +550,10 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
 
                 <button
                   onClick={() => setReExtractField(activeSplitField)}
-                  className="w-full py-1.5 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium cursor-pointer"
+                  className="w-full py-1.5 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-medium cursor-pointer flex items-center justify-center gap-1"
                 >
-                  Prompt AI Re-extract
+                  <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                  <span>Prompt AI Re-extract</span>
                 </button>
               </div>
             ) : (
@@ -470,6 +575,8 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                       ? 'border-blue-600 bg-blue-50/40 dark:bg-blue-950/20'
                       : field.isSkipped
                       ? 'border-slate-200 dark:border-slate-800 opacity-60 bg-slate-50 dark:bg-slate-900'
+                      : field.isConfirmed
+                      ? 'border-slate-200 dark:border-slate-800 border-l-4 border-l-emerald-500 bg-white dark:bg-slate-900 hover:border-slate-300'
                       : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300'
                   }`}
                 >
@@ -491,19 +598,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
 
                     <div className="flex items-center gap-2 shrink-0">
                       {getConfidenceBadge(field.confidence, field.confidenceLevel)}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          toggleConfirm(field.id);
-                        }}
-                        className={`px-2 py-1 rounded border text-[11px] font-mono cursor-pointer ${
-                          field.isConfirmed
-                            ? 'bg-emerald-600 text-white border-emerald-600'
-                            : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                        }`}
-                      >
-                        {field.isConfirmed ? 'Confirmed' : 'Confirm'}
-                      </button>
+                      {renderConfirmButton(field, true)}
                     </div>
                   </div>
                 </div>
@@ -520,7 +615,8 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                 <th className="py-2.5 px-3 font-semibold">Target Field</th>
                 <th className="py-2.5 px-3 font-semibold">Extracted Value</th>
                 <th className="py-2.5 px-3 font-semibold">Confidence</th>
-                <th className="py-2.5 px-3 font-semibold">Location</th>
+                <th className="py-2.5 px-3 font-semibold">Location / Source</th>
+                <th className="py-2.5 px-3 font-semibold text-center w-[150px]">Confirmation</th>
                 <th className="py-2.5 px-3 font-semibold text-right">Actions</th>
               </tr>
             </thead>
@@ -531,8 +627,12 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                 return (
                   <tr
                     key={field.id}
-                    className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors ${
-                      field.isSkipped ? 'opacity-50' : ''
+                    className={`transition-colors ${
+                      field.isSkipped
+                        ? 'opacity-50 bg-slate-50/80 dark:bg-slate-900/60'
+                        : field.isConfirmed
+                        ? 'border-l-2 border-l-emerald-500 bg-emerald-50/20 dark:bg-emerald-950/10 hover:bg-emerald-50/40 dark:hover:bg-emerald-950/20'
+                        : 'border-l-2 border-l-transparent hover:bg-slate-50 dark:hover:bg-slate-800/40'
                     }`}
                   >
                     {/* Target Field */}
@@ -542,6 +642,9 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                           {field.label}
                         </span>
                         {getEngineBadge(field)}
+                        {field.isSkipped && (
+                          <span className="font-mono text-[10px] text-slate-500 border border-slate-300 dark:border-slate-700 px-1 rounded">[Skipped]</span>
+                        )}
                       </div>
                       <div className="font-mono text-[11px] text-slate-500">
                         {field.templateField}
@@ -563,6 +666,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                             onClick={() => saveEdit(field.id)}
                             className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer"
                             aria-label="Save edit"
+                            title="Simpan perubahan"
                           >
                             <Check className="w-3.5 h-3.5" />
                           </button>
@@ -570,22 +674,25 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                             onClick={cancelEdit}
                             className="p-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 cursor-pointer"
                             aria-label="Cancel edit"
+                            title="Batal"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-medium text-slate-800 dark:text-slate-200">
+                        <div className="flex items-center justify-between gap-2 group">
+                          <span className={`font-medium ${field.isSkipped ? 'line-through text-slate-400' : 'text-slate-800 dark:text-slate-200'}`}>
                             {field.extractedValue || (
                               <span className="text-slate-400 italic">Not found</span>
                             )}
                           </span>
                           <button
                             onClick={() => startEdit(field)}
-                            className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 text-[11px] font-mono cursor-pointer shrink-0"
+                            className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 text-[11px] font-mono cursor-pointer shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                            title="Edit nilai field secara manual"
                           >
-                            [Edit]
+                            <Edit3 className="w-3 h-3" />
+                            <span>Edit</span>
                           </button>
                         </div>
                       )}
@@ -603,40 +710,49 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                         <button
                           onClick={() => setCitationField(field)}
                           className="font-mono text-[11px] text-blue-700 dark:text-blue-400 hover:underline cursor-pointer block mt-0.5"
+                          title="Lihat kutipan sumber dokumen asli"
                         >
                           Source p.{field.sourcePage || 1}
                         </button>
                       )}
                     </td>
 
+                    {/* Confirmation Status */}
+                    <td className="py-3 px-3 align-top text-center shrink-0">
+                      {renderConfirmButton(field)}
+                    </td>
+
                     {/* Actions */}
-                    <td className="py-3 px-3 align-top text-right">
+                    <td className="py-3 px-3 align-top text-right shrink-0">
                       <div className="flex items-center justify-end gap-1.5 text-[11px] font-mono">
                         <button
                           onClick={() => setReExtractField(field)}
-                          className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer"
+                          className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1"
+                          title="Minta AI mengekstrak ulang dengan petunjuk custom"
                         >
-                          Re-extract
+                          <Sparkles className="w-3 h-3 text-blue-500" />
+                          <span>Re-extract</span>
                         </button>
                         <button
                           onClick={() => toggleSkip(field.id)}
-                          className={`px-2 py-1 rounded border cursor-pointer ${
+                          className={`px-2 py-1 rounded border cursor-pointer flex items-center gap-1 ${
                             field.isSkipped
                               ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
                               : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-700'
                           }`}
+                          title={field.isSkipped ? "Pulihkan field ini agar disertakan dalam template" : "Lewati field ini agar tidak dimasukkan ke template"}
                         >
-                          {field.isSkipped ? 'Unskip' : 'Skip'}
-                        </button>
-                        <button
-                          onClick={() => toggleConfirm(field.id)}
-                          className={`px-2 py-1 rounded border font-semibold cursor-pointer ${
-                            field.isConfirmed
-                              ? 'bg-emerald-600 text-white border-emerald-600'
-                              : 'border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:border-emerald-600'
-                          }`}
-                        >
-                          {field.isConfirmed ? 'Confirmed' : 'Confirm'}
+                          {field.isSkipped ? (
+                            <>
+                              <RotateCcw className="w-3 h-3" />
+                              <span>Restore</span>
+                            </>
+                          ) : (
+                            <>
+                              <Ban className="w-3 h-3" />
+                              <span>Skip</span>
+                            </>
+                          )}
                         </button>
                       </div>
                     </td>
@@ -650,18 +766,29 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
 
       {/* Action Footer Bar */}
       <div className="p-4 rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="text-xs text-slate-600 dark:text-slate-400 font-mono">
-          <span>
-            {fields.filter((f) => f.isConfirmed && !f.isSkipped).length} of{' '}
-            {fields.filter((f) => !f.isSkipped).length} active fields confirmed
-          </span>
-          {skippedCount > 0 && <span className="ml-2 text-slate-400">({skippedCount} skipped)</span>}
+        <div className="text-xs text-slate-600 dark:text-slate-400 font-mono space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-slate-800 dark:text-slate-200">
+              {confirmedCount} of {activeCount} active fields confirmed
+            </span>
+            {confirmedCount === activeCount && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                <Check className="w-3.5 h-3.5" /> All confirmed
+              </span>
+            )}
+            {skippedCount > 0 && <span className="text-slate-400">({skippedCount} skipped)</span>}
+          </div>
+          <p className="text-[11px] text-slate-500">
+            {confirmedCount === activeCount
+              ? 'Seluruh data telah diverifikasi dan siap dimasukkan ke template.'
+              : 'Field yang belum dikonfirmasi tetap akan menggunakan nilai hasil ekstraksi saat ini.'}
+          </p>
         </div>
 
         <button
           disabled={isGenerating}
           onClick={handleGenerateClick}
-          className="w-full sm:w-auto px-5 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+          className="w-full sm:w-auto px-5 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
         >
           <span>{isGenerating ? 'Generating Template Document...' : 'Generate Filled Document'}</span>
           <ArrowRight className="w-3.5 h-3.5" />
