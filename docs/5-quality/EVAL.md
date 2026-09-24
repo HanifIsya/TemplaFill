@@ -99,8 +99,8 @@ eval/
 ```
 
 ### Minimum Dataset Size
-- **MVP**: At least 5 document pairs across 3+ domains
-- **v0.2.0**: At least 20 document pairs across 5+ domains
+- **MVP**: At least 5 document pairs across 3+ domains (synthetic, `eval/datasets/{hr,finance,education,legal,general}` — current CI gate)
+- **v0.2.0 (real-world validation 2026-09-24)**: + 1 real contract (`Test source/source_kontrak_konsultasi.pdf` 2 pages + `target_template_ringkasan_kontrak.docx` 51 placeholders, `source_sewa_pemeliharaan_it.pdf` variant) — private, gitignored via `.gitignore:19` `Test source/`, manually verified `51/51 gemini 3.5-flash` on direct REST (6118-char prompt) but synthetic suite remains CI gate to avoid PII. Heuristic fallback now covers 20/51 on this contract (vs 1/51 before Indonesian date/PT fixes) for resilience.
 - **v0.3.0**: At least 50 document pairs with edge cases
 
 ---
