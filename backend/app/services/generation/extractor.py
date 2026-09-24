@@ -312,14 +312,16 @@ class GeminiExtractor:
         prompt while 3.6-flash gave 503. 3.5 is thus first after self.model.
         """
         candidates: List[str] = []
-        # Prefer self.model first, then proven 3.5, then 3.6, then lite/3.7
+        # Prefer self.model first, then proven 3.5, 3.6, 3-preview, lite, 3.7, 3.8
         preferred = [
             self.model,
             "gemini-3.5-flash",
             "gemini-3.6-flash",
+            "gemini-3-flash-preview",
             "gemini-3.5-flash-lite",
             "gemini-3.7-flash",
             "gemini-3.8-flash",
+            "gemini-3.1-flash-lite",
         ]
         for m in preferred:
             if m and m not in candidates and m not in self._BLACKLISTED_MODELS:
@@ -485,7 +487,13 @@ Respond ONLY in valid JSON matching this schema:
 
         if not response:
             self.last_engine_used = "heuristic"
-            reason_str = f"Gemini API Error: {str(last_error)[:120]}" if last_error else "Empty response from Gemini API"
+            err_msg = str(last_error) if last_error else ""
+            if any(x in err_msg.lower() for x in ("quota", "limit: 20", "resource_exhausted")):
+                reason_str = "Google AI Studio Free Tier limit (20 req/day) exhausted. Use paid key or wait for quota reset."
+            elif any(x in err_msg.lower() for x in ("503", "unavailable", "capacity")):
+                reason_str = "Google Gemini server capacity temporarily overloaded (503). Please retry in a few moments."
+            else:
+                reason_str = f"Gemini API Error: {err_msg[:120]}" if last_error else "Empty response from Gemini API"
             self.last_fallback_reason = reason_str
             res = self._fake.extract(field_name, chunks, field_description)
             res.extracted_by = "heuristic"
@@ -552,7 +560,13 @@ Respond ONLY in valid JSON matching this schema:
 
         if not response:
             self.last_engine_used = "heuristic"
-            reason_str = f"Gemini API Error: {str(last_error)[:120]}" if last_error else "Empty response from Gemini API"
+            err_msg = str(last_error) if last_error else ""
+            if any(x in err_msg.lower() for x in ("quota", "limit: 20", "resource_exhausted")):
+                reason_str = "Google AI Studio Free Tier limit (20 req/day) exhausted. Use paid key or wait for quota reset."
+            elif any(x in err_msg.lower() for x in ("503", "unavailable", "capacity")):
+                reason_str = "Google Gemini server capacity temporarily overloaded (503). Please retry in a few moments."
+            else:
+                reason_str = f"Gemini API Error: {err_msg[:120]}" if last_error else "Empty response from Gemini API"
             self.last_fallback_reason = reason_str
             logger.warning("[GeminiExtractor] Batch extraction fallback to fake: %s", last_error)
             res_dict = self._fake.extract_batch(fields, chunks, source_pages=source_pages)
