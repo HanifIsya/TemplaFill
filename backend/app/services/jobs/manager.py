@@ -120,10 +120,10 @@ class JobManager:
             job = await self.get_job(job_id)
             assert job is not None
 
-            # --- Validate and extract PDF ---
-            await self.update_status(job_id, JobStatus.extracting)
-            job.progress.phase = "field_extraction"
-            job.progress.percent = 10
+            # --- Validate and extract PDF (Phase 1) ---
+            await self.update_status(job_id, JobStatus.processing)
+            job.progress.phase = "pdf_extraction"
+            job.progress.percent = 15
 
             from app.services.extraction import extract_pdf
             from app.services.extraction.exceptions import PdfExtractionError
@@ -143,13 +143,14 @@ class JobManager:
             job.extracted_doc = doc
             job.progress.percent = 25
 
-            # --- Chunk ---
+            # --- Chunk (Phase 2) ---
             from app.services.rag.chunker import chunk_document
 
             chunks = chunk_document(doc)
             if not chunks:
                 await self.update_status(job_id, JobStatus.failed, error="No extractable text found in PDF")
                 return
+            job.progress.phase = "embedding"
             job.progress.percent = 35
 
             # --- Embed & store ---
@@ -181,8 +182,11 @@ class JobManager:
             job._chunks = chunks  # type: ignore[attr-defined]
             job.progress.percent = 55
 
-            # --- Parse template ---
+            # --- Parse template (Phase 3: 55% - 74%) ---
             await self.update_status(job_id, JobStatus.mapping)
+            job.progress.phase = "template_mapping"
+            job.progress.percent = 60
+
             from app.services.mapping.parser import parse_template_bytes
 
             try:
@@ -192,7 +196,7 @@ class JobManager:
                 return
             job.parsed_template = parsed
             job.progress.total_fields = len(parsed.fields)
-            job.progress.percent = 65
+            job.progress.percent = 70
 
             if not parsed.fields:
                 # No placeholders: mark completed with empty results
@@ -202,15 +206,17 @@ class JobManager:
                 await self.update_status(job_id, JobStatus.completed)
                 return
 
-            # --- Batch extraction: retrieve top chunks & extract all fields in 1 single Gemini call ---
+            # --- Phase 4: Structured Extraction via Gemini AI (75% - 95%) ---
+            await self.update_status(job_id, JobStatus.extracting)
+            job.progress.phase = "ai_extraction"
+            job.progress.percent = 80
+            job.progress.current_field = 0
+
             from app.services.rag.retriever import Retriever
             from app.services.generation.extractor import get_extractor
 
             retriever = Retriever(vector_store=store, embedder=embedder)
             extractor = get_extractor(force_fake=False)
-
-            job.progress.percent = 65
-            job.progress.current_field = 0
 
             # Step 1: Collect relevant chunks across fields and deduplicate
             unique_chunks_dict = {}
@@ -252,7 +258,7 @@ class JobManager:
             total_conf = 0.0
             for idx, field in enumerate(parsed.fields):
                 job.progress.current_field = idx + 1
-                job.progress.percent = 70 + int(25 * (idx + 1) / len(parsed.fields))
+                job.progress.percent = 80 + int(18 * (idx + 1) / len(parsed.fields))
 
                 ext_res = batch_results.get(field.field_name)
                 if ext_res is not None and ext_res.extracted_value is not None:

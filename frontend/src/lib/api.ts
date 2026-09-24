@@ -198,17 +198,26 @@ class ApiClient {
           const json = await res.json();
           const job = json.data || json;
           const progress = job.progress || {};
-          const status = (job.status as JobStatusType) || 'extracting';
-          let currentStep = 'Processing document pipeline...';
-          if (status === 'extracting') currentStep = '1/4: Parsing and OCR on Source PDF...';
-          else if (status === 'embedding') currentStep = '2/4: Chunking text & generating embeddings...';
-          else if (status === 'mapping') currentStep = `3/4: Inspecting placeholders & mapping (${progress.current_field || 0}/${progress.total_fields || 8})...`;
-          else if (status === 'completed') currentStep = '4/4: Field extraction complete!';
-          else if (status === 'failed') currentStep = `Extraction failed: ${job.error || 'Pipeline error'}`;
-
+          const status = (job.status as JobStatusType) || 'processing';
+          const phase = progress.phase || '';
           let pct = progress.percent;
           if (pct === undefined || pct === null) {
             pct = status === 'completed' ? 100 : currentPercent;
+          }
+
+          let currentStep = 'Processing document pipeline...';
+          if (status === 'completed' || pct >= 100) {
+            currentStep = '4/4: Field extraction complete!';
+          } else if (status === 'failed') {
+            currentStep = `Extraction failed: ${job.error || 'Pipeline error'}`;
+          } else if (status === 'extracting' || phase === 'ai_extraction' || pct >= 75) {
+            currentStep = '4/4: Structured Extraction via Gemini AI...';
+          } else if (status === 'mapping' || phase === 'template_mapping' || pct >= 50) {
+            currentStep = `3/4: Inspecting placeholders & mapping (${progress.current_field || 0}/${progress.total_fields || 8})...`;
+          } else if (phase === 'embedding' || pct >= 25) {
+            currentStep = '2/4: Chunking text & generating embeddings...';
+          } else {
+            currentStep = '1/4: Parsing and OCR on Source PDF...';
           }
 
           return {

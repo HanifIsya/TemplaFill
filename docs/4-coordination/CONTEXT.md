@@ -7,7 +7,7 @@
 ## Last Updated
 - **Date**: 2026-09-24
 - **By**: Antigravity
-- **Summary**: Overhauled Review Mapping UI/UX: transformed ambiguous confirm/confirmed button into explicit dual-state status action (`[✓ Confirmed]` emerald vs `[◌ Unconfirmed / Click to Confirm]` amber with animated icon), added dedicated Confirmation column to Table View, left-accent status coloring, Unconfirmed/Confirmed tab filters with real-time counters, dynamic bulk confirmation actions (`Confirm All High (${count})` / `Confirm All Remaining`), clear footer status explaining optional confirmation behavior, and confirmed indicators in CitationModal. Passed Next.js production build and all 13 frontend tests.
+- **Summary**: Standardized model to `gemini-2.5-flash` to eliminate 404 NotFound errors on Google AI Studio Free Tier and ensure output tokens are produced. Fixed pipeline phase transitions: `JobManager` now transitions to `JobStatus.extracting` (80%) before calling `extract_batch()`, properly displaying Phase 4 ("Structured Extraction via Gemini AI") as ACTIVE with spinner during the 30-60s call. Simplified `GenerateContentConfig` to `response_mime_type="application/json"` without conflicting thinking configs. Documented in ADR-015. 167/167 backend pytest, 13/13 frontend tests, 1.00 eval suite PASS.
 
 ---
 

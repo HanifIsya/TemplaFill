@@ -195,9 +195,9 @@ class GeminiExtractor:
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
         self.model = model if model is not None else settings.gemini_model
-        # Sanitize deprecated / inactive model identifiers
-        if self.model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"):
-            self.model = "gemini-3.7-flash"
+        # Ensure default model is valid and universally available
+        if not self.model or self.model in ("gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"):
+            self.model = "gemini-2.5-flash"
         if use_fake is not None:
             self.use_fake = use_fake
         else:
@@ -220,11 +220,17 @@ class GeminiExtractor:
     def _get_candidate_models(self) -> List[str]:
         """Returns prioritized candidate models excluding blacklisted (404) ones."""
         candidates: List[str] = []
-        preferred = [self.model, "gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.8-flash"]
+        preferred = [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            self.model,
+            "gemini-3.7-flash",
+            "gemini-3.8-flash",
+        ]
         for m in preferred:
             if m and m not in candidates and m not in self._BLACKLISTED_MODELS:
                 candidates.append(m)
-        return candidates or ["gemini-3.7-flash"]
+        return candidates or ["gemini-2.5-flash"]
 
     async def _throttle_call(self) -> None:
         """Paces API calls to avoid 429 TooManyRequests bursts."""
@@ -504,13 +510,7 @@ Respond ONLY in valid JSON matching this schema:
         config = None
         if _HAS_GENAI and hasattr(types, "GenerateContentConfig"):
             try:
-                config_kwargs: Dict[str, Any] = {"response_mime_type": "application/json"}
-                if hasattr(types, "ThinkingConfig"):
-                    try:
-                        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="low")
-                    except Exception:
-                        pass
-                config = types.GenerateContentConfig(**config_kwargs)
+                config = types.GenerateContentConfig(response_mime_type="application/json")
             except Exception:
                 config = None
 

@@ -235,4 +235,18 @@
   - Full transparency for users and developers on exactly which engine produced each field.
   - Eliminates ambiguity when checking Google AI Studio token usage metrics.
 
+---
+
+### ADR-015: Standardizing Model to gemini-2.5-flash and Fixing Pipeline Phase Step Transitions (2026-09-24)
+- **Date**: 2026-09-24
+- **Status**: Accepted
+- **Context**: In user testing, the UI was stuck displaying "Pipeline 3/4: Inspecting placeholders (65%)" for 30-60 seconds during LLM extraction and then abruptly finished without showing Step 4 active. Additionally, Google AI Studio reported 404 NotFound errors and 0 output tokens because `gemini-3.7-flash` and `gemini-3.8-flash` are not universally available on all free-tier projects, and `ThinkingConfig` with `thinking_level` triggered model parameter validation errors.
+- **Decision**:
+  1. **Standardize Model**: Set default model to `gemini-2.5-flash`, the official, universal Google AI Studio model available on all tiers without 404s. Add `gemini-2.5-flash-lite` as immediate secondary candidate.
+  2. **Clean Config**: Use `types.GenerateContentConfig(response_mime_type="application/json")` without conflicting experimental thinking parameters.
+  3. **Accurate Phase Transitions**: Update `JobManager` to set `JobStatus.extracting`, `phase = "ai_extraction"`, and `percent = 80` right before invoking `extract_batch()`. Align `frontend/src/lib/api.ts` to map `percent >= 75` and `status === 'extracting'` directly to `"4/4: Structured Extraction via Gemini AI..."`.
+- **Consequences**:
+  - Step 4 is clearly animated as ACTIVE with its spinner during the 30-60 second AI call.
+  - Model requests succeed with 200 OK using `gemini-2.5-flash`, generating verified output tokens on Google AI Studio.
+
 
