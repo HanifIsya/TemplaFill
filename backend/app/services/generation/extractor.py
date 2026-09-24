@@ -196,8 +196,8 @@ class GeminiExtractor:
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
         self.model = model if model is not None else settings.gemini_model
         # Ensure default model is valid and universally available
-        if not self.model or self.model in ("gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro"):
-            self.model = "gemini-2.5-flash"
+        if not self.model or self.model in ("gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"):
+            self.model = "gemini-3.6-flash"
         if use_fake is not None:
             self.use_fake = use_fake
         else:
@@ -218,19 +218,20 @@ class GeminiExtractor:
                 self.last_fallback_reason = f"Failed to initialize Gemini Client: {e}"
 
     def _get_candidate_models(self) -> List[str]:
-        """Returns prioritized candidate models excluding blacklisted (404) ones."""
+        """Returns prioritized candidate models excluding blacklisted (404/quota-exhausted) ones."""
         candidates: List[str] = []
         preferred = [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
             self.model,
+            "gemini-3.6-flash",
+            "gemini-3.5-flash",
+            "gemini-3.5-flash-lite",
             "gemini-3.7-flash",
             "gemini-3.8-flash",
         ]
         for m in preferred:
             if m and m not in candidates and m not in self._BLACKLISTED_MODELS:
                 candidates.append(m)
-        return candidates or ["gemini-2.5-flash"]
+        return candidates or ["gemini-3.6-flash"]
 
     async def _throttle_call(self) -> None:
         """Paces API calls to avoid 429 TooManyRequests bursts."""
@@ -326,8 +327,15 @@ Respond ONLY in valid JSON matching this schema:
                         logger.warning("[GeminiExtractor] Blacklisted model '%s' due to 404 NotFound", candidate)
                         break  # Immediately advance to next candidate model
 
-                    # On 429 RateLimit or 503 ServiceUnavailable: backoff exponentially
-                    if any(x in err_str for x in ("503", "unavailable", "overload", "429", "too many", "quota", "resource_exhausted")):
+                    # On daily/plan quota exhausted (e.g. 20 requests/day limit on free tier):
+                    # Do not wait and retry the same model — blacklist and advance immediately to next model
+                    if any(x in err_str for x in ("quota", "resource_exhausted", "limit: 20", "per day")) and not ("per minute" in err_str or "rpm" in err_str):
+                        GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
+                        logger.warning("[GeminiExtractor] Model '%s' quota exhausted, advancing to next candidate model", candidate)
+                        break
+
+                    # On transient 429 RateLimit (burst) or 503 ServiceUnavailable: backoff exponentially
+                    if any(x in err_str for x in ("503", "unavailable", "overload", "429", "too many")):
                         if attempt < 1:
                             delay = 2.5 * (attempt + 1)
                             logger.info("[GeminiExtractor] Rate limited / service unavailable, backing off %.1fs...", delay)
