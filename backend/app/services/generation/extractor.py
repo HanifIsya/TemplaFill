@@ -282,7 +282,12 @@ class GeminiExtractor:
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, use_fake: Optional[bool] = None):
         settings = get_settings()
-        self.api_key = api_key if api_key is not None else settings.gemini_api_key
+        raw_key = api_key if api_key is not None else settings.gemini_api_key
+        from app.core.key_pool import get_key_pool
+
+        self.key_pool = get_key_pool(raw_key if api_key is not None else None)
+        active_key = self.key_pool.get_current_key()
+        self.api_key = active_key if active_key else raw_key
         self.model = model if model is not None else settings.gemini_model
         # Ensure default model is valid and universally available
         if not self.model or self.model in ("gemini-2.0-flash-exp", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"):
@@ -297,11 +302,21 @@ class GeminiExtractor:
         self.last_fallback_reason: Optional[str] = (
             None if not self.use_fake else "GEMINI_API_KEY is not configured in backend environment"
         )
-        if not self.use_fake and _HAS_GENAI:
+        if not self.use_fake and _HAS_GENAI and self.api_key:
             try:
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:  # noqa: BLE001
                 logger.warning("Failed to initialize genai.Client (%s). Using REST fallback.", e)
+                self._client = None
+
+    def _switch_api_key(self, new_key: str) -> None:
+        """Switch active API key and reinitialize client."""
+        self.api_key = new_key
+        if not self.use_fake and _HAS_GENAI and self.api_key:
+            try:
+                self._client = genai.Client(api_key=self.api_key)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed to reinitialize genai.Client with rotated key: %s", e)
                 self._client = None
 
     def _get_candidate_models(self) -> List[str]:
@@ -403,51 +418,62 @@ Respond ONLY in valid JSON matching this schema:
 """
 
     async def _call_gemini_with_fallback(self, prompt: str) -> Tuple[Optional[str], Optional[Exception]]:
-        """Executes a Gemini call with candidate model progression, 404 blacklisting, and 429 backoff."""
+        """Executes a Gemini call with candidate model progression, 404 blacklisting, 429 backoff, and multi-key rotation."""
         response: Optional[str] = None
         last_error: Optional[Exception] = None
 
-        candidate_models = self._get_candidate_models()
-        for candidate in candidate_models:
-            for attempt in range(2):
-                try:
-                    await self._throttle_call()
-                    self.model = candidate
-                    response = await self._call_gemini(prompt)
-                    if response:
-                        return response, None
-                except Exception as e:
-                    last_error = e
-                    err_str = str(e).lower()
-                    logger.warning("[GeminiExtractor] Model '%s' attempt %d failed: %s", candidate, attempt + 1, e)
+        max_key_rotations = max(1, self.key_pool.total_keys)
+        for _ in range(max_key_rotations):
+            candidate_models = self._get_candidate_models()
+            for candidate in candidate_models:
+                for attempt in range(2):
+                    try:
+                        await self._throttle_call()
+                        self.model = candidate
+                        response = await self._call_gemini(prompt)
+                        if response:
+                            return response, None
+                    except Exception as e:
+                        last_error = e
+                        err_str = str(e).lower()
+                        logger.warning("[GeminiExtractor] Model '%s' attempt %d failed: %s", candidate, attempt + 1, e)
 
-                    # On 404 NotFound: Model does not exist on this endpoint or key, blacklist it
-                    if "404" in err_str or "not found" in err_str:
-                        GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
-                        logger.warning("[GeminiExtractor] Blacklisted model '%s' due to 404 NotFound", candidate)
-                        break  # Immediately advance to next candidate model
+                        # On 404 NotFound: Model does not exist on this endpoint or key, blacklist it
+                        if "404" in err_str or "not found" in err_str:
+                            GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
+                            logger.warning("[GeminiExtractor] Blacklisted model '%s' due to 404 NotFound", candidate)
+                            break  # Immediately advance to next candidate model
 
-                    # On daily/plan quota exhausted (e.g. 20 requests/day limit on free tier):
-                    # Do not wait and retry the same model — blacklist and advance immediately to next model
-                    if any(x in err_str for x in ("quota", "resource_exhausted", "limit: 20", "per day")) and not ("per minute" in err_str or "rpm" in err_str):
-                        GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
-                        logger.warning("[GeminiExtractor] Model '%s' quota exhausted, advancing to next candidate model", candidate)
+                        # On daily/plan quota exhausted (e.g. 20 requests/day limit on free tier):
+                        if any(x in err_str for x in ("quota", "resource_exhausted", "limit: 20", "per day")) and not ("per minute" in err_str or "rpm" in err_str):
+                            if self.key_pool.total_keys > 1:
+                                next_key = self.key_pool.mark_exhausted(self.api_key, reason="daily quota 429")
+                                if next_key and next_key != self.api_key:
+                                    logger.info("[GeminiExtractor] Rotating to fresh API key from pool, retrying candidate models")
+                                    self._switch_api_key(next_key)
+                                    GeminiExtractor._BLACKLISTED_MODELS.clear()
+                                    break  # Advance to next key iteration
+                            GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
+                            logger.warning("[GeminiExtractor] Model '%s' quota exhausted, advancing to next candidate model", candidate)
+                            break
+
+                        # On 503 ServiceUnavailable or overload:
+                        # Google's model cluster is overloaded. Do not retry the same model — advance immediately!
+                        if any(x in err_str for x in ("503", "unavailable", "overload")):
+                            GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
+                            logger.warning("[GeminiExtractor] Model '%s' service unavailable, advancing to next candidate model", candidate)
+                            break
+
+                        # On transient 429 RateLimit (burst): backoff exponentially
+                        if any(x in err_str for x in ("429", "too many")):
+                            if attempt < 1:
+                                delay = 2.0 * (attempt + 1)
+                                logger.info("[GeminiExtractor] Rate limited, backing off %.1fs...", delay)
+                                await asyncio.sleep(delay)
+                                continue
                         break
 
-                    # On 503 ServiceUnavailable or overload:
-                    # Google's model cluster is overloaded. Do not retry the same model — advance immediately!
-                    if any(x in err_str for x in ("503", "unavailable", "overload")):
-                        GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
-                        logger.warning("[GeminiExtractor] Model '%s' service unavailable, advancing to next candidate model", candidate)
-                        break
-
-                    # On transient 429 RateLimit (burst): backoff exponentially
-                    if any(x in err_str for x in ("429", "too many")):
-                        if attempt < 1:
-                            delay = 2.0 * (attempt + 1)
-                            logger.info("[GeminiExtractor] Rate limited, backing off %.1fs...", delay)
-                            await asyncio.sleep(delay)
-                            continue
+                if response:
                     break
 
             if response:

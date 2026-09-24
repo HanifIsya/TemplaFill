@@ -100,7 +100,12 @@ class Embedder:
         use_fake: Optional[bool] = None,
     ):
         settings = get_settings()
-        self.api_key = api_key if api_key is not None else settings.gemini_api_key
+        raw_key = api_key if api_key is not None else settings.gemini_api_key
+        from app.core.key_pool import get_key_pool
+
+        self.key_pool = get_key_pool(raw_key if api_key is not None else None)
+        active_key = self.key_pool.get_current_key()
+        self.api_key = active_key if active_key else raw_key
         self.model = model if model is not None else settings.gemini_embedding_model
         # Sanitize legacy / unsupported embedding models that return 404 in v1beta
         if self.model in ("text-embedding-004", "models/text-embedding-004"):
