@@ -1,12 +1,12 @@
 # TemplaFill 📄✨
 
 > **AI-Powered Document Field Extraction & Multi-Format Template Population Engine**  
-> *Extract precise structured data from unstructured PDF documents via Retrieval-Augmented Generation (RAG) and Google Gemini 3.7 / 3.8 Flash, then automatically map and populate variables into Microsoft Word (`.docx`), Excel (`.xlsx`), and PowerPoint (`.pptx`) templates while preserving 100% of original formatting, layouts, and styles.*
+> *Extract precise structured data from unstructured PDF documents via Retrieval-Augmented Generation (RAG) and Google Gemini 3.6 Flash, then automatically map and populate variables into Microsoft Word (`.docx`), Excel (`.xlsx`), and PowerPoint (`.pptx`) templates while preserving 100% of original formatting, layouts, and styles.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2015-black?logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Gemini](https://img.shields.io/badge/AI-Gemini%203.7%20%2F%203.8%20Flash-4285F4?logo=google)](https://ai.google.dev/)
+[![Gemini](https://img.shields.io/badge/AI-Gemini%203.6%20Flash-4285F4?logo=google)](https://ai.google.dev/)
 [![Embeddings](https://img.shields.io/badge/Embeddings-gemini--embedding--001-blue)](https://ai.google.dev/)
 [![Evaluation Benchmark](https://img.shields.io/badge/Evaluation%20F1-1.00%20(5%20Domains)-success)](docs/5-quality/EVAL.md)
 [![Test Suite](https://img.shields.io/badge/Tests-165%20Pytest%20%7C%2013%20E2E-brightgreen)](tests/)

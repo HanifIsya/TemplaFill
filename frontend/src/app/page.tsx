@@ -247,8 +247,8 @@ export default function Home() {
             } else {
               addToast(
                 'success',
-                'Ekstraksi Gemini AI Berhasil',
-                `Berhasil mengekstrak ${result.totalFields} field langsung menggunakan Google Gemini AI.`
+                'Ekstraksi Google Gemini 3.6 Flash Berhasil',
+                `Berhasil mengekstrak ${result.totalFields} field langsung menggunakan Google Gemini 3.6 Flash.`
               );
             }
           } else if (updated.status === 'failed') {

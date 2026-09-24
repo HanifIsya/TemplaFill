@@ -220,10 +220,10 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
       return (
         <span
           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60"
-          title="Diekstrak langsung oleh Google Gemini AI"
+          title="Diekstrak langsung oleh Google Gemini 3.6 Flash"
         >
-          <Sparkles className="w-2.5 h-2.5" />
-          Gemini AI
+          <Sparkles className="w-2.5 h-2.5 text-indigo-500" />
+          Gemini 3.6 Flash
         </span>
       );
     }
@@ -346,11 +346,11 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="text-[11px]">
-              <strong>Didukung Penuh oleh Gemini AI</strong>: Semua field berhasil diekstrak langsung menggunakan kecerdasan buatan Google Gemini.
+              <strong>Didukung Penuh oleh Google Gemini 3.6 Flash</strong>: Semua field berhasil diekstrak langsung menggunakan kecerdasan buatan Google Gemini.
             </span>
           </div>
           <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 shrink-0">
-            Gemini AI Active
+            Gemini 3.6 Flash Active
           </span>
         </div>
       )}

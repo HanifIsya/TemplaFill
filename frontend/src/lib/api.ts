@@ -211,7 +211,7 @@ class ApiClient {
           } else if (status === 'failed') {
             currentStep = `Extraction failed: ${job.error || 'Pipeline error'}`;
           } else if (status === 'extracting' || phase === 'ai_extraction' || pct >= 75) {
-            currentStep = '4/4: Structured Extraction via Gemini AI...';
+            currentStep = '4/4: Structured Extraction via Gemini 3.6 Flash...';
           } else if (status === 'mapping' || phase === 'template_mapping' || pct >= 50) {
             currentStep = `3/4: Inspecting placeholders & mapping (${progress.current_field || 0}/${progress.total_fields || 8})...`;
           } else if (phase === 'embedding' || pct >= 25) {

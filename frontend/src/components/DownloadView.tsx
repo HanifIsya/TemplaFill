@@ -36,7 +36,7 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
       templateDocument: sessionInfo.templateDoc,
       generatedFile: generationResult.filename,
       timestamp: new Date().toISOString(),
-      engine: 'Gemini 3.7 / 3.8 Flash RAG',
+      engine: 'Google Gemini 3.6 Flash RAG',
     };
     const blob = new Blob([JSON.stringify(auditData, null, 2)], {
       type: 'application/json',

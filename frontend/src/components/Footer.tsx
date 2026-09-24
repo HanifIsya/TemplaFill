@@ -32,7 +32,7 @@ export const Footer: React.FC<FooterProps> = ({ onOpenHelp }) => {
         </div>
 
         <div>
-          <span>Gemini 3.7 / 3.8 Flash + PyMuPDF</span>
+          <span>Google Gemini 3.6 Flash + PyMuPDF</span>
         </div>
       </div>
     </footer>

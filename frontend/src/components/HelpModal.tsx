@@ -97,7 +97,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       <h4 className="text-xs font-mono font-bold text-slate-200 uppercase">Ekstraksi RAG & AI</h4>
                     </div>
                     <p className="text-xs text-slate-400">
-                      PyMuPDF mem-parsing teks PDF, membuat semantic chunking, menghasilkan embedding vektor, dan memanggil <strong>Gemini 3.7 / 3.8 Flash</strong> untuk menemukan data persis yang dibutuhkan.
+                      PyMuPDF mem-parsing teks PDF, membuat semantic chunking, menghasilkan embedding vektor, dan memanggil <strong>Google Gemini 3.6 Flash</strong> untuk menemukan data persis yang dibutuhkan.
                     </p>
                   </div>
 
@@ -227,7 +227,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-mono text-xs font-bold text-blue-400 uppercase">
-                      1. Mesin Utama: Google Gemini 3.7 / 3.8 Flash + RAG
+                      1. Mesin Utama: Google Gemini 3.6 Flash + RAG
                     </span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
                       Primary AI
@@ -375,7 +375,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
         {/* Footer */}
         <div className="flex items-center justify-between px-6 py-3 border-t border-slate-800 bg-slate-950 text-xs font-mono text-slate-400">
-          <span>TemplaFill v0.1.0 • Gemini 3.7 / 3.8 Flash</span>
+          <span>TemplaFill v0.1.0 • Google Gemini 3.6 Flash</span>
           <button
             onClick={onClose}
             className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium uppercase tracking-wider text-[11px] transition-colors"

@@ -43,7 +43,7 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDem
             System Specifications & Supported Formats
           </span>
           <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-            Engine: Gemini 3.7 / 3.8 Flash + PyMuPDF
+            Engine: Google Gemini 3.6 Flash + PyMuPDF
           </span>
         </div>
 

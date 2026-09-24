@@ -48,7 +48,9 @@ async def debug_gemini():
         }
 
     results = {}
-    for model_name in ["gemini-3.8-flash", "gemini-3.7-flash"]:
+    for model_name in [ext.model, "gemini-3.6-flash", "gemini-3.5-flash"]:
+        if not model_name or model_name in results:
+            continue
         try:
             ext.model = model_name
             resp = await ext._call_gemini("Ping! Reply with 'PONG' only.")

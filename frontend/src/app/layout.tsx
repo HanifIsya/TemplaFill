@@ -17,7 +17,7 @@ const ibmPlexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: 'TemplaFill | Document Field Extraction & Template Population',
   description:
-    'Extract structured fields from source PDF documents and populate DOCX, XLSX, and PPTX templates using RAG and Gemini 3.7 / 3.8 Flash.',
+    'Extract structured fields from source PDF documents and populate DOCX, XLSX, and PPTX templates using RAG and Google Gemini 3.6 Flash.',
 };
 
 export default function RootLayout({
