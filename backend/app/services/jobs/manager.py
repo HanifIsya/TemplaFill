@@ -242,7 +242,11 @@ class JobManager:
             fields_payload = [
                 {
                     "field_name": field.field_name,
-                    "description": field.placeholder or "",
+                    "description": (
+                        f"{field.field_name.replace('_', ' ')} (Template context: {field.context})"
+                        if field.context and field.context != field.placeholder
+                        else field.field_name.replace("_", " ")
+                    ),
                 }
                 for field in parsed.fields
             ]

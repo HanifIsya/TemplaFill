@@ -122,11 +122,12 @@ def _parse_docx(file_bytes: bytes, filename: str = "") -> ParsedTemplate:
     found: List[Tuple[str, str, str, str, str]] = []
     warnings: List[str] = []
 
-    def scan_text(text: str, location: str):
+    def scan_text(text: str, location: str, ctx: Optional[str] = None):
         if not text:
             return
+        context_str = ctx if ctx else text
         for raw, norm, pat in _find_placeholders(text):
-            found.append((raw, norm, pat, location, text))
+            found.append((raw, norm, pat, location, context_str))
 
     # Paragraphs
     for idx, para in enumerate(doc.paragraphs):
@@ -134,11 +135,22 @@ def _parse_docx(file_bytes: bytes, filename: str = "") -> ParsedTemplate:
 
     # Tables
     for t_idx, table in enumerate(doc.tables):
+        header_cells = [c.text.strip() for c in table.rows[0].cells] if len(table.rows) > 0 else []
         for r_idx, row in enumerate(table.rows):
             for c_idx, cell in enumerate(row.cells):
+                other_labels = [c.text.strip() for idx, c in enumerate(row.cells) if idx != c_idx and c.text.strip()]
+                row_label = " - ".join(other_labels)
+                header_label = header_cells[c_idx] if c_idx < len(header_cells) else ""
+                table_ctx = ""
+                if row_label:
+                    table_ctx = f"Label: {row_label}"
+                if header_label and header_label != row_label:
+                    table_ctx = f"{table_ctx} (Header: {header_label})" if table_ctx else f"Header: {header_label}"
+
                 for p_idx, para in enumerate(cell.paragraphs):
                     loc = f"table:{t_idx} row:{r_idx} col:{c_idx} para:{p_idx}"
-                    scan_text(para.text, loc)
+                    full_ctx = f"{table_ctx} | {para.text}" if table_ctx else para.text
+                    scan_text(para.text, loc, full_ctx)
 
     # Headers / Footers
     for s_idx, section in enumerate(doc.sections):

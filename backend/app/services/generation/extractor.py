@@ -251,6 +251,8 @@ Context chunks from source PDF:
 
 Instructions:
 - Extract the value for the field exactly as it appears in the context.
+- If the field or context asks for representative/position/title (e.g. "perwakilan", "jabatan", "pic", "authorized person"), extract BOTH the person's full name AND their title/position (e.g., "Nama Lengkap — Jabatan").
+- Return clean plain text. Do NOT include markdown formatting like **bold** or *italic* in the value.
 - If the field is not present or ambiguous, return null for value and 0.0 confidence.
 - Provide confidence between 0.0 and 1.0.
 - Cite the source page number (1-indexed chunk number) and the exact snippet.
@@ -272,7 +274,10 @@ Extract all requested fields from the context below.
 Strict rules:
 1. ONLY extract data that is explicitly stated in the context. Never hallucinate or infer.
 2. If a field value is not found, ambiguous, or not explicitly stated, set "value" to null and "confidence" to 0.0.
-3. For each found field, provide:
+3. If a field or context requests representative and position/title (e.g. 'pic_klien', 'pic_vendor', or fields with context 'Perwakilan / Jabatan'):
+   Extract BOTH the authorized person's full name AND their title/position (e.g. "Ir. Bambang Wijaya, M.T. — Direktur Utama" or "Nama, Jabatan").
+4. Return clean plain text. DO NOT include markdown asterisks like **bold** or *italic* inside the extracted string values.
+5. For each found field, provide:
    - "field_name": Exact field name requested.
    - "value": The exact extracted string or null.
    - "confidence": Float between 0.0 and 1.0 (1.0 = explicit exact match).

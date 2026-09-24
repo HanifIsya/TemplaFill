@@ -31,6 +31,16 @@ from typing import Dict, Tuple, Union
 from app.services.mapping.parser import _find_placeholders, _normalize_field_name
 
 
+def _clean_field_value(val: Any) -> str:
+    if val is None:
+        return ""
+    text = str(val)
+    # Strip markdown bold/italic tags like **text** or *text* that LLMs might produce
+    text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
+    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    return text
+
+
 def _build_replacement_map(mapped: Dict[str, str]) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Normalize mapped dict to handle both raw placeholder and field_name keys.
 
@@ -42,7 +52,7 @@ def _build_replacement_map(mapped: Dict[str, str]) -> Tuple[Dict[str, str], Dict
     for k, v in mapped.items():
         if not isinstance(k, str):
             continue
-        val = str(v) if v is not None else ""
+        val = _clean_field_value(v)
         placeholders = _find_placeholders(k)
         if placeholders:
             # k is a raw placeholder like {{nomor_kontrak}}
@@ -148,9 +158,8 @@ def _generate_docx(template_bytes: bytes, mapped: Dict[str, str]) -> bytes:
         size = first_run.font.size
 
         paragraph.text = new_text
-        # Reapply to first run
-        if paragraph.runs:
-            run = paragraph.runs[0]
+        # Reapply formatting uniformly to all runs created by docx
+        for run in paragraph.runs:
             run.bold = bold
             run.italic = italic
             run.underline = underline
