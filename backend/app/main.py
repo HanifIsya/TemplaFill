@@ -33,13 +33,15 @@ app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIdMiddleware)
 
-# ----- CORS (VULN-9: restrict methods/headers to only what's needed) -----
+# ----- CORS (allow Vercel production & preview domains, localhost, and any headers) -----
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins_list,
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type", "Authorization", "X-Request-ID", "Accept"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["Content-Disposition", "X-Request-ID"],
 )
 
 # ----- Routers -----

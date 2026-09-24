@@ -101,47 +101,13 @@ class ApiClient {
   }
 
   async uploadFiles(sourceFile: File, templateFile: File): Promise<SessionInfo> {
-    const health = await this.checkHealth({ timeoutMs: 8000 });
-    // If backend is waking, give it a short grace window (Render cold start) before falling back to mock
-    if (!health.isLive && health.isWaking) {
-      const waited = await this.waitForBackend(6, 5000);
+    let health = await this.checkHealth({ timeoutMs: 8000 });
+    // If backend is waking or not live, give it a grace window before failing
+    if (!health.isLive) {
+      const waited = await this.waitForBackend(10, 5000);
       if (waited.isLive) {
-        const retryHealth = await this.checkHealth();
-        if (retryHealth.isLive) {
-          const formData = new FormData();
-          formData.append('source_file', sourceFile);
-          formData.append('template_file', templateFile);
-          const res = await fetch(`${this.baseUrl}/upload`, { method: 'POST', body: formData });
-          if (res.ok) {
-            const data = await res.json();
-            const jobData = data.data || data;
-            const jobId = jobData.job_id || `job-${Date.now().toString(36)}`;
-            return {
-              sessionId: jobId,
-              sourceDoc: {
-                filename: jobData.source_file?.filename || sourceFile.name,
-                sizeBytes: jobData.source_file?.size_bytes || sourceFile.size,
-                format: 'pdf',
-                pageCount: jobData.source_file?.page_count || 1,
-              },
-              templateDoc: {
-                filename: jobData.template_file?.filename || templateFile.name,
-                sizeBytes: jobData.template_file?.size_bytes || templateFile.size,
-                format: jobData.template_file?.format || templateFile.name.split('.').pop() || 'docx',
-                detectedFieldsCount: 8,
-              },
-              createdAt: jobData.created_at || new Date().toISOString(),
-            };
-          }
-          let errText = res.statusText;
-          try {
-            const errJson = await res.json();
-            if (errJson?.error?.message) errText = errJson.error.message;
-          } catch {}
-          throw new Error(`Upload failed: ${errText}`);
-        }
+        health = await this.checkHealth();
       }
-      throw new Error('Backend is waking up (Render Hobby cold start ~60s). Please wait and retry — or use mock demo mode.');
     }
 
     if (health.isLive) {
@@ -178,30 +144,13 @@ class ApiClient {
           filename: jobData.template_file?.filename || templateFile.name,
           sizeBytes: jobData.template_file?.size_bytes || templateFile.size,
           format: jobData.template_file?.format || templateFile.name.split('.').pop() || 'docx',
-          detectedFieldsCount: 8,
+          detectedFieldsCount: jobData.template_file?.detected_fields_count || 51,
         },
         createdAt: jobData.created_at || new Date().toISOString(),
       };
     }
 
-    // Dev Fallback Mock
-    await new Promise((resolve) => setTimeout(resolve, 800));
-    return {
-      sessionId: `session-${Date.now().toString(36)}`,
-      sourceDoc: {
-        filename: sourceFile.name,
-        sizeBytes: sourceFile.size,
-        format: 'pdf',
-        pageCount: Math.max(1, Math.floor(sourceFile.size / 120000)),
-      },
-      templateDoc: {
-        filename: templateFile.name,
-        sizeBytes: templateFile.size,
-        format: templateFile.name.split('.').pop() || 'docx',
-        detectedFieldsCount: 8,
-      },
-      createdAt: new Date().toISOString(),
-    };
+    throw new Error('Backend is not reachable on Render (may still be waking up). Please retry in 30 seconds.');
   }
 
   async startExtraction(sessionId: string): Promise<{ jobId: string }> {
@@ -284,89 +233,99 @@ class ApiClient {
   }
 
   async getFieldMappings(sessionId: string): Promise<ExtractionResult> {
-    const health = await this.checkHealth();
-    if (health.isLive) {
-      try {
-        const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/results`, { cache: 'no-store' });
-        if (res.ok) {
-          const json = await res.json();
-          const data = json.data || json;
-          const rawFields: any[] = data.fields || [];
-          if (rawFields.length > 0) {
-            const fields: FieldMapping[] = rawFields.map((f: any, idx: number) => {
-              const conf = typeof f.confidence === 'number' ? f.confidence : 0.85;
-              const confLevel: 'high' | 'medium' | 'low' = conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low';
-              const fieldName = f.field_name || `field_${idx}`;
-              let fType: FieldMapping['fieldType'] = 'text';
-              if (/date|time|period|deadline/i.test(fieldName)) fType = 'date';
-              else if (/price|cost|fee|amount|rate|value|budget/i.test(fieldName)) fType = 'currency';
-              else if (/count|qty|quantity|number|num|total_items/i.test(fieldName)) fType = 'number';
-              else if (/items|list|table|rows/i.test(fieldName)) fType = 'table';
+    const isMock = sessionId.startsWith('demo-') || sessionId.startsWith('mock-');
+    if (!isMock) {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        try {
+          const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/results`, { cache: 'no-store' });
+          if (res.ok) {
+            const json = await res.json();
+            const data = json.data || json;
+            const rawFields: any[] = data.fields || [];
+            if (rawFields.length > 0) {
+              const fields: FieldMapping[] = rawFields.map((f: any, idx: number) => {
+                const conf = typeof f.confidence === 'number' ? f.confidence : 0.85;
+                const confLevel: 'high' | 'medium' | 'low' = conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low';
+                const fieldName = f.field_name || `field_${idx}`;
+                let fType: FieldMapping['fieldType'] = 'text';
+                if (/date|time|period|deadline/i.test(fieldName)) fType = 'date';
+                else if (/price|cost|fee|amount|rate|value|budget/i.test(fieldName)) fType = 'currency';
+                else if (/count|qty|quantity|number|num|total_items/i.test(fieldName)) fType = 'number';
+                else if (/items|list|table|rows/i.test(fieldName)) fType = 'table';
+
+                return {
+                  id: f.field_id || `f-${idx}`,
+                  templateField: f.placeholder || f.field_name || `field_${idx}`,
+                  label: f.field_label || f.field_name || `Field ${idx + 1}`,
+                  targetLocation: f.source_reference?.page ? `Page ${f.source_reference.page}` : 'Document Body',
+                  extractedValue: f.user_edited_value || f.extracted_value || '',
+                  confidence: conf,
+                  confidenceLevel: confLevel,
+                  sourcePage: f.source_reference?.page || 1,
+                  sourceSnippet: f.source_reference?.snippet || '',
+                  isEdited: Boolean(f.is_manually_edited),
+                  isConfirmed: f.status === 'confirmed',
+                  isSkipped: f.status === 'skipped',
+                  fieldType: fType,
+                  extractedBy: f.extracted_by || (f.source_reference?.snippet?.includes('AI_ERROR') ? 'heuristic' : 'gemini'),
+                  fallbackReason: f.fallback_reason,
+                };
+              });
+
+              const high = fields.filter((f) => f.confidence >= 0.8).length;
+              const medium = fields.filter((f) => f.confidence >= 0.5 && f.confidence < 0.8).length;
+              const low = fields.filter((f) => f.confidence < 0.5).length;
+              const avg = fields.reduce((acc, f) => acc + f.confidence, 0) / fields.length;
+
+              const hasAiError = Boolean(
+                data.has_ai_error ||
+                data.has_fallback ||
+                data.engine_used === 'heuristic' ||
+                rawFields.some((f: any) =>
+                  f.extracted_by === 'heuristic' ||
+                  f.source_reference?.snippet?.includes('AI_ERROR') ||
+                  f.source_reference?.snippet?.includes('404') ||
+                  f.source_reference?.snippet?.includes('429')
+                )
+              );
+
+              const fallbackReason = data.fallback_reason || (hasAiError
+                ? 'AI service hit a quota or model limit (404/429/Missing Key). The extraction engine automatically switched to the local heuristic fallback.'
+                : undefined);
+
+              const engineUsed = (data.engine_used as any) || (hasAiError ? 'heuristic' : 'gemini');
 
               return {
-                id: f.field_id || `f-${idx}`,
-                templateField: f.placeholder || f.field_name || `field_${idx}`,
-                label: f.field_label || f.field_name || `Field ${idx + 1}`,
-                targetLocation: f.source_reference?.page ? `Page ${f.source_reference.page}` : 'Document Body',
-                extractedValue: f.user_edited_value || f.extracted_value || '',
-                confidence: conf,
-                confidenceLevel: confLevel,
-                sourcePage: f.source_reference?.page || 1,
-                sourceSnippet: f.source_reference?.snippet || '',
-                isEdited: Boolean(f.is_manually_edited),
-                isConfirmed: f.status === 'confirmed',
-                isSkipped: f.status === 'skipped',
-                fieldType: fType,
-                extractedBy: f.extracted_by || (f.source_reference?.snippet?.includes('AI_ERROR') ? 'heuristic' : 'gemini'),
-                fallbackReason: f.fallback_reason,
+                sessionId,
+                totalFields: fields.length,
+                highConfidenceCount: high,
+                mediumConfidenceCount: medium,
+                lowConfidenceCount: low,
+                averageConfidence: avg,
+                fields,
+                hasAiError,
+                hasFallback: hasAiError,
+                fallbackReason,
+                aiErrorMessage: fallbackReason,
+                engineUsed,
               };
-            });
-
-            const high = fields.filter((f) => f.confidence >= 0.8).length;
-            const medium = fields.filter((f) => f.confidence >= 0.5 && f.confidence < 0.8).length;
-            const low = fields.filter((f) => f.confidence < 0.5).length;
-            const avg = fields.reduce((acc, f) => acc + f.confidence, 0) / fields.length;
-
-            const hasAiError = Boolean(
-              data.has_ai_error ||
-              data.has_fallback ||
-              data.engine_used === 'heuristic' ||
-              rawFields.some((f: any) =>
-                f.extracted_by === 'heuristic' ||
-                f.source_reference?.snippet?.includes('AI_ERROR') ||
-                f.source_reference?.snippet?.includes('404') ||
-                f.source_reference?.snippet?.includes('429')
-              )
-            );
-
-            const fallbackReason = data.fallback_reason || (hasAiError
-              ? 'AI service hit a quota or model limit (404/429/Missing Key). The extraction engine automatically switched to the local heuristic fallback.'
-              : undefined);
-
-            const engineUsed = (data.engine_used as any) || (hasAiError ? 'heuristic' : 'gemini');
-
-            return {
-              sessionId,
-              totalFields: fields.length,
-              highConfidenceCount: high,
-              mediumConfidenceCount: medium,
-              lowConfidenceCount: low,
-              averageConfidence: avg,
-              fields,
-              hasAiError,
-              hasFallback: hasAiError,
-              fallbackReason,
-              aiErrorMessage: fallbackReason,
-              engineUsed,
-            };
+            }
+          } else if (res.status === 404 && attempt < 5) {
+            await new Promise((r) => setTimeout(r, 1200));
+            continue;
+          }
+        } catch (err) {
+          console.warn(`Fetch results error on attempt ${attempt + 1}:`, err);
+          if (attempt < 5) {
+            await new Promise((r) => setTimeout(r, 1200));
+            continue;
           }
         }
-      } catch (err) {
-        console.warn('Fetch results error, using mock fields', err);
       }
+      throw new Error(`Extraction completed on backend, but results are not ready yet. Please retry in a moment.`);
     }
 
-    // Mock data return
+    // Mock data return (only for explicit demo preset)
     const fields = MOCK_FIELDS;
     const high = fields.filter((f) => f.confidence >= 0.8).length;
     const medium = fields.filter((f) => f.confidence >= 0.5 && f.confidence < 0.8).length;

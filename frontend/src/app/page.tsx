@@ -218,14 +218,16 @@ export default function Home() {
       const interval = setInterval(async () => {
         try {
           pollAttempts++;
-          currentProgress = Math.min(95, currentProgress + 10);
           const updated = await api.getJobProgress(jobId, currentProgress);
           setProgress(updated);
+          if (typeof updated.progressPercent === 'number' && updated.progressPercent > 0) {
+            currentProgress = updated.progressPercent;
+          }
 
-          const isComplete = updated.status === 'completed' || (updated.progressPercent >= 100 && updated.status !== 'extracting' && updated.status !== 'mapping');
-          const isTimeout = pollAttempts >= 50;
+          const isComplete = updated.status === 'completed';
+          const isTimeout = pollAttempts >= 120; // 120 * 1s = 2 minutes
 
-          if (isComplete || isTimeout) {
+          if (isComplete) {
             clearInterval(interval);
             // Fetch results
             const result = await api.getFieldMappings(session.sessionId);
@@ -247,56 +249,38 @@ export default function Home() {
             } else {
               addToast(
                 'success',
-                'Google Gemini 3.6 Flash — Extraction Complete',
-                `Successfully extracted ${result.totalFields} fields directly with Google Gemini 3.6 Flash.`
+                'Google Gemini — Extraction Complete',
+                `Successfully extracted ${result.totalFields} fields directly with Google Gemini.`
               );
             }
+          } else if (isTimeout) {
+            clearInterval(interval);
+            throw new Error('Extraction timed out. The backend is taking longer than expected. Please check again in a moment.');
           } else if (updated.status === 'failed') {
             clearInterval(interval);
             throw new Error(updated.errorMessage || 'Job failed during backend processing');
           }
         } catch (pollErr: any) {
           clearInterval(interval);
-          console.warn('Extraction polling failed, switching to demo mode fallback:', pollErr);
+          console.error('Extraction polling failed:', pollErr);
           addToast(
-            'warning',
-            'Live Pipeline Fallback',
-            pollErr?.message || 'Backend processing encountered an issue. Switched to demo data for review.'
+            'error',
+            'Extraction Failed',
+            pollErr?.message || 'Backend processing encountered an issue.'
           );
-          const mockResult = await api.getFieldMappings(session.sessionId);
-          setExtractionResult(mockResult);
           setIsProcessing(false);
-          setCurrentStep('review');
+          setCurrentStep('upload');
         }
-      }, 750);
+      }, 1000);
     } catch (err: any) {
-      console.warn('Upload/Extraction error, falling back to interactive demo session:', err);
+      console.error('Upload / Extraction error:', err);
       addToast(
-        'warning',
-        'Backend Fallback to Demo Mode',
-        err?.message || 'Could not process via live backend. Switched to interactive demo mode.'
+        'error',
+        'Upload / Extraction Failed',
+        err?.message || 'Could not process via live backend.'
       );
-      const fallbackSession: SessionInfo = {
-        sessionId: `demo-${Date.now().toString(36)}`,
-        sourceDoc: {
-          filename: sourceFile.name,
-          sizeBytes: sourceFile.size,
-          format: 'pdf',
-          pageCount: 3,
-        },
-        templateDoc: {
-          filename: templateFile.name,
-          sizeBytes: templateFile.size,
-          format: 'docx',
-          detectedFieldsCount: 8,
-        },
-        createdAt: new Date().toISOString(),
-      };
-      setSessionInfo(fallbackSession);
-      const mockResult = await api.getFieldMappings(fallbackSession.sessionId);
-      setExtractionResult(mockResult);
       setIsProcessing(false);
-      setCurrentStep('review');
+      setCurrentStep('upload');
     }
   };
 
