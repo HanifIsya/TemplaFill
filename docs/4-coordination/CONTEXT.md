@@ -5,9 +5,9 @@
 ---
 
 ## Last Updated
-- **Date**: 2026-09-23
+- **Date**: 2026-09-24
 - **By**: Antigravity
-- **Summary**: Completed comprehensive full-stack security audit and hardening (VULN-1 through VULN-10). Applied rate limiting on upload (10/hr), re-extract (5/min), and write endpoints (30/min). Active sanitization for uploaded filenames (path traversal prevention) and user hints/payloads. Hardened Content-Disposition headers with RFC 5987 UTF-8 safe encoding. Suppressed internal exception leakage in API responses. Guarded debug endpoints and disabled OpenAPI docs in production. Added strict CSP, HSTS (with preload), and disabled x-powered-by fingerprinting across Vercel and Next.js configs. Logged ADR-012 in DECISIONS.md. Verified with 165/165 backend pytest passing, 13/13 frontend tests passing, and Next.js production build cleanly passing.
+- **Summary**: Resolved Gemini API 429 TooManyRequests and 404 NotFound error spikes causing 0 output tokens. Implemented Single-Prompt Batch Extraction (`extract_batch`) reducing API calls from 15+ per doc down to 1 single call. Added 404 model blacklisting (`_BLACKLISTED_MODELS`), request pacing (`_MIN_CALL_INTERVAL = 1.2s`), and exponential backoff on 429/503. Upgraded `JobManager.process_document` to batch extraction. Logged ADR-013 in DECISIONS.md. Verified with 167/167 backend pytest passing and eval suite at 1.00 PASS.
 
 ---
 
@@ -107,6 +107,7 @@ _No known issues._
 | 2026-09-23 | Antigravity | Backend extractor resiliency: added automatic fallback to FakeExtractor inside GeminiExtractor.extract exception block. If Gemini API key is missing, invalid, or hits rate limits/quota (429), extraction falls back to deterministic heuristic parsing instead of returning null for all fields. 165 backend tests and 1.00 eval PASS. This backend commit will also trigger Render auto-deploy. |
 | 2026-09-23 | Antigravity | Gemini 404 resolution & transparent UI notice banner: diagnosed 404 NotFound errors from Google AI Studio screenshot (gemini-2.0-flash endpoint mismatch on free tier); updated default model in config.py to gemini-1.5-flash with automatic 2.0->1.5 fallback in extractor.py; added prominent Amber warning banner and toast in ReviewMappingView.tsx/page.tsx notifying user transparently when Gemini encounters 404/429 limits and active heuristic engine takes over. 165 backend tests and 13 frontend tests passing, build clean. |
 | 2026-09-23 | Antigravity | Model migration to Gemini 3.7 Flash & 3.8 Flash (ADR-011): Diagnosed 404 error spike from user AI Studio metrics showing active models are Gemini 3.7 Flash & 3.8 Flash. Root caused 404 errors to render.yaml hardcoding gemini-2.0-flash and gemini-1.5-flash fallback. Updated render.yaml, config.py, and .env.example to gemini-3.7-flash, added automatic sanitization of deprecated model names, set candidate progression [gemini-3.7-flash -> gemini-3.8-flash], and verified UI Amber banner warning. 165 backend tests, 5/5 eval datasets, and 13 frontend tests passing. |
+| 2026-09-24 | Antigravity | Single-Prompt Batch Extraction & Rate-Limit Resilience (ADR-013): Diagnosed 0 output tokens and 130+ error spike in Google AI Studio dashboard (404 NotFound, 429 TooManyRequests, 503 ServiceUnavailable). Implemented extract_batch in extractor.py and integrated into JobManager.process_document (single consolidated prompt for all template fields, reducing requests by 90%+). Added 404 model blacklisting (_BLACKLISTED_MODELS), 1.2s request pacing, and exponential backoff on 429/503. Added 2 new unit tests in test_generation_extractor.py (167 backend tests passing, 5/5 eval datasets at 1.00 PASS). |
 
 
 

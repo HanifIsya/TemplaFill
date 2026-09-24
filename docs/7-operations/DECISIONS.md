@@ -198,4 +198,21 @@
   - Full mitigation of injection, XSS, DoS, header smuggling, and information disclosure vectors.
   - Zero regression in functionality: 165/165 backend unit tests, 13/13 frontend tests, and eval benchmarks pass with 100% green status.
 
+---
+
+### ADR-013: Single-Prompt Batch Extraction & Rate-Limit Resilience (2026-09-24)
+- **Date**: 2026-09-24
+- **Status**: Accepted
+- **Context**: Rapid sequential per-field API calls during document processing caused Google AI Studio free-tier rate limit violations (HTTP 429 TooManyRequests) and temporary server shedding (HTTP 503 ServiceUnavailable), resulting in 100+ error spikes and 0 output tokens. In addition, unprovisioned candidate models repeatedly returned HTTP 404 NotFound.
+- **Decision**: 
+  1. **Single-Prompt Batch Extraction (`extract_batch`)**: In `extractor.py` and `JobManager.process_document`, consolidate relevant document chunks and extract all template fields in a single Gemini structured prompt.
+  2. **404 Model Blacklisting (`_BLACKLISTED_MODELS`)**: If a model returns 404 (NotFound), blacklist it for the process session so subsequent fields/jobs never re-attempt an invalid model identifier.
+  3. **Pacing & Adaptive Backoff**: Add `_MIN_CALL_INTERVAL = 1.2s` request pacing and exponential backoff on 429/503.
+  4. **Graceful Fallback**: Retain deterministic `FakeExtractor` batch/single fallback to prevent job failure on API errors.
+- **Consequences**:
+  - API requests per document reduced by >90% (1 single API call for all fields).
+  - Completely avoids 15 RPM rate limit exhaustion during document processing.
+  - Output tokens are properly produced and accounted for by Google AI Studio.
+  - 167/167 backend unit tests and 1.00 eval benchmark verified green.
+
 

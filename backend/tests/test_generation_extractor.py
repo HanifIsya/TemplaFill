@@ -112,3 +112,42 @@ class TestGeminiExtractorFakeFallback:
         result = await extractor.extract("total_amount", chunks_for_llm, "Total invoice amount")
         assert result.extracted_value is not None
         assert "$5,000" in result.extracted_value or "5,000" in result.extracted_value
+
+    @pytest.mark.asyncio
+    async def test_extract_batch_multiple_fields(self):
+        """Test extract_batch resolves multiple fields in one call."""
+        ext = GeminiExtractor(use_fake=True)
+        chunks = [
+            "Customer Name: Jane Smith\nInvoice Date: 2026-09-24\nTotal: $1,250.00",
+            "Support Contact: info@acme.org\nPhone: +1 555-0199",
+        ]
+        fields = [
+            {"field_name": "customer_name", "description": "Customer full name"},
+            {"field_name": "invoice_date", "description": "Date of the invoice"},
+            {"field_name": "total", "description": "Total amount"},
+            {"field_name": "support_email", "description": "Support email"},
+        ]
+        res = await ext.extract_batch(fields, chunks, source_pages=[1, 2])
+        assert isinstance(res, dict)
+        assert len(res) == 4
+        assert "customer_name" in res
+        assert res["customer_name"].extracted_value == "Jane Smith"
+        assert res["total"].extracted_value is not None
+        assert "1,250.00" in res["total"].extracted_value
+
+    def test_parse_batch_json_response(self):
+        """Test parsing valid batch JSON extractions."""
+        ext = GeminiExtractor(use_fake=True)
+        sample_json = """
+        {
+          "extractions": [
+            {"field_name": "full_name", "value": "Alice Wonder", "confidence": 0.99, "source_page": 1, "source_text": "Alice Wonder"},
+            {"field_name": "tax_id", "value": null, "confidence": 0.0, "source_page": null, "source_text": null}
+          ]
+        }
+        """
+        parsed = ext._parse_batch_json_response(sample_json)
+        assert len(parsed) == 2
+        assert parsed[0]["field_name"] == "full_name"
+        assert parsed[0]["value"] == "Alice Wonder"
+        assert parsed[1]["value"] is None

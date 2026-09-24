@@ -202,38 +202,59 @@ class JobManager:
                 await self.update_status(job_id, JobStatus.completed)
                 return
 
-            # --- For each field: retrieve + extract ---
+            # --- Batch extraction: retrieve top chunks & extract all fields in 1 single Gemini call ---
             from app.services.rag.retriever import Retriever
             from app.services.generation.extractor import get_extractor
 
             retriever = Retriever(vector_store=store, embedder=embedder)
             extractor = get_extractor(force_fake=False)
 
+            job.progress.percent = 65
+            job.progress.current_field = 0
+
+            # Step 1: Collect relevant chunks across fields and deduplicate
+            unique_chunks_dict = {}
+            for field in parsed.fields:
+                try:
+                    retrieved = await retriever.retrieve_for_field(field.field_name, top_k=3)
+                    for r in retrieved:
+                        if r.chunk.chunk_id not in unique_chunks_dict:
+                            unique_chunks_dict[r.chunk.chunk_id] = r.chunk
+                except Exception:
+                    pass
+
+            if not unique_chunks_dict:
+                batch_chunks = chunks[:10]
+            else:
+                batch_chunks = list(unique_chunks_dict.values())[:10]
+
+            batch_chunk_texts = [c.text for c in batch_chunks]
+            batch_source_pages = [c.page_number for c in batch_chunks]
+
+            # Step 2: Build fields list for batch extraction
+            fields_payload = [
+                {
+                    "field_name": field.field_name,
+                    "description": field.placeholder or "",
+                }
+                for field in parsed.fields
+            ]
+
+            # Step 3: Single-Prompt Batch Extraction (1 single Gemini call for entire document)
+            batch_results = await extractor.extract_batch(
+                fields=fields_payload,
+                chunks=batch_chunk_texts,
+                source_pages=batch_source_pages,
+            )
+
+            # Step 4: Build FieldResult models
             field_results: List[FieldResult] = []
             total_conf = 0.0
             for idx, field in enumerate(parsed.fields):
                 job.progress.current_field = idx + 1
-                job.progress.percent = 65 + int(30 * (idx + 1) / len(parsed.fields))
+                job.progress.percent = 70 + int(25 * (idx + 1) / len(parsed.fields))
 
-                # Retrieve
-                try:
-                    retrieved = await retriever.retrieve_for_field(field.field_name, top_k=5)
-                    chunk_texts = [r.chunk.text for r in retrieved]
-                    source_pages = [r.chunk.page_number for r in retrieved]
-                    if not chunk_texts:
-                        # Fallback to all chunks if retrieval empty
-                        chunk_texts = [c.text for c in chunks[:5]]
-                        source_pages = [c.page_number for c in chunks[:5]]
-                except Exception:  # noqa: BLE001
-                    chunk_texts = [c.text for c in chunks[:5]]
-                    source_pages = [c.page_number for c in chunks[:5]]
-
-                # Extract
-                try:
-                    ext_res = await extractor.extract(field.field_name, chunk_texts, field_description="", source_pages=source_pages)
-                except Exception:  # noqa: BLE001
-                    ext_res = None  # type: ignore[assignment]
-
+                ext_res = batch_results.get(field.field_name)
                 if ext_res is not None and ext_res.extracted_value is not None:
                     status = "extracted"
                     value = ext_res.extracted_value
@@ -244,11 +265,8 @@ class JobManager:
                     status = "not_found"
                     value = None
                     conf = 0.0
-                    src_page = None
-                    src_text = None
-                    if ext_res is not None:
-                        src_page = ext_res.source_page
-                        src_text = ext_res.source_text
+                    src_page = ext_res.source_page if ext_res else None
+                    src_text = ext_res.source_text if ext_res else None
 
                 total_conf += conf
 
@@ -263,9 +281,6 @@ class JobManager:
                     is_manually_edited=False,
                 )
                 field_results.append(fr)
-                # Polite pacing between field extractions to prevent Google Free Tier 503 load-shedding
-                import asyncio
-                await asyncio.sleep(0.3)
 
             job.field_results = field_results
             job.overall_confidence = round(total_conf / len(field_results), 2) if field_results else 0.0

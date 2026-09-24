@@ -13,9 +13,12 @@ Fallback to fake extractor for offline tests / missing API key.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import re
-from typing import Any, Dict, List, Optional
+import time
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from pydantic import BaseModel, Field
 
@@ -141,15 +144,39 @@ class FakeExtractor:
         snippet = best_match[2][:200] if best_match else (chunks_texts[0][:200] if chunks_texts else None)
         return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, source_text=snippet, status="not_found")
 
+    def extract_batch(
+        self,
+        fields: List[Dict[str, str]],
+        chunks_texts: List[str],
+        source_pages: Optional[List[int]] = None,
+    ) -> Dict[str, ExtractionResult]:
+        """Deterministic batch extraction using FakeExtractor heuristics."""
+        results: Dict[str, ExtractionResult] = {}
+        for f in fields:
+            fname = f.get("field_name", "")
+            fdesc = f.get("description", "")
+            res = self.extract(fname, chunks_texts, fdesc)
+            if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
+                res.source_page = source_pages[res.source_page - 1]
+            results[fname] = res
+        return results
+
+
+logger = logging.getLogger(__name__)
+
 
 class GeminiExtractor:
-    """Live Gemini extractor (structured output)."""
+    """Live Gemini extractor with structured output, single-prompt batching, and rate limit resilience."""
+
+    _last_call_time: float = 0.0
+    _MIN_CALL_INTERVAL: float = 1.2  # Minimum seconds between API calls to prevent 429 bursts
+    _BLACKLISTED_MODELS: Set[str] = set()
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, use_fake: Optional[bool] = None):
         settings = get_settings()
         self.api_key = api_key if api_key is not None else settings.gemini_api_key
         self.model = model if model is not None else settings.gemini_model
-        # Sanitize deprecated / inactive models that return 404 in Google AI Studio
+        # Sanitize deprecated / inactive model identifiers
         if self.model in ("gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.0-flash-exp"):
             self.model = "gemini-3.7-flash"
         if use_fake is not None:
@@ -161,8 +188,26 @@ class GeminiExtractor:
         if not self.use_fake and _HAS_GENAI:
             try:
                 self._client = genai.Client(api_key=self.api_key)
-            except Exception:  # noqa: BLE001
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Failed to initialize genai.Client: %s. Using fake fallback.", e)
                 self.use_fake = True
+
+    def _get_candidate_models(self) -> List[str]:
+        """Returns prioritized candidate models excluding blacklisted (404) ones."""
+        candidates: List[str] = []
+        preferred = [self.model, "gemini-3.7-flash", "gemini-2.5-flash", "gemini-3.8-flash"]
+        for m in preferred:
+            if m and m not in candidates and m not in self._BLACKLISTED_MODELS:
+                candidates.append(m)
+        return candidates or ["gemini-3.7-flash"]
+
+    async def _throttle_call(self) -> None:
+        """Paces API calls to avoid 429 TooManyRequests bursts."""
+        now = time.monotonic()
+        elapsed = now - GeminiExtractor._last_call_time
+        if elapsed < GeminiExtractor._MIN_CALL_INTERVAL:
+            await asyncio.sleep(GeminiExtractor._MIN_CALL_INTERVAL - elapsed)
+        GeminiExtractor._last_call_time = time.monotonic()
 
     def _build_prompt(self, field_name: str, field_description: str, chunks: List[str]) -> str:
         chunks_block = "\n\n---\n\n".join(f"[Chunk {i+1}]\n{c}" for i, c in enumerate(chunks))
@@ -184,6 +229,86 @@ Instructions:
 Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_page (int or null), source_text (string or null).
 """
 
+    def _build_batch_prompt(self, fields: List[Dict[str, str]], chunks: List[str]) -> str:
+        """Builds a single consolidated prompt to extract all fields in 1 API call."""
+        chunks_block = "\n\n---\n\n".join(
+            f"[Chunk {i+1} - Page {i+1}]\n{c}" for i, c in enumerate(chunks)
+        )
+        fields_list = "\n".join(
+            f"- {f.get('field_name')}: {f.get('description') or 'Extract the exact value for this field'}"
+            for f in fields
+        )
+        return f"""You are a precise document extraction system.
+Extract all requested fields from the context below.
+Strict rules:
+1. ONLY extract data that is explicitly stated in the context. Never hallucinate or infer.
+2. If a field value is not found, ambiguous, or not explicitly stated, set "value" to null and "confidence" to 0.0.
+3. For each found field, provide:
+   - "field_name": Exact field name requested.
+   - "value": The exact extracted string or null.
+   - "confidence": Float between 0.0 and 1.0 (1.0 = explicit exact match).
+   - "source_page": Integer 1-indexed chunk number where found, or null.
+   - "source_text": Exact snippet from the context containing the value, or null.
+
+Context chunks from source document:
+{chunks_block}
+
+Fields to extract:
+{fields_list}
+
+Respond ONLY in valid JSON matching this schema:
+{{
+  "extractions": [
+    {{
+      "field_name": "field_name_here",
+      "value": "string or null",
+      "confidence": 0.95,
+      "source_page": 1,
+      "source_text": "verbatim text snippet"
+    }}
+  ]
+}}
+"""
+
+    async def _call_gemini_with_fallback(self, prompt: str) -> Tuple[Optional[str], Optional[Exception]]:
+        """Executes a Gemini call with candidate model progression, 404 blacklisting, and 429 backoff."""
+        response: Optional[str] = None
+        last_error: Optional[Exception] = None
+
+        candidate_models = self._get_candidate_models()
+        for candidate in candidate_models:
+            for attempt in range(2):
+                try:
+                    await self._throttle_call()
+                    self.model = candidate
+                    response = await self._call_gemini(prompt)
+                    if response:
+                        return response, None
+                except Exception as e:
+                    last_error = e
+                    err_str = str(e).lower()
+                    logger.warning("[GeminiExtractor] Model '%s' attempt %d failed: %s", candidate, attempt + 1, e)
+
+                    # On 404 NotFound: Model does not exist on this endpoint or key, blacklist it
+                    if "404" in err_str or "not found" in err_str:
+                        GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
+                        logger.warning("[GeminiExtractor] Blacklisted model '%s' due to 404 NotFound", candidate)
+                        break  # Immediately advance to next candidate model
+
+                    # On 429 RateLimit or 503 ServiceUnavailable: backoff exponentially
+                    if any(x in err_str for x in ("503", "unavailable", "overload", "429", "too many", "quota", "resource_exhausted")):
+                        if attempt < 1:
+                            delay = 2.5 * (attempt + 1)
+                            logger.info("[GeminiExtractor] Rate limited / service unavailable, backing off %.1fs...", delay)
+                            await asyncio.sleep(delay)
+                            continue
+                    break
+
+            if response:
+                break
+
+        return response, last_error
+
     async def extract(
         self,
         field_name: str,
@@ -191,50 +316,18 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
         field_description: str = "",
         source_pages: Optional[List[int]] = None,
     ) -> ExtractionResult:
+        """Extract a single field with Gemini, fallback to FakeExtractor on error."""
         if not chunks:
             return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, status="not_found")
 
         if self.use_fake or self._client is None:
-            # Delegate to fake
             res = self._fake.extract(field_name, chunks, field_description)
-            # Map fake page to real source_pages if provided
             if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]
             return res
 
-        # Live Gemini call with candidate model progression (Gemini 3.7 Flash & 3.8 Flash)
         prompt = self._build_prompt(field_name, field_description, chunks)
-        response: Optional[str] = None
-
-        candidate_models: list[str] = []
-        for m in [self.model, "gemini-3.8-flash", "gemini-3.7-flash"]:
-            if m and m not in candidate_models and m not in ("gemini-2.0-flash", "gemini-1.5-flash"):
-                candidate_models.append(m)
-
-        last_error: Optional[Exception] = None
-        for candidate in candidate_models:
-            for attempt in range(2):
-                try:
-                    self.model = candidate
-                    response = await self._call_gemini(prompt)
-                    if response:
-                        break
-                except Exception as e:
-                    last_error = e
-                    print(f"[GeminiExtractor] Model {candidate} attempt {attempt+1} failed: {e}")
-                    err_str = str(e).lower()
-                    # On 503 ServiceUnavailable or 429 RateLimit, backoff briefly and retry
-                    if any(x in err_str for x in ("503", "unavailable", "overload", "429", "rate")):
-                        if attempt < 1:
-                            import asyncio
-                            await asyncio.sleep(1.5)
-                            continue
-                    # On 404 NotFound, advance directly to next candidate model
-                    if "404" in err_str or "not found" in err_str:
-                        break
-                    break
-            if response:
-                break
+        response, last_error = await self._call_gemini_with_fallback(prompt)
 
         if not response:
             res = self._fake.extract(field_name, chunks, field_description)
@@ -246,13 +339,11 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
         try:
             data = self._parse_json_response(response or "")
             value = data.get("value")
-            # Normalize empty string to None
             if isinstance(value, str) and not value.strip():
                 value = None
-            confidence = float(data.get("confidence", 0.0))
+            confidence = float(data.get("confidence", 0.0) or 0.0)
             source_page = data.get("source_page")
             source_text = data.get("source_text")
-            # Map source_page via source_pages if provided
             if source_pages and isinstance(source_page, int) and 1 <= source_page <= len(source_pages):
                 source_page = source_pages[source_page - 1]
             status = "extracted" if value is not None else "not_found"
@@ -266,9 +357,68 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
             )
         except Exception:
             res = self._fake.extract(field_name, chunks, field_description)
-            if source_pages and res.source_page and 1 <= source_page <= len(source_pages):
+            if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]
             return res
+
+    async def extract_batch(
+        self,
+        fields: List[Dict[str, str]],
+        chunks: List[str],
+        source_pages: Optional[List[int]] = None,
+    ) -> Dict[str, ExtractionResult]:
+        """Extract multiple fields in a single Gemini prompt to drastically reduce API requests and avoid rate limits."""
+        if not fields:
+            return {}
+
+        if not chunks or self.use_fake or self._client is None:
+            return self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+
+        prompt = self._build_batch_prompt(fields, chunks)
+        response, last_error = await self._call_gemini_with_fallback(prompt)
+
+        if not response:
+            logger.warning("[GeminiExtractor] Batch extraction fallback to fake: %s", last_error)
+            return self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+
+        try:
+            extractions = self._parse_batch_json_response(response)
+            results: Dict[str, ExtractionResult] = {}
+            for item in extractions:
+                fname = str(item.get("field_name", "")).strip()
+                if not fname:
+                    continue
+                val = item.get("value")
+                if isinstance(val, str) and not val.strip():
+                    val = None
+                conf = float(item.get("confidence", 0.0) or 0.0)
+                spage = item.get("source_page")
+                stext = item.get("source_text")
+                if source_pages and isinstance(spage, int) and 1 <= spage <= len(source_pages):
+                    spage = source_pages[spage - 1]
+                status = "extracted" if val is not None else "not_found"
+                results[fname] = ExtractionResult(
+                    field_name=fname,
+                    extracted_value=str(val) if val is not None else None,
+                    confidence=conf,
+                    source_page=spage,
+                    source_text=str(stext)[:500] if stext else None,
+                    status=status,
+                )
+
+            # Ensure every requested field has a result (fallback any missing field)
+            for f in fields:
+                fname = f.get("field_name", "")
+                if fname not in results:
+                    fake_res = self._fake.extract(fname, chunks, f.get("description", ""))
+                    if source_pages and fake_res.source_page and 1 <= fake_res.source_page <= len(source_pages):
+                        fake_res.source_page = source_pages[fake_res.source_page - 1]
+                    results[fname] = fake_res
+
+            return results
+        except Exception as e:
+            logger.warning("[GeminiExtractor] Failed to parse batch JSON response (%s), falling back to fake", e)
+            return self._fake.extract_batch(fields, chunks, source_pages=source_pages)
 
     async def _call_gemini(self, prompt: str) -> str:
         """Call Gemini generate_content and return text."""
@@ -276,11 +426,15 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
             raise RuntimeError("Gemini client is not initialized")
 
         config = None
-        if _HAS_GENAI and hasattr(types, "GenerateContentConfig") and hasattr(types, "ThinkingConfig"):
+        if _HAS_GENAI and hasattr(types, "GenerateContentConfig"):
             try:
-                config = types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_level="low")
-                )
+                config_kwargs: Dict[str, Any] = {"response_mime_type": "application/json"}
+                if hasattr(types, "ThinkingConfig"):
+                    try:
+                        config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_level="low")
+                    except Exception:
+                        pass
+                config = types.GenerateContentConfig(**config_kwargs)
             except Exception:
                 config = None
 
@@ -292,8 +446,6 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
                 resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt)
             return str(getattr(resp, "text", "") or "")
         else:
-            import asyncio
-
             loop = asyncio.get_running_loop()
 
             def sync_call() -> str:
@@ -306,11 +458,9 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
             return await loop.run_in_executor(None, sync_call)
 
     def _parse_json_response(self, text: str) -> Dict[str, Any]:
-        """Parse JSON from model text (handle markdown code block)."""
+        """Parse JSON from model text (handles markdown code block)."""
         text = text.strip()
-        # Remove ```json ... ``` wrapper if present
         if text.startswith("```"):
-            # Find first { and last }
             start = text.find("{")
             end = text.rfind("}")
             if start != -1 and end != -1:
@@ -318,7 +468,6 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # Try to extract JSON object via regex
             m = re.search(r"\{[\s\S]*\}", text)
             if m:
                 try:
@@ -327,10 +476,43 @@ Respond in JSON with keys: value (string or null), confidence (0.0-1.0), source_
                     pass
             return {"value": None, "confidence": 0.0, "source_page": None, "source_text": None}
 
+    def _parse_batch_json_response(self, text: str) -> List[Dict[str, Any]]:
+        """Parse batch JSON response containing a list of extractions."""
+        text = text.strip()
+        if text.startswith("```"):
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1:
+                text = text[start : end + 1]
+            else:
+                start_arr = text.find("[")
+                end_arr = text.rfind("]")
+                if start_arr != -1 and end_arr != -1:
+                    text = text[start_arr : end_arr + 1]
+        try:
+            data = json.loads(text)
+            if isinstance(data, dict):
+                if "extractions" in data and isinstance(data["extractions"], list):
+                    return data["extractions"]
+                if "fields" in data and isinstance(data["fields"], list):
+                    return data["fields"]
+            elif isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            m = re.search(r"(\{|\[)[\s\S]*(\}|\])", text)
+            if m:
+                try:
+                    parsed = json.loads(m.group(0))
+                    if isinstance(parsed, dict) and "extractions" in parsed:
+                        return parsed["extractions"]
+                    elif isinstance(parsed, list):
+                        return parsed
+                except Exception:  # noqa: BLE001
+                    pass
+        return []
+
     # Sync wrapper for tests / simple use
     def extract_sync(self, field_name: str, chunks: List[str], field_description: str = "") -> ExtractionResult:
-        import asyncio
-
         return asyncio.run(self.extract(field_name, chunks, field_description))
 
 
