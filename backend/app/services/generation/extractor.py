@@ -327,12 +327,12 @@ class GeminiExtractor:
         prompt while 3.6-flash gave 503. 3.5 is thus first after self.model.
         """
         candidates: List[str] = []
-        # Prefer self.model first, then proven 3.5, 3.6, 3-preview, 3.7, 3.8 (exclude hanging lite models)
+        # Prioritize gemini-3-flash-preview (proven 200 OK across all user API keys)
         preferred = [
+            "gemini-3-flash-preview",
             self.model,
             "gemini-3.5-flash",
             "gemini-3.6-flash",
-            "gemini-3-flash-preview",
             "gemini-3.7-flash",
             "gemini-3.8-flash",
         ]
@@ -443,18 +443,19 @@ Respond ONLY in valid JSON matching this schema:
                             logger.warning("[GeminiExtractor] Blacklisted model '%s' due to 404 NotFound", candidate)
                             break  # Immediately advance to next candidate model
 
-                        # On daily/plan quota exhausted (e.g. 20 requests/day limit on free tier):
-                        if any(x in err_str for x in ("quota", "resource_exhausted", "limit: 20", "per day")) and not ("per minute" in err_str or "rpm" in err_str):
+                        # On ANY 429 Too Many Requests / Quota / Resource Exhausted:
+                        # Immediately rotate to next API key in the pool!
+                        if any(x in err_str for x in ("429", "too many", "quota", "resource_exhausted")):
                             if self.key_pool.total_keys > 1:
-                                next_key = self.key_pool.mark_exhausted(self.api_key, reason="daily quota 429")
+                                next_key = self.key_pool.mark_exhausted(self.api_key, reason="429_quota_or_rate")
                                 if next_key and next_key != self.api_key:
-                                    logger.info("[GeminiExtractor] Rotating to fresh API key from pool, retrying candidate models")
+                                    logger.info("[GeminiExtractor] Rotating to fresh API key from pool on 429, retrying")
                                     self._switch_api_key(next_key)
                                     GeminiExtractor._BLACKLISTED_MODELS.clear()
                                     key_rotated = True
                                     break
                             GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
-                            logger.warning("[GeminiExtractor] Model '%s' quota exhausted, advancing to next candidate model", candidate)
+                            logger.warning("[GeminiExtractor] Model '%s' rate/quota exhausted, advancing to next candidate model", candidate)
                             break
 
                         # On 503 ServiceUnavailable or overload:
@@ -463,14 +464,6 @@ Respond ONLY in valid JSON matching this schema:
                             GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
                             logger.warning("[GeminiExtractor] Model '%s' service unavailable, advancing to next candidate model", candidate)
                             break
-
-                        # On transient 429 RateLimit (burst): backoff exponentially
-                        if any(x in err_str for x in ("429", "too many")):
-                            if attempt < 1:
-                                delay = 2.0 * (attempt + 1)
-                                logger.info("[GeminiExtractor] Rate limited, backing off %.1fs...", delay)
-                                await asyncio.sleep(delay)
-                                continue
                         break
 
                 if key_rotated or response:
