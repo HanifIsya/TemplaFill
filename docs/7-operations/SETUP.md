@@ -40,55 +40,75 @@ cp .env.example .env
 
 ### 3. Backend Setup
 ```bash
-# Create virtual environment
+# Create virtual environment (repo uses .venv at root in README; backend/venv also supported)
 cd backend
-python -m venv venv
+python -m venv .venv
+# Activate (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
+# Activate (Windows CMD / Linux/Mac)
+# .\.venv\Scripts\activate  /  source .venv/bin/activate
 
-# Activate (Windows)
-.\venv\Scripts\activate
-
-# Activate (Linux/Mac)
-source venv/bin/activate
-
-# Install dependencies
+# Install dependencies (pinned, includes google-genai, PyMuPDF, pdfplumber, python-docx, openpyxl, python-pptx)
 pip install -r requirements.txt
 
-# Run database migrations
+# Optional: run database migrations (only if DATABASE_URL points to Postgres; InMemory works without DB for MVP)
 python -m alembic upgrade head
 
 # Start development server
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+# Docs open at http://localhost:8000/docs when DEBUG=true (auto-disabled in production, main.py:24)
 ```
 
 ### 4. Frontend Setup
 ```bash
-# Install dependencies
+# Install dependencies (Next 16.3.6, React 19.2, Tailwind 4)
 cd frontend
 npm install
 
+# Configure API URL (defaults to http://localhost:8000/api if not set)
+# PowerShell: Set-Content -Path .env.local -Value "NEXT_PUBLIC_API_URL=http://localhost:8000/api"
+# Bash:      echo "NEXT_PUBLIC_API_URL=http://localhost:8000/api" > .env.local
+
 # Start development server
 npm run dev
+# Build + lint check (verifies CSP headers in next.config.ts)
+npm run build && npm run lint
+npm test   # 13/13 (models + e2e, 106ms)
 ```
 
-### 5. Database Setup (with Docker — recommended)
+### 5. Database Setup (with Docker — recommended for prod-like, optional for MVP)
+
+> **MVP note**: All 167 backend tests + `eval/run_eval.py` run on `InMemoryVectorStore` with no Postgres/Redis required. Docker is only needed if you want persistent `pgvector` or to reproduce production.
+
 ```bash
-# Start PostgreSQL with pgvector + Redis
+# Start PostgreSQL (pgvector:pg16) + Redis + backend (with hot-reload mount)
 docker compose up -d
+docker compose logs -f
 
 # Or without Docker:
 # 1. Install PostgreSQL 16+
 # 2. Create database: createdb templafill
-# 3. Enable pgvector: CREATE EXTENSION vector;
-# 4. Install and start Redis
+# 3. Enable pgvector: CREATE EXTENSION IF NOT EXISTS vector;
+# 4. Install and start Redis (optional — InMemoryRateLimiter works without it)
+
+# Supabase alternative (free-forever prod, per DEPLOYMENT.md):
+# Use Connection URI: postgresql+asyncpg://postgres.[project]:[pass]@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres?pgbouncer=true
 ```
 
 ### 6. Verify Setup
 ```bash
-# Backend health check
-curl http://localhost:8000/api/health
+# Backend health check — should return {ai_configured, model: gemini-3.6-flash, status: healthy} without DB
+curl http://localhost:8000/api/health | jq
+curl "http://localhost:8000/api/health" -H "X-Request-ID: test123"
 
-# Frontend
+# Frontend — banner shows API LIVE (green) or Backend is waking up (amber) if Render sleeps
 # Open http://localhost:3000 in browser
+
+# Quick smoke for pipeline (requires no GEMINI_API_KEY — uses fallback)
+curl -F "source_file=@frontend/public/samples/sample_contract.pdf" \
+     -F "template_file=@frontend/public/samples/sample_template.docx" \
+     http://localhost:8000/api/upload
+# → {job_id, status: queued} ; poll GET /api/jobs/{id} → GET /api/jobs/{id}/results
 ```
 
 ---
@@ -125,9 +145,9 @@ DATABASE_ECHO=false                    # Set true to log SQL queries
 REDIS_URL=redis://localhost:6379/0
 
 # ----- Gemini API -----
-GEMINI_API_KEY=your_gemini_api_key_here    # Get from https://aistudio.google.com/apikey
-GEMINI_MODEL=gemini-2.0-flash             # Model for extraction
-GEMINI_EMBEDDING_MODEL=text-embedding-004  # Model for embeddings
+GEMINI_API_KEY=               # empty = heuristic fallback (167 tests still PASS); set to enable live Gemini 3.6 Flash
+GEMINI_MODEL=gemini-3.6-flash             # candidates: gemini-3.6-flash → gemini-3.5-flash → gemini-3.5-flash-lite → gemini-3.7/3.8 (auto-blacklist on 404)
+GEMINI_EMBEDDING_MODEL=gemini-embedding-001  # sanitized from legacy text-embedding-004 at embedder.py:107, 768 dims, batch 100
 
 # ----- File Storage -----
 UPLOAD_DIR=./uploads                   # Local upload directory
@@ -158,10 +178,9 @@ EMBEDDING_BATCH_SIZE=100               # Chunks per embedding API call
 
 ## Docker Compose (Development)
 
-### `docker-compose.yml`
-```yaml
-version: '3.8'
+### `docker-compose.yml` (actual `e:\TemplaFill\docker-compose.yml:1`, includes healthchecks + backend service)
 
+```yaml
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -173,25 +192,42 @@ services:
       POSTGRES_PASSWORD: postgres
     volumes:
       - pgdata:/var/lib/postgresql/data
+    healthcheck: { test: ["CMD-SHELL","pg_isready -U postgres"], interval: 5s }
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    ports: ["6379:6379"]
+    healthcheck: { test: ["CMD","redis-cli","ping"], interval: 5s }
 
-volumes:
-  pgdata:
+  backend:
+    build: { context: ./backend, dockerfile: Dockerfile }
+    ports: ["8000:8000"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/templafill
+      REDIS_URL: redis://redis:6379/0
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      CORS_ORIGINS: http://localhost:3000
+    env_file: [.env]
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
+    volumes: ["./backend:/app", "backend_uploads:/app/uploads"]  # hot reload in dev
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes: { pgdata:, redisdata:, backend_uploads: }
 ```
 
 ```bash
-# Start services
+# Start services (Postgres + Redis + backend with healthchecks)
 docker compose up -d
+docker compose logs -f
 
 # Stop services
 docker compose down
 
-# Reset database
+# Reset database (wipes pgdata + redisdata)
 docker compose down -v && docker compose up -d
+
+# Single-service alternative (skip Postgres/Redis, InMemory only)
+docker build -t templafill-backend ./backend && docker run -p 8000:8000 --env-file .env templafill-backend
 ```
 
 ---
@@ -237,8 +273,13 @@ docker compose down -v && docker compose up -d
 
 | Issue | Solution |
 |-------|---------|
-| `pgvector` extension not found | Use `pgvector/pgvector:pg16` Docker image, or install manually: `CREATE EXTENSION vector;` |
-| Redis connection refused | Start Redis: `docker compose up redis -d` or install locally |
-| Gemini API key invalid | Get key from [AI Studio](https://aistudio.google.com/apikey), set in `.env` |
-| Port 3000 already in use | Kill existing process or change port: `npm run dev -- -p 3001` |
-| Python venv activation fails (Windows) | Run: `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
+| `pgvector` extension not found | Use `pgvector/pgvector:pg16` Docker image, or Supabase `SQL Editor → CREATE EXTENSION IF NOT EXISTS vector;` |
+| Redis connection refused | `docker compose up redis -d` or ignore — `InMemoryRateLimiter` works without Redis (MVP) |
+| Gemini API key missing → heuristic fallback | Intentional if `GEMINI_API_KEY` empty — all 167 tests still PASS. Banner in Review shows `[Fallback]`. Set key to enable live `gemini-3.6-flash`.|
+| Gemini 404 `NotFound` / model unavailable | Auto-sanitized in `extractor.py:199` (legacy→3.6) + `_BLACKLISTED_MODELS` advances to next candidate (`3.6→3.5→3.7/3.8`); verify `render.yaml` `GEMINI_MODEL=gemini-3.6-flash` |
+| 429 `RESOURCE_EXHAUSTED` / 503 `UNAVAILABLE` | Expected on free tier bursts; batch path reduces calls >90% + 1.2s pacing + 2.5s backoff (`extractor.py:337`). Daily quota `20/day` blacklists without sleep. |
+| `npm run build` fails with CSP | Verify `next.config.ts:24` `headers()` + `vercel.json:33` CSP syntax (no stray commas in `connect-src`). |
+| Port 3000/8000 already in use | Kill existing process or change port: `npm run dev -- -p 3001` / `uvicorn app.main:app --port 8001` |
+| Python venv activation fails (Windows) | `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` then `.\.venv\Scripts\Activate.ps1` |
+| Minimal sample PDFs fail `missing %PDF` | Use real binaries in `frontend/public/samples/` (1.1KB PDF/36.7KB DOCX); dummy string files were replaced (CONTEXT 2026-09-23). |
+| `GET /api/health` timeout on Render | Hobby sleeps 15min→ wake ~60s; frontend polls `checkHealth(7s)` + `waitForBackend(5s×12)` and shows amber banner — wait or `Retry now`. |

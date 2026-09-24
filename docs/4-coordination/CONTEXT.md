@@ -6,8 +6,8 @@
 
 ## Last Updated
 - **Date**: 2026-09-24
-- **By**: Antigravity
-- **Summary**: Standardized model to `gemini-2.5-flash` to eliminate 404 NotFound errors on Google AI Studio Free Tier and ensure output tokens are produced. Fixed pipeline phase transitions: `JobManager` now transitions to `JobStatus.extracting` (80%) before calling `extract_batch()`, properly displaying Phase 4 ("Structured Extraction via Gemini AI") as ACTIVE with spinner during the 30-60s call. Simplified `GenerateContentConfig` to `response_mime_type="application/json"` without conflicting thinking configs. Documented in ADR-015. 167/167 backend pytest, 13/13 frontend tests, 1.00 eval suite PASS.
+- **By**: OpenCode
+- **Summary**: **Docs-wide 3.6-flash sync sweep (ADR-016)**: Unified model to `gemini-3.6-flash` across `config.py:50`/`render.yaml:30`/`.env.example:32`/`extractor.py:199`/`api.ts:214`, retained candidate fallback chain `3.6→3.5→3.5-lite→3.7→3.8` with `_BLACKLISTED_MODELS` + 1.2s pacing + 429/503 backoff, updated `README.md` (badges 167, 16.3.6, 768 dims, architecture mermaid, provenance), `CHANGELOG.md` `v0.2.0` delta, `backend/README.md`/`frontend/README.md` rewrites, `ARCHITECTURE.md`/`TECH_STACK.md`/`DATA_MODEL.md`/`API.md`/`SETUP.md`/`DECISIONS.md` (new ADR-016). Batch extraction + engine badges + phase fidelity (ADR-013→015) now fully surfaced. Verified `167/167` backend pytest, `13/13` frontend, `1.00` eval PASS (halluc 0.00) — docs-only, no behavior change.
 
 ---
 
@@ -15,29 +15,30 @@
 
 ### Overall Status: 🟢 All Phases (0, 1, 2, 3, 4, 5) 100% Complete & Production Ready ✅
 
-All core phases completed:
+All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→016):
 - Phase 0: Foundation documentation & project scaffolds ✅
-- Phase 1: Core backend extraction & RAG pipeline (140 tests) ✅
-- Phase 2: FastAPI API layer (25 API tests, 165 total pytest green) ✅
-- Phase 3: Next.js frontend with IBM Plex design system, Auth, and all workflows ✅
-- Phase 4: Evaluation suite (5 datasets, run_eval.py PASS 1.00) ✅
-- Phase 5: Polish, CI/CD, security headers, Docker, Vercel config, Help & E2E tests ✅
+- Phase 1: Core backend extraction & RAG pipeline (140→167 tests) ✅
+- Phase 2: FastAPI API layer (25 API tests, 167 total pytest green) ✅ — single-prompt batch, engine provenance (`extracted_by`), phase-80 fix
+- Phase 3: Next.js 16.3.6 frontend with IBM Plex, Auth stub, engine badges + fallback banner, all workflows ✅
+- Phase 4: Evaluation suite (5 synthetic domains, `generate_eval_datasets.py` + `run_eval.py` PASS 1.00 halluc 0.00) ✅
+- Phase 5: Polish, CI/CD (167 cov + lint/build + eval + audit + docker), security VULN-1→10, Docker/Render/Supabase free-forever ✅
 
 ### What Exists
 - [x] `AGENTS.md` — Agent coordination contract (root)
-- [x] `CHANGELOG.md` — Project changelog (root)
-- [x] `.env.example` — Environment variables template (root)
-- [x] `.gitignore` — Public repo privacy & ignore rules
-- [x] `docs/1-product/*` — PRD, VISION, USER_STORIES, USER_GUIDE
-- [x] `docs/2-architecture/*` — ARCHITECTURE, TECH_STACK, DATA_MODEL, API
-- [x] `docs/3-design/*` — DESIGN, DESIGN_SYSTEM
-- [x] `docs/4-coordination/*` — OWNERSHIP, WORKFLOW, TASKS, CONTEXT
-- [x] `docs/5-quality/*` — EVAL, FEEDBACK_LOOP, TESTING
-- [x] `docs/6-security/*` — SECURITY, DATA_PRIVACY
-- [x] `docs/7-operations/*` — SETUP, DEPLOYMENT, DECISIONS
-- [x] `frontend/` — Next.js 14+ App Router, AuthModal, HelpModal, vercel.json, 13/13 tests green ✅
-- [x] `backend/` — FastAPI backend (165 tests, Phase 1+2) ✅
-- [x] `eval/` — Evaluation suite with 5 datasets + run_eval.py (eval PASS 1.00) ✅
+- [x] `README.md` — Top-level product + arch + API + eval + deploy (updated 2026-09-24 for 3.6-flash batch + provenance)
+- [x] `CHANGELOG.md` — Keep-a-Changelog `0.1.0` → `[Unreleased] v0.2.0` delta (ADR-013→016)
+- [x] `.env.example` — Environment template (gemini-3.6-flash, gemini-embedding-001, Supabase pooling)
+- [x] `.gitignore` — Public repo privacy & ignore rules (uploads/eval results/pycache)
+- [x] `docs/1-product/*` — PRD, VISION, USER_STORIES, USER_GUIDE (USER_GUIDE reflects 5-syntax + engine badges)
+- [x] `docs/2-architecture/*` — ARCHITECTURE (batch sequence, 768d embed), TECH_STACK (16.3.6/4.x/3.6-flash/768), DATA_MODEL (extracted_by/fallback_reason), API (anonymous MVP + provenance + RFC5987)
+- [x] `docs/3-design/*` — DESIGN, DESIGN_SYSTEM (slate/indigo, IBM Plex — unchanged)
+- [x] `docs/4-coordination/*` — OWNERSHIP, WORKFLOW, TASKS, CONTEXT (this file, ADR-016 logged)
+- [x] `docs/5-quality/*` — EVAL, FEEDBACK_LOOP, TESTING (167 count aligned)
+- [x] `docs/6-security/*` — SECURITY (VULN-1→10 audit pass), DATA_PRIVACY
+- [x] `docs/7-operations/*` — SETUP (Docker/verify issues), DEPLOYMENT (free-forever $0), DECISIONS (ADR-001 superseded + ADR-016)
+- [x] `frontend/` — Next.js 16.3.6 App Router, AuthModal stub, HelpModal 4 tabs, BackendWakingBanner (5s×12), Review engine badges, DualDropzone real binaries, 13/13 tests green ✅
+- [x] `backend/` — FastAPI 167 tests (batch+blacklist), extraction/rag/mapping/jobs batch+provenance, InMemory by default ✅
+- [x] `eval/` — 5 synthetic datasets + `generate_eval_datasets.py` + `run_eval.py` (1.00 PASS, halluc 0.00, placeholder 1.00) ✅
 
 ### What's Being Worked On Right Now
 _All planned tasks in Phase 0 through Phase 5 have been completed._
@@ -57,12 +58,17 @@ _All planned tasks in Phase 0 through Phase 5 have been completed._
 
 | Decision | Rationale | Date | Logged in DECISIONS.md? |
 |----------|-----------|------|------------------------|
-| Product name: TemplaFill | User-defined | 2026-09-23 | Pending |
-| LLM: Gemini free plan | Cost-effective for MVP | 2026-09-23 | Pending |
-| Multi-format templates (.docx, .xlsx, .pptx) | User requirement | 2026-09-23 | Pending |
-| UI language: English | User preference | 2026-09-23 | Pending |
-| Frontend: Next.js + React | Modern, SSR capable, good DX | 2026-09-23 | Pending |
-| Backend: Python + FastAPI | Best ML/AI ecosystem, async | 2026-09-23 | Pending |
+| Product name: TemplaFill | User-defined | 2026-09-23 | ADR-001 |
+| LLM: Gemini free plan (`gemini-3.6-flash` current) | Cost-effective + structured JSON + 768d embeddings | 2026-09-23 (migrated 2026-09-24 ADR-016) | ADR-001→015→016 ✅ |
+| Multi-format templates (.docx/.xlsx/.pptx) + 5 syntaxes | User req. + parser `{{}}/{}/[]/<<>>/__` `parser.py:32` | 2026-09-23 | ADR-006 ✅ |
+| UI language: English/Indonesian (banner toast ID) | User preference + hybrid notice | 2026-09-23 | — |
+| Frontend: Next.js 16.3.6 + React 19.2 + Tailwind 4 | SSR + static prerender + CSP | 2026-09-23 (updated 2026-09-24) | ADR-004 ✅ |
+| Backend: Python 3.11 + FastAPI + google-genai | Best ML/AI + async + batch | 2026-09-23 (batch ADR-013) | ADR-003/005 ✅ |
+| Embeddings: `gemini-embedding-001` 768d (legacy 004 sanitized) | Free-tier 100 batch + fake offline | 2026-09-24 `embedder.py:107` | ADR-016 ✅ |
+| Deployment: Vercel Hobby + Render Hobby $0 + Supabase 500MB | Free-forever 750h + 12×5s wake banner | 2026-09-23 | ADR-010 ✅ |
+| Security: VULN-1→10 zero-trust pipeline | Rate limiter + sanitize + CSP + 404 gate | 2026-09-23 | ADR-012 ✅ |
+| Batch extraction: single-prompt all fields | >90% fewer calls, kills 429 | 2026-09-24 | ADR-013 ✅ |
+| Engine provenance: extracted_by/fallback_reason badges | Transparency over silent fallback | 2026-09-24 | ADR-014 ✅ |
 
 ---
 

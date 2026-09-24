@@ -82,30 +82,42 @@ TemplaFill processes **user-uploaded documents** that may contain sensitive, con
 - Refresh token: 7-day expiry, httpOnly cookie
 - CSRF protection via double-submit cookie pattern
 
-### Input Validation
-- All request bodies validated against Pydantic schemas (backend)
-- All request bodies validated against Zod schemas (frontend)
-- SQL injection: prevented by SQLAlchemy ORM (parameterized queries)
-- XSS: React's default escaping + Content-Security-Policy headers
+### Input Validation (VULN-1→10, ADR-012)
 
-### Rate Limiting
-| Endpoint Category | Limit | Window |
-|-------------------|-------|--------|
-| File upload | 10 | per hour per IP |
-| API read | 60 | per minute per IP |
-| API write | 30 | per minute per IP |
-| Re-extraction | 5 | per minute per IP |
+- Backend Pydantic: `Job`/`FieldResult`/`FileInfo` + strict extension/magic checks (`upload.py:53` `%PDF`/`PK`) + `sanitize_filename()` (strip `../`/null chars, whitelist `a-zA-Z0-9._-`, `__+→_` collapse, 128-char cap) + `sanitize_text_input(5000/2000)` (null byte + `[\x01-\x08\x0B\x0C\x0E-\x1F]` strip) + download `Content-Disposition: filename*=UTF-8''...` RFC5987 (`jobs.py:325`) + no `str(e)` leak (generic `msg`) + `DEBUG` gates `/api/debug/gemini` + `/docs` disabled when `DEBUG=False` + CORS whitelist (`GET POST PATCH PUT DELETE OPTIONS` + explicit headers) (`main.py:37`).
+- Frontend: React JSX escapes all fields/snippets; no `dangerouslySetInnerHTML`; `DualDropzone` 50MB/20MB client-side checks mirror backend.
+- SQL injection: SQLAlchemy ORM parameterized; vector `VECTOR(768)` via `asyncpg`.
+- XSS: React escaping + triple-enforced CSP (see above); `X-XSS-Protection: 0` is intentional per modern guidance.
 
-### Security Headers
+### Rate Limiting (`backend/app/core/security.py:98` `InMemoryRateLimiter` + `backend/app/api/jobs.py:87,232,338` / `upload.py:38`)
+
+| Endpoint Category | Limit | Window | Key | Behavior |
+|-------------------|-------|--------|-----|----------|
+| File upload (`POST /api/upload`) | 10 | per hour per IP | `upload` | `429` + `Retry-After` header; `testclient` exempt for CI |
+| API read (`GET /api/jobs/*`) | 60 | per minute per IP | `read` | Sliding `deque` per `ip:category`; `retry_after()` = `oldest+window−now` |
+| API write (`PATCH /fields/*`, `POST /confirm`) | 30 | per minute per IP | `write` | Same bucket, `PATCH` gated 30/min |
+| Re-extraction (`POST /re-extract` + alias `PATCH re_extract`) | 5 | per minute per IP | `re_extract` | `5/min`, hint `max_len=2000` sanitized |
+| Gemini bursts (embeddings/extraction) | 15 RPM global | per process | Gemini throttle | `4s` embedder (`embedder.py:123`) + `1.2s` extractor (`extractor.py:236`) + `2.5s×attempt` backoff |
+
+### Security Headers (`backend/app/core/security.py:28` + `frontend/next.config.ts:3` + `frontend/vercel.json:10`)
+
 ```
-Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'
+Content-Security-Policy: default-src 'self';
+  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+  font-src 'self' https://fonts.gstatic.com data:;
+  img-src 'self' data: blob:;
+  connect-src 'self' https://*.onrender.com https://*.vercel.app http://localhost:8000;
+  frame-ancestors 'none'
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
-X-XSS-Protection: 0
+X-XSS-Protection: 0  # CSP is authoritative; 0 per modern browser guidance
 Referrer-Policy: strict-origin-when-cross-origin
-Strict-Transport-Security: max-age=31536000; includeSubDomains
+Strict-Transport-Security: max-age=31536000; includeSubDomains; preload
 Permissions-Policy: camera=(), microphone=(), geolocation=()
+X-Powered-By: absent (poweredByHeader:false)
 ```
+Enforced in middleware `SecurityHeadersMiddleware` + `nextConfig.headers()` + Vercel; `/api/health` also adds `X-Request-ID` per `RequestIdMiddleware`.
 
 ---
 

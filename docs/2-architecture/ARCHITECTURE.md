@@ -81,53 +81,52 @@ sequenceDiagram
     actor User
     participant FE as Frontend
     participant API as API Server
-    participant Q as Job Queue
+    participant Q as Job Queue (BackgroundTasks)
     participant PE as PDF Extractor
     participant CH as Chunker
     participant EM as Embedder
-    participant VDB as Vector DB
+    participant VDB as Vector DB (InMemory/pgvector)
     participant TP as Template Parser
     participant RAG as RAG Retriever
     participant LLM as Gemini API
     participant GEN as Doc Generator
 
     User->>FE: Upload source PDF + template
-    FE->>API: POST /api/upload (files)
-    API->>API: Validate files
-    API-->>FE: job_id, status: queued
+    FE->>API: POST /api/upload (multipart, %PDF/PK, 202)
+    API->>API: Validate files + sanitize_filename
+    API-->>FE: job_id, status: queued, estimated_time
 
-    API->>Q: Enqueue extraction job
+    API->>Q: Enqueue process_job (BackgroundTasks)
 
-    Note over Q,EM: Phase 1: Document Processing
-    Q->>PE: Extract text & tables from PDF
-    PE->>CH: Chunk text semantically
-    CH->>EM: Generate embeddings per chunk
-    EM->>LLM: Embedding API call
+    Note over Q,EM: Phase 1: Document Processing (15%→35%)
+    Q->>PE: Extract text & tables from PDF (PyMuPDF + pdfplumber)
+    Q->>PE: On PdfExtractionError → failed with error message
+    PE->>CH: Chunk text semantically (800/100, header metadata)
+    CH->>EM: Generate embeddings per chunk (batch 100, throttled 4s)
+    EM->>LLM: Embedding API call (gemini-embedding-001 768d)
     LLM-->>EM: Vector embeddings
-    EM->>VDB: Store chunk vectors
+    EM->>VDB: Store chunk vectors (InMemoryVectorStore)
 
-    Note over Q,TP: Phase 2: Template Analysis
-    Q->>TP: Parse template, detect placeholders
-    TP-->>Q: List of fields with metadata
+    Note over Q,TP: Phase 2: Template Analysis (55%→70%)
+    Q->>TP: Parse template, detect placeholders (5 syntaxes: {{}}/{}/[]/<<>>/__)
+    TP-->>Q: List of fields with metadata (occurrences, location)
 
-    Note over RAG,LLM: Phase 3: Field Extraction
-    loop For each template field
-        RAG->>VDB: Query top-K relevant chunks
-        VDB-->>RAG: Relevant chunks + scores
-        RAG->>LLM: Extract field value (structured output)
-        LLM-->>RAG: {value, confidence, source_ref}
-    end
+    Note over RAG,LLM: Phase 3: Field Extraction — Single-Prompt Batch (80%→98%)
+    RAG->>VDB: Query top-K (3) per field, dedupe chunks (≤10 total)
+    VDB-->>RAG: Relevant chunks + scores
+    RAG->>LLM: Single JSON batch request (all fields + deduped chunks + candidate fallback 3.6→3.5→3.7/3.8, 404 blacklist, 1.2s pacing, 429/503 backoff)
+    LLM-->>RAG: {extractions: [{field_name, value, confidence, source_page, source_text}]}
+    RAG-->>RAG: Missing fields → heuristic term-scoring per field (FakeExtractor)
+    RAG-->>API: Extraction results (all fields) with extracted_by + fallback_reason
 
-    Note over GEN: Phase 4: Document Generation
-    RAG-->>API: Extraction results (all fields)
-    API-->>FE: Mapping preview (SSE/polling)
-    FE-->>User: Show mapping for review
-
+    Note over GEN: Phase 4: Document Generation (confirm)
+    API-->>FE: Mapping preview via polling GET /api/jobs/{id}/results (engineUsed/hasFallback)
+    FE-->>User: Show mapping for review (engine badges, citation modal, re-extract)
     User->>FE: Edit corrections, confirm
-    FE->>API: POST /api/generate (confirmed fields)
-    API->>GEN: Fill template with values
-    GEN-->>API: Filled document (file)
-    API-->>FE: Download ready
+    FE->>API: POST /api/jobs/{id}/confirm (skipped/empty filtered, RFC5987 name)
+    API->>GEN: Fill template with mapped values (docx/xlsx/pptx, style-preserving)
+    GEN-->>API: Filled document bytes (file)
+    API-->>FE: Download ready (GET /api/jobs/{id}/download?type=filled)
     FE-->>User: Download filled document
 ```
 
@@ -161,14 +160,16 @@ sequenceDiagram
 
 ### 3. Embedding Service (`backend/app/services/rag/embedder.py`)
 
-**Responsibility**: Convert text chunks to vector embeddings using Gemini Embedding API.
+**Responsibility**: Convert text chunks to vector embeddings using Gemini Embedding API (with legacy sanitization).
 
-| Parameter | Value |
-|-----------|-------|
-| Model | `text-embedding-004` (Gemini) |
-| Dimensions | 768 |
-| Batch size | 100 chunks per API call |
-| Rate limiting | Respect Gemini free tier limits (15 RPM) |
+| Parameter | Value | Notes |
+|-----------|-------|-------|
+| Model | `gemini-embedding-001` (sanitized from legacy `text-embedding-004` at `embedder.py:107`) | `get_settings().gemini_embedding_model` default `gemini-embedding-001` |
+| Dimensions | 768 | `EMBEDDING_DIMS`; 3072-capable model truncated to 768 for InMemory/pgvector `VECTOR(768)` + fake embeddings |
+| Batch size | 100 chunks per API call | `EMBEDDING_BATCH_SIZE` |
+| Rate limiting | Respect Gemini free tier limits (15 RPM via 4s `MIN_INTERVAL_S`) | `_last_call_ts` throttling + fake fallback on API error |
+
+**Fake fallback**: `_fake_embedding()` hashes text → seeded `Random` uniform vector normalized to unit length, with keyword bias on first 32 dims — deterministic and offline-safe, so 167 tests + `eval/run_eval.py` pass without `GEMINI_API_KEY`.
 
 ### 4. RAG Retriever (`backend/app/services/rag/retriever.py`)
 
@@ -182,23 +183,28 @@ sequenceDiagram
 
 ### 5. Structured Extractor (`backend/app/services/generation/extractor.py`)
 
-**Responsibility**: Use Gemini to extract precise field values from retrieved chunks.
+**Responsibility**: Use Gemini to extract precise field values from retrieved chunks — single-prompt batch with resilient candidate fallback, plus deterministic `FakeExtractor` for offline/tests.
 
-**Approach**:
-- Input: field name + description + top-K relevant chunks
-- Output: JSON with `{value, confidence, source_page, source_text}`
-- Use Gemini's structured output (JSON schema) for reliable parsing
-- System prompt enforces: "Only extract data explicitly stated in the provided context. If the data is not found, return null."
+**Approach** (ADR-013/014/015):
+
+- **Batch path** (`extractor.py:426` `extract_batch`): Input is `fields: [{field_name, description}]` + deduped chunk texts (≤10) + `source_pages`. Builds one JSON schema prompt (`_build_batch_prompt`) listing all fields → single `GenerateContentConfig(response_mime_type="application/json")` → parses `{"extractions": [...]}`. On missing fields, per-field `FakeExtractor` recovery (`extracted_by="heuristic"`, `fallback_reason="Field missing in Gemini response"`); `last_engine_used` is `hybrid` if any recovered. `JobManager.process_job` (`manager.py:250`) calls this once per document (not 1-per-field), cutting API calls by >90%.
+- **Single-field path** (`extractor.py:350` `extract`): used by `PATCH /fields/{id}` `re_extract` with `hint` appended as `field_description` + top-5 reranked chunks.
+- **Resilience** (`_call_gemini_with_fallback` + `_throttle_call`): Candidate list `self.model, gemini-3.6-flash, gemini-3.5-flash, gemini-3.5-flash-lite, gemini-3.7-flash, gemini-3.8-flash` deduped via `_BLACKLISTED_MODELS`; 404 immediately blacklists + advances; daily quota `limit: 20 / RESOURCE_EXHAUSTED per day` also blacklists without sleep; 429/503 triggers 1.2s pacing + 2.5s×attempt backoff (2 attempts/candidate). Every failure path sets `extracted_by="heuristic"` + `fallback_reason` + `source_text` prefix `[AI_ERROR: ...]`.
+- **Model sanitization**: `__init__` rewrites legacy `gemini-2.0-flash-exp/1.5-flash/1.5-pro/2.5-flash` → `gemini-3.6-flash`.
+- **Provenance**: `ExtractionResult.extracted_by` (`gemini|heuristic`) + `fallback_reason` propagated to `FieldResult` (`jobs/models.py:53`) and surfaced via `GET /api/jobs/{id}/results` `engine_used/hasFallback/fallback_reason` → frontend badges + banner + toast (`page.tsx:235`).
+- System prompt invariant: *“Only extract data explicitly stated in the provided context. If the data is not found, return null.”* — enforced in both `_build_prompt` and `_build_batch_prompt` to prevent hallucination; `_fake` path uses term-scoring + distinctive guard (≥0.5, `0.85` for distinctive terms) to mirror the same behavior for eval 1.00 PASS.
 
 ### 6. Template Parser (`backend/app/services/mapping/parser.py`)
 
-**Responsibility**: Parse template files and detect placeholder fields.
+**Responsibility**: Parse template files and detect placeholder fields (5 syntaxes, priority-ordered).
 
 | Format | Library | Detection Strategy |
 |--------|---------|-------------------|
-| .docx | python-docx | Regex scan for `{{...}}`, `{...}`, `[...]`, `<<...>>`, `__...__` in paragraphs, tables, headers, footers |
-| .xlsx | openpyxl | Regex scan across all cells in all sheets |
-| .pptx | python-pptx | Regex scan in all text frames across all slides |
+| .docx | python-docx | Regex scan for `{{...}}`, `{...}`, `[...]`, `<<...>>`, `__...__` (`_PLACEHOLDER_PATTERNS`) in paragraphs, tables, headers/footers/tables per section, dedup via `used_spans` + `_aggregate_fields` |
+| .xlsx | openpyxl | Regex scan across all cells in all sheets (`cell.coordinate` location) |
+| .pptx | python-pptx | Regex scan in all text frames + tables across all slides, plus `msoGroup` (shape_type 6) recursion |
+
+Detection: case-insensitive, whitespace-normalized (`_normalize_field_name` replaces `[\s.\-]+` → `_`), skips numeric-only placeholders, tracks `occurrences` and `location`; warning if `0 placeholders` or `field_name>50 chars`.
 
 ### 7. Field Mapper (`backend/app/services/mapping/mapper.py`)
 
@@ -263,17 +269,20 @@ graph LR
 
 ---
 
-## Error Handling Strategy
+## Error Handling Strategy (updated to actual code)
 
-| Error Type | Handling |
-|-----------|----------|
-| File upload fails | Retry with exponential backoff, show user-friendly error |
-| PDF extraction fails | Log error, notify user, suggest re-upload |
-| Gemini API rate limit | Queue with backoff, respect 15 RPM limit |
-| Gemini API error | Retry up to 3 times, fallback to error state |
-| Vector DB unavailable | Retry connection, degrade gracefully |
-| Template parsing fails | Show detected format, ask user to verify placeholder format |
-| Field extraction returns null | Mark as "Not Found", don't hallucinate |
+| Error Type | Handling (source) |
+|-----------|-------------------|
+| File upload fails (413/415/400) | `upload.py:56` extension + size checks, `%PDF`/`PK` magic, `sanitize_filename`; client sees `VALIDATION_ERROR`/`UNSUPPORTED_TYPE`/`FILE_TOO_LARGE` + retry hint; rate 10/hr with `Retry-After` |
+| PDF extraction fails | `manager.py:132` catches `PdfExtractionError` → `failed`; generic `Exception` → `Extraction failed: {e}`; UI polls `GET /jobs/{id}` `status=failed` + `error` → toast |
+| Gemini rate limit (burst 429/min) | Embedder `_rate_limit` 4s + `extractor._throttle_call` 1.2s + per-candidate `2.5s×attempt` backoff (`extractor.py:337`); batch path reduces calls >90% |
+| Gemini daily quota (429/day, `limit: 20`) | `_BLACKLISTED_MODELS.add(candidate)` + immediate advance to next model, no sleep loop (`extractor.py:332`) |
+| Gemini 404 NotFound (model unprovisioned) | Immediately `blacklist + break` to next candidate (`extractor.py:325`); `sanitize` legacy model strings to `gemini-3.6-flash` in `__init__` |
+| Gemini 503 / overload | Same 429 path: 2 attempts with `2.5s` backoff then advance |
+| Vector DB unavailable | `InMemoryVectorStore` default (no Postgres required); `PgVectorStore` is optional prod path — graceful degrade |
+| Template parsing fails / 0 placeholders | `parser.py:164` warning `No placeholders detected…`; `manager.py:201` short-circuits to `completed` with `0 field_results`; frontend shows mock fallback if `rawFields.length==0` |
+| Field extraction returns null | `status="not_found"` + `confidence=0.0` + `source_reference=null`; frontend `🔴 Not found`; generator skips empty/skipped fields (`jobs.py:255`); never hallucinated — guard is `FakeExtractor` `combined>=0.5` + distinctive `0.85` check |
+| Re-extract hint injection | `jobs.py:168,351` `sanitize_text_input(max_len=2000)` scrubs control/null bytes before embedding |
 
 ---
 

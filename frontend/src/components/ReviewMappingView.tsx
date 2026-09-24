@@ -210,7 +210,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
       return (
         <span
           className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-50 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60"
-          title={field.fallbackReason || 'Ekstraksi otomatis beralih ke Fallback Heuristik Lokal'}
+          title={field.fallbackReason || 'Automatically switched to the local heuristic fallback engine'}
         >
           Fallback
         </span>
@@ -220,7 +220,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
       return (
         <span
           className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60"
-          title="Diekstrak langsung oleh Google Gemini 3.6 Flash"
+          title="Extracted directly by Google Gemini 3.6 Flash"
         >
           <Sparkles className="w-2.5 h-2.5 text-indigo-500" />
           Gemini 3.6 Flash
@@ -239,7 +239,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
             e.stopPropagation();
             toggleConfirm(field.id);
           }}
-          title="Status: Dikonfirmasi (Confirmed). Klik untuk membatalkan konfirmasi."
+          title="Status: Confirmed. Click to unconfirm."
           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded font-semibold font-mono text-[11px] transition-all cursor-pointer bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white border border-emerald-600 shadow-xs ${
             compact ? 'text-[10px] px-2 py-0.5' : ''
           }`}
@@ -257,7 +257,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           e.stopPropagation();
           toggleConfirm(field.id);
         }}
-        title="Status: Belum Dikonfirmasi (Unconfirmed). Klik untuk mengonfirmasi nilai ini."
+        title="Status: Unconfirmed. Click to confirm this value."
         className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded font-medium font-mono text-[11px] transition-all cursor-pointer border border-amber-300 dark:border-amber-700/80 bg-amber-50/60 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 hover:bg-emerald-50 hover:border-emerald-500 hover:text-emerald-700 dark:hover:bg-emerald-950/40 dark:hover:text-emerald-300 active:scale-95 group ${
           compact ? 'text-[10px] px-2 py-0.5' : ''
         }`}
@@ -318,14 +318,14 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-xs text-amber-800 dark:text-amber-300">
-                Pemberitahuan Ekstraksi: Mode Fallback Heuristik Aktif
+                Extraction Notice: Heuristic Fallback Active
               </span>
               <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-amber-400 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200">
                 Heuristic Fallback Engine
               </span>
             </div>
             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-              {extractionResult.fallbackReason || extractionResult.aiErrorMessage || 'Layanan AI beralih ke Mesin Heuristik Lokal karena kendala Gemini API (404/429/Missing Key).'} Sistem secara transparan mengamankan proses ekstraksi dokumen Anda agar tidak gagal. Anda dapat meninjau, mengedit, atau mengkonfirmasi field di bawah ini sebelum mengekspor.
+              {extractionResult.fallbackReason || extractionResult.aiErrorMessage || 'The AI engine switched to the local heuristic due to a Gemini API issue (404/429/Missing Key).'} Your extraction was transparently secured to prevent failure. Review, edit, or confirm the fields below before export.
             </p>
           </div>
         </div>
@@ -334,7 +334,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
             <span className="font-medium text-[11px]">
-              <strong>Ekstraksi Hybrid</strong>: Sebagian field diproses oleh <strong>Gemini AI</strong> dan sebagian dipulihkan oleh mesin heuristik lokal.
+              <strong>Hybrid Extraction</strong>: Some fields were processed by <strong>Gemini AI</strong> and others were recovered by the local heuristic engine.
             </span>
           </div>
           <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-blue-300 dark:border-blue-800 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 shrink-0">
@@ -346,7 +346,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span className="text-[11px]">
-              <strong>Didukung Penuh oleh Google Gemini 3.6 Flash</strong>: Semua field berhasil diekstrak langsung menggunakan kecerdasan buatan Google Gemini.
+              <strong>Fully Powered by Google Gemini 3.6 Flash</strong>: All fields were extracted directly with Google Gemini AI.
             </span>
           </div>
           <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 shrink-0">
@@ -471,7 +471,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
               <button
                 onClick={confirmAllHigh}
                 className="text-blue-700 dark:text-blue-400 font-medium hover:underline flex items-center gap-1 cursor-pointer text-xs"
-                title="Konfirmasi semua field berakurasi tinggi sekaligus"
+                title="Confirm all high-confidence fields at once"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 <span>Confirm All High ({unconfirmedHighCount})</span>
@@ -480,7 +480,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
               <button
                 onClick={confirmAll}
                 className="text-emerald-700 dark:text-emerald-400 font-medium hover:underline flex items-center gap-1 cursor-pointer text-xs"
-                title="Konfirmasi semua sisa field sekaligus"
+                title="Confirm all remaining fields at once"
               >
                 <CheckCheck className="w-3.5 h-3.5" />
                 <span>Confirm All Remaining ({unconfirmedCount})</span>
@@ -524,11 +524,11 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
 
                 <div className="p-3 rounded border border-slate-200 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Status Konfirmasi:</span>
+                    <span className="text-slate-500">Confirmation Status:</span>
                     <div>{renderConfirmButton(activeSplitField)}</div>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-slate-500">Mesin Ekstraksi:</span>
+                    <span className="text-slate-500">Extraction Engine:</span>
                     <div>{getEngineBadge(activeSplitField)}</div>
                   </div>
                   {activeSplitField.fallbackReason && (
@@ -666,7 +666,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                             onClick={() => saveEdit(field.id)}
                             className="p-1 rounded bg-emerald-600 text-white hover:bg-emerald-500 cursor-pointer"
                             aria-label="Save edit"
-                            title="Simpan perubahan"
+                            title="Save changes"
                           >
                             <Check className="w-3.5 h-3.5" />
                           </button>
@@ -674,7 +674,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                             onClick={cancelEdit}
                             className="p-1 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-300 cursor-pointer"
                             aria-label="Cancel edit"
-                            title="Batal"
+                            title="Cancel"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
@@ -689,7 +689,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                           <button
                             onClick={() => startEdit(field)}
                             className="text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 text-[11px] font-mono cursor-pointer shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
-                            title="Edit nilai field secara manual"
+                            title="Manually edit field value"
                           >
                             <Edit3 className="w-3 h-3" />
                             <span>Edit</span>
@@ -710,7 +710,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                         <button
                           onClick={() => setCitationField(field)}
                           className="font-mono text-[11px] text-blue-700 dark:text-blue-400 hover:underline cursor-pointer block mt-0.5"
-                          title="Lihat kutipan sumber dokumen asli"
+                          title="View source citation"
                         >
                           Source p.{field.sourcePage || 1}
                         </button>
@@ -728,7 +728,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                         <button
                           onClick={() => setReExtractField(field)}
                           className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 cursor-pointer flex items-center gap-1"
-                          title="Minta AI mengekstrak ulang dengan petunjuk custom"
+                          title="Ask AI to re-extract with a custom hint"
                         >
                           <Sparkles className="w-3 h-3 text-blue-500" />
                           <span>Re-extract</span>
@@ -740,7 +740,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                               ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200'
                               : 'border-slate-200 dark:border-slate-700 text-slate-500 hover:text-slate-700'
                           }`}
-                          title={field.isSkipped ? "Pulihkan field ini agar disertakan dalam template" : "Lewati field ini agar tidak dimasukkan ke template"}
+                          title={field.isSkipped ? "Restore this field to include it in the template" : "Skip this field — leave it blank in the generated document"}
                         >
                           {field.isSkipped ? (
                             <>
@@ -780,8 +780,8 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           </div>
           <p className="text-[11px] text-slate-500">
             {confirmedCount === activeCount
-              ? 'Seluruh data telah diverifikasi dan siap dimasukkan ke template.'
-              : 'Field yang belum dikonfirmasi tetap akan menggunakan nilai hasil ekstraksi saat ini.'}
+              ? 'All data has been verified and is ready for template injection.'
+              : 'Unconfirmed fields will use their current extracted values.'}
           </p>
         </div>
 

@@ -320,7 +320,7 @@ class ApiClient {
             );
 
             const fallbackReason = data.fallback_reason || (hasAiError
-              ? 'Layanan AI mengalami kendala limit kuota/model (404/429/Missing Key). Mesin ekstraksi otomatis beralih ke Mesin Heuristik Lokal.'
+              ? 'AI service hit a quota or model limit (404/429/Missing Key). The extraction engine automatically switched to the local heuristic fallback.'
               : undefined);
 
             const engineUsed = (data.engine_used as any) || (hasAiError ? 'heuristic' : 'gemini');

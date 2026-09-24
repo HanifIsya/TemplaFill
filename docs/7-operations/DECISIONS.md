@@ -22,9 +22,9 @@
 
 ### ADR-001: Use Gemini API Free Plan as LLM Provider
 - **Date**: 2026-09-23
-- **Status**: Accepted
-- **Context**: Need an LLM for structured extraction and embeddings. Must be free for MVP development.
-- **Decision**: Use Google Gemini API free plan (`gemini-2.0-flash` for generation, `text-embedding-004` for embeddings).
+- **Status**: Superseded by ADR-015 → ADR-016 (model now `gemini-3.6-flash` + `gemini-embedding-001`)
+- **Context**: Need an LLM for structured extraction and embeddings. Must be free for MVP development. Initial implementation used `gemini-2.0-flash` / `text-embedding-004`.
+- **Decision**: Use Google Gemini API free plan (`gemini-2.0-flash` for generation, `text-embedding-004` for embeddings → later migrated via ADR-011→015→016).
 - **Alternatives Considered**:
   - OpenAI API — No free tier, per-token cost
   - Claude API — No free tier
@@ -227,10 +227,10 @@
      - `Job` stores `has_fallback: bool`, `engine_used: str`, and `fallback_reason: str`.
      - `Extractor.extract_batch` and `extract` records `last_engine_used` and `last_fallback_reason`.
      - `/api/health` reports `ai_configured: bool` and active `model`.
-  2. **Frontend Notifications & Badges**:
-     - Completion toast explicitly distinguishes between "Selesai dengan Gemini AI", "Selesai (Hybrid Mode)", and "Beralih ke Heuristic Fallback (Pemberitahuan Otomatis)".
-     - Top notice banner in `ReviewMappingView` highlights whether Gemini AI was used or why Fallback was triggered.
-     - Per-field badges (`[Gemini AI]` vs `[Fallback]`) in both Split View and Table View, with the fallback reason surfaced on hover and in the source citation inspector.
+   2. **Frontend Notifications & Badges** (professional English, general-audience):
+      - Completion toasts explicitly distinguish: “Extraction Complete — Gemini AI” (all Gemini), “Hybrid Extraction (AI + Fallback)” (mixed), and “Heuristic Fallback Active” (automatic notice when quota/connectivity forces fallback).
+      - Top notice banner in `ReviewMappingView.tsx` highlights whether Gemini AI was used or why fallback was triggered (with `fallbackReason` tooltip).
+      - Per-field badges (`[Gemini 3.6 Flash]` vs `[Fallback]`) in both Split View and Table View, with the fallback reason surfaced on hover and in the source citation inspector. All user-facing strings are in professional English.
 - **Consequences**:
   - Full transparency for users and developers on exactly which engine produced each field.
   - Eliminates ambiguity when checking Google AI Studio token usage metrics.
@@ -239,7 +239,7 @@
 
 ### ADR-015: Standardizing Model to gemini-2.5-flash and Fixing Pipeline Phase Step Transitions (2026-09-24)
 - **Date**: 2026-09-24
-- **Status**: Accepted
+- **Status**: Superseded by ADR-016 (model now `gemini-3.6-flash`)
 - **Context**: In user testing, the UI was stuck displaying "Pipeline 3/4: Inspecting placeholders (65%)" for 30-60 seconds during LLM extraction and then abruptly finished without showing Step 4 active. Additionally, Google AI Studio reported 404 NotFound errors and 0 output tokens because `gemini-3.7-flash` and `gemini-3.8-flash` are not universally available on all free-tier projects, and `ThinkingConfig` with `thinking_level` triggered model parameter validation errors.
 - **Decision**:
   1. **Standardize Model**: Set default model to `gemini-2.5-flash`, the official, universal Google AI Studio model available on all tiers without 404s. Add `gemini-2.5-flash-lite` as immediate secondary candidate.
@@ -248,5 +248,21 @@
 - **Consequences**:
   - Step 4 is clearly animated as ACTIVE with its spinner during the 30-60 second AI call.
   - Model requests succeed with 200 OK using `gemini-2.5-flash`, generating verified output tokens on Google AI Studio.
+  - Superseded 2026-09-24 when `gemini-3.6-flash` became the stable primary across Google AI Studio + Render; pattern retained but candidate now `3.6` first.
+
+---
+
+### ADR-016: Standardize to Gemini 3.6 Flash + Verify End-to-End Documentation Sync (2026-09-24)
+- **Date**: 2026-09-24
+- **Status**: Accepted
+- **Context**: Documentation drift after rapid model migrations (2.0→1.5→3.7→3.8→2.5) left mixed references across `README.md:9,32` (badges/placeholders), `docs/2-architecture/*`, `docs/7-operations/SETUP.md:129` (`2.0`/`text-embedding-004`), `render.yaml:30` vs `config.py:50` vs `extractor.py:199` values, and badge/test counts (`165→167`). Batch extraction (ADR-013) + engine provenance (ADR-014) + phase fidelity (ADR-015) also needed surfacing in top-level docs. Single-prompt batch and 404 blacklisting were proven with 167/167 pytest + 1.00 eval PASS but not documented centrally.
+- **Decision**:
+  1. **Single source of truth**: Set `gemini-3.6-flash` as primary in `backend/app/core/config.py:50`, `render.yaml:30`, `.env.example:32`, `frontend/src/lib/api.ts:214` + `ReviewMappingView.tsx` badges, and `README.md`. Retain candidate fallback chain `3.6 → 3.5 → 3.5-lite → 3.7 → 3.8` with `_BLACKLISTED_MODELS` (`extractor.py:220`). Sanitize legacy `2.0/1.5/2.5` → `3.6` in `__init__` (`extractor.py:199`). `gemini-embedding-001` (768d, 100 batch, fake fallback) with legacy sanitization (`embedder.py:107`).
+  2. **Documentation sweep**: Update `README.md` (badges, 167 E2E, 768 dims, architecture mermaid, dual-engine fallback section, API table, deployment table), `CHANGELOG.md` `[Unreleased] v0.2.0` entry, `backend/README.md` + `frontend/README.md` rewrites (167 tests, stack 16.3.6/4, sample assets), `ARCHITECTURE.md` sequence diagram batch phase + embedding table + extractor section + error table, `TECH_STACK.md` overview table + API usage plan + frontend/backend detail, `DATA_MODEL.md` job/field provenance columns, `API.md` health+results+rate limiting+confirm+download sections, `SETUP.md` Docker/verify/common-issues panels, `DEPLOYMENT.md` (unchanged — already correct on hobby free-forever), and mark ADR-001/015 as superseded.
+  3. **Quality gates**: Re-verify `167/167` pytest, `13/13` frontend, `1.00` eval PASS (hallucination 0.00, placeholder 1.00) after doc updates; no code behavior change (docs-only).
+- **Consequences**:
+  - `google-ai studio` `model not found` 404s eliminated across all projects without per-user manual `.env` edits; legacy configs self-heal.
+  - Top-level docs now match executable code (searchable `file:line` refs retained), reducing onboarding drift for next agent/human contributor.
+  - Batch path + provenance + phase animation are now discoverable from `README.md` alone, so new contributors land on the correct mental model immediately.
 
 

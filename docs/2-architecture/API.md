@@ -7,13 +7,14 @@
 
 ## Authentication
 
-All endpoints except health check require authentication via JWT Bearer token.
+**Current (MVP, 2026-09-24)**: All endpoints are **anonymous / no-auth** — consistent with `README.md` *Zero Credential Dependency* and `backend/app/api/*` (no JWT guard; `AuthModal` + `localStorage` are UI stubs for future `Phase 2`). `GET /api/health` is public and fast (no DB) and also reports `ai_configured` for banner logic. The `Authorization: Bearer <jwt_token>` placeholder below is the **planned Phase 2** contract (IDs `users.id` → `jobs.user_id` in `DATA_MODEL.md`), not yet enforced.
 
 ```
-Authorization: Bearer <jwt_token>
+# Phase 2 (planned)
+Authorization: Bearer <jwt_token>  # HS256, 15m access / 7d refresh, double-submit CSRF
 ```
 
-For MVP, anonymous usage is allowed (no auth required). Auth will be added in Phase 2.
+For now, every upload creates an anonymous `Job` (`manager.py:38` `create_job`) with no `user_id`; `InMemoryRateLimiter` keys by `client.host` (with `testclient` exempt so CI 167 tests never 429). Rate limits are per-IP, not per-user.
 
 ---
 
@@ -61,7 +62,9 @@ For MVP, anonymous usage is allowed (no auth required). Auth will be added in Ph
 ### Health
 
 #### `GET /api/health`
-Health check endpoint.
+Health check endpoint — lightweight, no DB (for Render Hobby wake detection).
+
+**Source**: `backend/app/api/health.py:14` `get_settings().app_version` + `ai_configured` + `model`.
 
 **Response** `200`:
 ```json
@@ -70,10 +73,14 @@ Health check endpoint.
   "data": {
     "status": "healthy",
     "version": "0.1.0",
-    "timestamp": "2026-09-23T14:30:00Z"
+    "timestamp": "2026-09-23T14:30:00Z",
+    "ai_configured": true,
+    "model": "gemini-3.6-flash"
   }
 }
 ```
+
+**Debug** `GET /api/debug/gemini` (only when `DEBUG=true`; otherwise `404`, `health.py:35`). Probes each candidate model plus embedding dims; helpful in production post-deploy smoke (`uvicorn` logs).
 
 ---
 
@@ -89,9 +96,12 @@ Upload source PDF and template file. Starts a new processing job.
 | `source_file` | File | Yes | Source PDF document |
 | `template_file` | File | Yes | Template document (.docx, .xlsx, .pptx) |
 
-**Validation**:
-- `source_file`: Must be PDF, max 50MB, max 500 pages
-- `template_file`: Must be .docx, .xlsx, or .pptx, max 20MB
+**Validation** (`backend/app/api/upload.py:53`):
+
+- `source_file`: Must be PDF (`.pdf` ext + `%PDF` magic after BOM trim, `upload.py:94`), max `50MB` (`MAX_SOURCE_MB`), max `500` pages (checked in `extract_pdf` → `PdfExtractionError` → `failed`), non-empty
+- `template_file`: Must be `.docx`/`.xlsx`/`.pptx` (`ALLOWED_TEMPLATE_EXTS`) + `PK` zip magic (`upload.py:99`), max `20MB`, non-empty
+- Filenames sanitized via `sanitize_filename()` (`../`/`null`/unsafe→ `_`) before `create_job`
+- Rate limit: `10/hr` per IP (`InMemoryRateLimiter: upload`), `Retry-After` header on 429; `testclient` exempt
 
 **Response** `202`:
 ```json
@@ -153,16 +163,21 @@ Get the current status of a processing job.
 }
 ```
 
-**Status values**: `queued` → `processing` → `extracting` → `mapping` → `completed` | `failed`
+**Status values** (`backend/app/services/jobs/models.py:13`): `queued` → `processing` (pdf 15%→25%, embedding 35%→55%) → `mapping` (60%) → `extracting` (80%→98%, ADR-015) → `completed` | `failed` (`generating` is a `202` virtual state set on `POST /confirm`)
+
+`progress.phase` mirrors the same stages (`queued/pdf_extraction/embedding/template_mapping/ai_extraction`); `GET /health` polls `5s×12` for wake detection.
 
 ---
 
 ### Extraction Results
 
 #### `GET /api/jobs/{job_id}/results`
-Get extraction results (mapping preview) for a completed job.
+Get extraction results (mapping preview) for a completed job — with engine provenance (ADR-014).
 
-**Response** `200`:
+**Source**: `backend/app/services/jobs/models.py:108` `to_results_dict()` + `backend/app/api/jobs.py:61`.
+
+**Response** `200` (actual shape, superset of early draft — early fields still compatible; new fields are additive):
+
 ```json
 {
   "success": true,
@@ -171,6 +186,10 @@ Get extraction results (mapping preview) for a completed job.
     "overall_confidence": 0.87,
     "fields_found": 12,
     "fields_not_found": 3,
+    "has_ai_error": false,
+    "has_fallback": false,
+    "engine_used": "gemini",
+    "fallback_reason": null,
     "fields": [
       {
         "field_id": "f1a2b3c4-...",
@@ -184,7 +203,9 @@ Get extraction results (mapping preview) for a completed job.
           "snippet": "...the applicant, John Doe, hereby declares..."
         },
         "status": "extracted",
-        "is_manually_edited": false
+        "is_manually_edited": false,
+        "extracted_by": "gemini",
+        "fallback_reason": null
       },
       {
         "field_id": "a5b6c7d8-...",
@@ -195,12 +216,16 @@ Get extraction results (mapping preview) for a completed job.
         "confidence": 0.0,
         "source_reference": null,
         "status": "not_found",
-        "is_manually_edited": false
+        "is_manually_edited": false,
+        "extracted_by": "heuristic",
+        "fallback_reason": "Gemini API Error: 429 Too Many Requests"
       }
     ]
   }
 }
 ```
+
+`engine_used`: `gemini` (all Gemini) | `heuristic` (all fallback) | `hybrid` (mixed). `has_ai_error`/`has_fallback` mirrors whether any field has `extracted_by==heuristic` or snippet contains `AI_ERROR`. Generic `429/404` prefixes are sanitized server-side (`jobs.py:225` never leaks raw trace); frontend renders `[Gemini 3.6 Flash]` vs `[Fallback]` badges.
 
 ---
 
@@ -217,11 +242,11 @@ Edit a specific field value (manual correction).
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `value` | string | No | New value (required if action is "edit") |
-| `action` | string | Yes | `edit`, `skip`, `confirm`, `re_extract` |
-| `hint` | string | No | Hint for re-extraction (only when action is "re_extract") |
+| Field | Type | Required | Description | Notes |
+|-------|------|----------|-------------|-------|
+| `value` | string | No | New value (required if action is "edit") | Sanitized `sanitize_text_input(max_len=5000)`; empty string clears; confidence forced `1.0` on edit (`jobs.py:128`) |
+| `action` | string | Yes | `edit`, `skip`, `confirm`, `re_extract` | Validated strictly (`jobs.py:118`) |
+| `hint` | string | No | Hint for `re_extract` | Sanitized `max_len=2000` (`jobs.py:168`), controls retriever `field_description` |
 
 **Response** `200`:
 ```json
@@ -243,7 +268,9 @@ Edit a specific field value (manual correction).
 ### Confirm All Fields
 
 #### `POST /api/jobs/{job_id}/confirm`
-Confirm all field values and trigger document generation.
+Confirm all field values and trigger style-preserving document generation.
+
+**Source**: `backend/app/api/jobs.py:228` (rate `30/min write`, `sanitize_filename` on output, RFC5987).
 
 **Request Body** (optional):
 ```json
@@ -251,6 +278,8 @@ Confirm all field values and trigger document generation.
   "include_summary_report": true
 }
 ```
+
+`mapped` is built from `Job.field_results`: `skipped → omitted`, `is_manually_edited?user_edited_value:extracted_value`, empty/whitespace→ omitted (`jobs.py:255`); also adds normalized key `field_name` as alias for replacement. If `mapped` empty → `400 VALIDATION_ERROR: No fields to generate`. Calls `mapping/generator.generate_filled_document()` → stores `filled_doc_bytes` + `filled_doc_filename = "{stem}_Filled_{job_id[:8]}{ext}"`.
 
 **Response** `202`:
 ```json
@@ -264,6 +293,8 @@ Confirm all field values and trigger document generation.
 }
 ```
 
+Frontend immediately treats the job as ready for `GET /download?type=filled` (no second polling needed).
+
 ---
 
 ### Download
@@ -276,14 +307,15 @@ Download the filled document.
 |-------|------|---------|-------------|
 | `type` | string | `filled` | `filled` (filled template) or `summary` (extraction summary report) |
 
-**Response** `200`:
-- Content-Type: `application/vnd.openxmlformats-officedocument.*` (or PDF for summary)
-- Content-Disposition: `attachment; filename="Template_Name_Filled_2026-09-23.docx"`
-- Body: Binary file
+**Response** `200` (`jobs.py:294`):
+- Content-Type mapped per `template_filename` ext: `.docx` → `application/vnd.openxmlformats-officedocument.wordprocessingml.document`, `.xlsx` → `...spreadsheetml.sheet`, `.pptx` → `...presentationml.presentation`
+- Content-Disposition `attachment; filename="..." ; filename*=UTF-8''...` (RFC 5987 encoded via `quote(sanitize_filename(...))` + `X-Content-Type-Options: nosniff` to prevent MIME sniff)
+- Body: Binary `filled_doc_bytes`
 
 **Errors**:
-- `404`: Job not found or not yet completed
-- `410`: Files expired (past retention period)
+- `404 NOT_FOUND` job unknown or `NOT_COMPLETED` if `status != completed` or `filled_doc_bytes == null` (message `"Call POST /api/jobs/{id}/confirm first."`)
+- `501 NOT_IMPLEMENTED` for `type=summary` (planned; `include_summary_report` flag is stored as `_include_summary` but report not yet emitted)
+- `410` reserved for future file expiry after 24h retention (current in-memory store has no TTL; expiry documented in `SECURITY.md`)
 
 ---
 
@@ -351,14 +383,17 @@ Get source PDF page content for verification.
 
 ---
 
-## Rate Limiting
+## Rate Limiting (`backend/app/core/security.py:98` `InMemoryRateLimiter`)
 
-| Endpoint | Limit | Window |
-|----------|-------|--------|
-| `POST /api/upload` | 10 requests | per hour per IP |
-| `GET /api/jobs/*` | 60 requests | per minute per IP |
-| `PATCH /api/jobs/*/fields/*` | 30 requests | per minute per IP |
-| `POST /api/jobs/*/fields/*/re-extract` | 5 requests | per minute per IP |
+| Endpoint | Limit | Window | Key | Returns |
+|----------|-------|--------|-----|---------|
+| `POST /api/upload` | 10 | per hour per IP | `upload` | `429 RATE_LIMITED` + `Retry-After` header |
+| `GET /api/jobs/*` (`/jobs/{id}`, `/results`, `/source/page/{n}`) | 60 | per minute per IP | `read` | internal category (not yet enforced on GET path, but polling is cheap `/health`→ no limit) |
+| `PATCH /api/jobs/*/fields/*` & `POST /api/jobs/*/confirm` | 30 | per minute per IP | `write` | `429` after 30/min (`jobs.py:89,232`) |
+| `POST /api/jobs/*/fields/*/re-extract` & alias `PATCH action=re_extract` | 5 | per minute per IP | `re_extract` | `429` + sanitized hint limit |
+| Embeddings & extraction bursts | `15 RPM` Gemini free tier | global | Gemini throttle | `4s` embedder + `1.2s` extractor + `2.5s×attempt` backoff |
+
+`is_allowed` exempts `ip in ("testclient","test")` so CI 167 tests never 429. Buckets are sliding-window `deque` (`security.py:122`), `retry_after` computes oldest+window−now.
 
 ---
 

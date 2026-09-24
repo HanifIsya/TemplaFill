@@ -23,7 +23,7 @@
 | 0.1 | Create all project documentation (23 files) | `done` | Antigravity | Foundation docs complete |
 | 0.2 | Initialize git repository | `done` | User/OpenCode | `git init`, `.gitignore` set up |
 | 0.3 | Set up Python backend project structure | `done` | OpenCode | FastAPI scaffold, `pyproject.toml` — branch feat/oc-backend-scaffold, 8 tests green |
-| 0.4 | Set up Next.js frontend project structure | `done` | Antigravity | Scaffolding Next.js 14+ app — branch feat/ag-frontend-scaffold, build & lint green |
+| 0.4 | Set up Next.js frontend project structure | `done` | Antigravity | Scaffolding Next.js 16.3.6 app (App Router) — branch feat/ag-frontend-scaffold, build & lint green; 2026-09-24 sweep to 16.3.6 ✅ |
 | 0.5 | Create `.env.example` with all required vars | `done` | Antigravity | Created at project root |
 
 ## Phase 1: Core Backend Pipeline (OpenCode)
@@ -33,31 +33,31 @@
 | 1.1 | Implement PDF text extraction service | `done` | OpenCode | PyMuPDF text extractor — 18 tests green, branch feat/oc-backend-scaffold |
 | 1.2 | Implement PDF table extraction service | `done` | OpenCode | pdfplumber table extractor + combined pdf_extractor — 19 tests green, branch feat/oc-backend-scaffold |
 | 1.3 | Implement text chunking strategy | `done` | OpenCode | chunker.py (recursive semantic, 800/100 tokens, page/header metadata) — 20 tests green, branch feat/oc-backend-scaffold |
-| 1.4 | Set up vector database (pgvector) | `done` | OpenCode | vector_store.py (InMemory+PgVector stub, cosine search, 165 total tests) |
-| 1.5 | Implement embedding service | `done` | OpenCode | embedder.py (Gemini text-embedding-004 768d, batch 100, rate-limit 15 RPM, fake fallback) |
-| 1.6 | Implement RAG retrieval service | `done` | OpenCode | retriever.py (query embedding + top-K search, threshold, field-aware) |
-| 1.7 | Implement structured extraction via Gemini | `done` | OpenCode | extractor.py (Gemini JSON schema + FakeExtractor fallback, 11 tests) |
-| 1.8 | Implement .docx template parser | `done` | OpenCode | parser.py docx (paragraphs/tables/headers, regex {{}},<<>>,[],__ ) — 24 tests |
-| 1.9 | Implement .xlsx template parser | `done` | OpenCode | parser.py xlsx (all sheets/cells via openpyxl) |
-| 1.10 | Implement .pptx template parser | `done` | OpenCode | parser.py pptx (slides/text-frames/tables) |
+| 1.4 | Set up vector database (pgvector) | `done` | OpenCode | vector_store.py (InMemory+PgVector stub, cosine search, 167 total tests) |
+| 1.5 | Implement embedding service | `done` | OpenCode | embedder.py (Gemini `gemini-embedding-001` 768d sanitized from `text-embedding-004`, batch 100, 15 RPM via 4s, fake fallback) |
+| 1.6 | Implement RAG retrieval service | `done` | OpenCode | retriever.py (query embedding + top-K=5 cosine, threshold, field-aware, dedupe chunks ≤10 for batch) |
+| 1.7 | Implement structured extraction via Gemini | `done` | OpenCode | extractor.py (Gemini batch single-prompt `extract_batch` + Fake term-scoring, 404 blacklist, 1.2s throttle, 13 tests via ADR-013/015) |
+| 1.8 | Implement .docx template parser | `done` | OpenCode | parser.py docx (paragraphs/tables/headers/footers, 5 syntaxes `{{}}/{}/<<>>/[]/__` priority + whitespace) — 24 tests |
+| 1.9 | Implement .xlsx template parser | `done` | OpenCode | parser.py xlsx (all sheets/cells via openpyxl, coordinate loc) |
+| 1.10 | Implement .pptx template parser | `done` | OpenCode | parser.py pptx (slides/text-frames/tables + group shapes, 13) |
 | 1.11 | Implement template field mapping engine | `done` | OpenCode | mapper.py (exact/fuzzy/synonym, 7 tests) |
-| 1.12 | Implement filled document generator | `done` | OpenCode | generator.py (docx/xlsx/pptx preserve formatting, 10 tests) |
-| 1.13 | Write unit tests for extraction pipeline | `done` | OpenCode | 165 tests total (prev 140 + 25 API) — all green |
-| 1.14 | Write integration tests for full pipeline | `done` | OpenCode | End-to-end upload→jobs→results→patch→confirm→download flow in test_api.py |
+| 1.12 | Implement filled document generator | `done` | OpenCode | generator.py (docx/xlsx/pptx preserve formatting, RFC5987 download, 10 tests) |
+| 1.13 | Write unit tests for extraction pipeline | `done` | OpenCode | 167 tests total (prev 140→165 + 2 batch/blacklist via ADR-013) — all green |
+| 1.14 | Write integration tests for full pipeline | `done` | OpenCode | End-to-end upload→jobs→results→patch→confirm→download→source/page flow in test_api.py (25 tests) + batch engine provenance |
 
 ## Phase 2: API Layer (OpenCode)
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 2.1 | Implement file upload endpoint | `done` | OpenCode | POST /api/upload (multipart, 50MB PDF, 20MB template, PK/%PDF validation, 202) — branch feat/oc-backend-scaffold |
-| 2.2 | Implement extraction trigger endpoint | `done` | OpenCode | Combined with upload: BackgroundTasks → process_job (extract→chunk→embed→parse→retrieve→extract) |
-| 2.3 | Implement mapping preview endpoint | `done` | OpenCode | GET /api/jobs/{id}/results (165 tests, overall confidence, field list per API.md) |
-| 2.4 | Implement field edit/correction endpoint | `done` | OpenCode | PATCH /api/jobs/{id}/fields/{field_id} (edit/skip/confirm/re_extract + POST re-extract) |
-| 2.5 | Implement document generation endpoint | `done` | OpenCode | POST /api/jobs/{id}/confirm → generate_filled_document, 202 |
-| 2.6 | Implement download endpoint | `done` | OpenCode | GET /api/jobs/{id}/download?type=filled (StreamingResponse, content-type per ext) |
-| 2.7 | Implement async job status endpoint | `done` | OpenCode | GET /api/jobs/{id} (queued→processing→extracting→mapping→completed) |
-| 2.8 | Add API authentication middleware | `done` | OpenCode | MVP anonymous allowed per API.md: auth stub (no JWT required, ready for JWT extension) |
-| 2.9 | Write API endpoint tests | `done` | OpenCode | test_api.py 25 tests (upload/status/results/patch/re-extract/confirm/download/source page) — all green |
+| 2.1 | Implement file upload endpoint | `done` | OpenCode | POST /api/upload (multipart, 50MB PDF `%PDF`+20MB template `PK`, `sanitize_filename`, 10/hr + Retry-After, 202) |
+| 2.2 | Implement extraction trigger endpoint | `done` | OpenCode | Combined with upload: BackgroundTasks → `process_job` (queued→processing→extracting@80%→mapping→completed, batch) |
+| 2.3 | Implement mapping preview endpoint | `done` | OpenCode | GET /api/jobs/{id}/results (167 tests, `overall_confidence`, `engine_used/hasFallback/fallback_reason` + field `extracted_by`, per API.md 2026-09-24) |
+| 2.4 | Implement field edit/correction endpoint | `done` | OpenCode | PATCH /api/jobs/{id}/fields/{field_id} (edit sanitized 5000/skip/confirm/re_extract 2000 + POST `/re-extract` 5/min) |
+| 2.5 | Implement document generation endpoint | `done` | OpenCode | POST /api/jobs/{id}/confirm (skipped/empty filtered, `generate_filled_document`, 202, RFC5987 filename) |
+| 2.6 | Implement download endpoint | `done` | OpenCode | GET /api/jobs/{id}/download?type=filled (StreamingResponse, per-ext Content-Type + `filename*=UTF-8''` + nosniff) |
+| 2.7 | Implement async job status endpoint | `done` | OpenCode | GET /api/jobs/{id} (queued→processing→extracting(80% ADR-015)→mapping→completed, `percent/phase`) |
+| 2.8 | Add API authentication middleware | `done` | OpenCode | MVP anonymous allowed per API.md: auth stub (no JWT, `testclient` exempt on rate limiter, ready for Phase 2 JWT) |
+| 2.9 | Write API endpoint tests | `done` | OpenCode | test_api.py 25 tests (upload/status/results/patch/re-extract/confirm/download/source page, sanitization) — all green |
 
 ## Phase 3: Frontend (Antigravity)
 
@@ -90,8 +90,9 @@
 |---|------|--------|----------|-------|
 | 5.1 | Security audit (encryption, auth) | `done` | Both | Backend complete; Frontend XSS/CSP, formula injection guard & token audit passed in SECURITY.md |
 | 5.2 | Performance optimization | `done` | Both | Backend complete; Frontend Next.js static prerendering & font optimization verified |
-| 5.3 | Set up CI/CD pipeline | `done` | OpenCode | .github/workflows/ci.yml (backend 165 tests + coverage, frontend lint/build, eval, audit, docker) + deploy.yml (Render) |
-| 5.4 | Deploy backend (cloud) | `done` | OpenCode | Dockerfile (python:3.11-slim, healthcheck, non-root), .dockerignore, docker-compose.yml (pgvector/pg16+redis+backend), ready for Render/Railway per DEPLOYMENT.md |
-| 5.5 | Deploy frontend (Vercel) | `done` | Antigravity | vercel.json with security headers, build validation (100% green), and deployment guide |
-| 5.6 | End-to-end testing on staging | `done` | Both | Automated E2E integration test suite in e2e.test.mjs (13/13 passing in 106ms) |
-| 5.7 | Write user documentation / help page | `done` | Antigravity | Interactive HelpModal with 4 tabs + docs/1-product/USER_GUIDE.md |
+| 5.3 | Set up CI/CD pipeline | `done` | OpenCode | .github/workflows/ci.yml (backend 167 + coverage, frontend lint/build 13 E2E 106ms, eval 5×1.00, pip-audit, docker sanity) + deploy.yml (Render on `main`, Vercel auto) |
+| 5.4 | Deploy backend (cloud) | `done` | OpenCode | Dockerfile (python:3.11-slim, 2 workers, healthcheck, non-root), .dockerignore, docker-compose.yml (pgvector:pg16 healthcheck+redis healthcheck+backend), `render.yaml` Blueprint ready per DEPLOYMENT.md |
+| 5.5 | Deploy frontend (Vercel) | `done` | Antigravity | vercel.json (CSP/HSTS + connect-src `*.onrender.com`/`*.vercel.app`) + next.config.ts headers, build 16.3.6 validation 100% green |
+| 5.6 | End-to-end testing on staging | `done` | Both | Automated E2E 13/13 106ms (`models.test.mjs` 5/5 + `e2e.test.mjs` 8/8) + batch engine provenance verified |
+| 5.7 | Write user documentation / help page | `done` | Antigravity | Interactive HelpModal 4 tabs + docs/1-product/USER_GUIDE.md (updated 2026-09-24: 5 syntaxes, batch, provenance badges) |
+| 5.8 | Docs-wide 3.6-flash sync (ADR-016) | `done` | OpenCode | README (167/3.6/768), CHANGELOG v0.2.0, backend/frontend READMEs, ARCH/TECH_STACK/DATA_MODEL/API/SETUP/DECISIONS/CONTEXT sweeping — all 167+13 green, eval 1.00 |

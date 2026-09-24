@@ -19,63 +19,55 @@
         └─────────┘
 ```
 
-| Level | Scope | Speed | Count (target) | Tool |
-|-------|-------|-------|-----------------|------|
-| Unit | Single function/component | < 1 sec each | 100+ | pytest (BE), Vitest (FE) |
-| Integration | Multi-component interaction | < 10 sec each | 30+ | pytest + httpx (BE) |
-| E2E | Full user flow | < 60 sec each | 10+ | Playwright |
-| Eval | Extraction accuracy | < 120 sec total | 5+ datasets | Custom eval runner |
+| Level | Scope | Speed | Count (actual) | Tool |
+|-------|-------|-------|---------------|------|
+| Unit | Single function/component | < 1 sec each | 167 backend (`test_*` 8+ suites) / 13 frontend | `pytest` (BE), `node --test` FE (`models.test.mjs` 5/5 + `e2e.test.mjs` 8/8, 106ms) |
+| Integration | Multi-component interaction | < 10 sec each | 25 API + pipeline via `manager.process_job` + `generate_filled_document` | `pytest + httpx` (`test_api.py` covers upload/status/results/patch/re-extract/confirm/download/source page) |
+| E2E | Full user flow | < 60 sec each | 13 lightweight (node) — Playwright planned but deferred; current `e2e.test.mjs` is full-flow via API contracts | `node --test` (see `frontend/src/tests/e2e.test.mjs`) |
+| Eval | Extraction accuracy | < 120 sec total (actual 0.6s) | 5 synthetic datasets (26 fields) PASS `1.00` (halluc 0.00) | `eval/run_eval.py` `force_fake` offline |
 
 ---
 
 ## Backend Testing
 
-### Test Directory Structure
+### Test Directory Structure (actual `backend/tests/` flat, 167 collected)
+
 ```
 backend/
 ├── tests/
-│   ├── conftest.py                    # Shared fixtures
-│   ├── unit/
-│   │   ├── test_pdf_extractor.py      # PDF text/table extraction
-│   │   ├── test_chunker.py            # Text chunking
-│   │   ├── test_embedder.py           # Embedding generation
-│   │   ├── test_retriever.py          # RAG retrieval
-│   │   ├── test_extractor.py          # Structured extraction
-│   │   ├── test_template_parser.py    # Template field detection
-│   │   ├── test_field_mapper.py       # Field mapping logic
-│   │   └── test_doc_generator.py      # Document generation
-│   ├── integration/
-│   │   ├── test_pipeline.py           # Full extraction pipeline
-│   │   ├── test_api_upload.py         # Upload endpoint
-│   │   ├── test_api_extract.py        # Extraction endpoint
-│   │   ├── test_api_download.py       # Download endpoint
-│   │   └── test_api_fields.py         # Field edit endpoints
-│   └── fixtures/
-│       ├── sample_source.pdf          # Test PDF (small, 5 pages)
-│       ├── sample_template.docx       # Test template with placeholders
-│       ├── sample_template.xlsx       # Test spreadsheet template
-│       └── expected_output.json       # Expected extraction results
+│   ├── test_health.py                 # 8 tests: /health (status/model/ai_configured/timestamp) + /debug gate
+│   ├── test_pdf_extraction.py         # 37 tests: fitz blocks/bbox + pdfplumber tables + PdfExtractionError paths
+│   ├── test_chunker.py                # 20 tests: recursive 800/100, header metadata, page-aware overlap, char fallback
+│   ├── test_rag.py                    # 19 tests: InMemory add/search (cosine), embedder fake dims 768, retriever top-K threshold
+│   ├── test_generation_extractor.py   # 13 tests: FakeExtractor term-scoring (distinctive 0.85 guard) + Gemini batch + blacklist
+│   ├── test_template_parser.py        # 24 tests: 5-syntax regex, docx/xlsx/pptx, header/footer, duplicate occurrences, warnings
+│   ├── test_mapping_generator.py      # 20 tests: mapper exact/fuzzy/synonym + generator docx/xlsx/pptx style-preserving
+│   ├── test_api.py                    # 25 tests: upload (%PDF/PK/size/415/413) → status → results (extracted_by) → PATCH edit/skip/confirm/re_extract → confirm/202 → download (RFC5987) → source/page
+│   └── __init__.py
+└── (no conftest/fixtures split yet — shared helpers inline; frontend tests live in frontend/src/tests/*.mjs)
 ```
 
-### Running Backend Tests
+### Running Backend Tests (offline-safe, no GEMINI_API_KEY required)
+
 ```bash
-# All tests
+# All 167 tests
 cd backend && pytest -v
-
-# Unit tests only
-cd backend && pytest tests/unit/ -v
-
-# Integration tests only
-cd backend && pytest tests/integration/ -v
+# 167 collected in ~3s — every Embedder/Extractor uses force_fake=True fallback; InMemoryVectorStore needs no Postgres.
 
 # With coverage
-cd backend && pytest --cov=app --cov-report=html -v
+cd backend && pytest --cov=app --cov-report=term-missing --cov-report=xml -v
 
-# Specific test file
-cd backend && pytest tests/unit/test_pdf_extractor.py -v
+# Specific file
+cd backend && pytest tests/test_generation_extractor.py -v
+cd backend && pytest tests/test_api.py::TestUpload -v
 
-# Run tests matching a pattern
-cd backend && pytest -k "test_extract" -v
+# Match pattern (e.g., batch/blacklist)
+cd backend && pytest -k "batch or blacklist or extract" -v
+
+# Eval harness (reads regenerated datasets, uses same fake fallback)
+python ../scripts/generate_eval_datasets.py
+python ../eval/run_eval.py --dataset ../eval/datasets --output ../eval/results
+# → TemplaFill Evaluation Report (5/5 PASS, 1.00 F1, 0.6s) + eval_run_*.json
 ```
 
 ### Coverage Target
@@ -131,24 +123,20 @@ cd backend && pytest -k "test_extract" -v
 
 ## Frontend Testing
 
-### Test Structure
+### Test Structure (actual)
+
 ```
 frontend/
 ├── src/
-│   ├── __tests__/                     # Global test utilities
-│   │   └── setup.ts
-│   ├── components/
-│   │   ├── FileUpload/
-│   │   │   ├── FileUpload.tsx
-│   │   │   └── FileUpload.test.tsx
-│   │   ├── FieldReview/
-│   │   │   ├── FieldReview.tsx
-│   │   │   └── FieldReview.test.tsx
-│   │   └── ...
-│   └── lib/
-│       ├── api.ts
-│       └── api.test.ts
+│   ├── app/page.tsx                 # Integration orchestrator under test via e2e
+│   ├── components/*.tsx             # Navbar, DualDropzone, ProcessingView, ReviewMappingView, DownloadView, BackendWakingBanner, HelpModal, HistoryModal, Toast, ReExtract/Citation/AddField
+│   ├── lib/{api.ts,types.ts,mockData.ts}
+│   └── tests/
+│       ├── models.test.mjs          # 5/5: type invariants, mapping helpers
+│       └── e2e.test.mjs             # 8/8 full-flow 106ms (upload → polling batch → results engineUsed hybrid/fallback → edit/generate)
 ```
+
+*No `__tests__/setup.ts` / per-component `*.test.tsx` split yet — deferred per early spec; build verified via `next build` + `eslint`.*
 
 ### Running Frontend Tests
 ```bash

@@ -1,8 +1,8 @@
 # TemplaFill — User Guide & Operations Manual
 
-> **Version**: 1.0.0  
+> **Version**: 1.0.1 (doc sweep 2026-09-24, code is `gemini-3.6-flash` / `gemini-embedding-001` / `167 tests`)  
 > **Target Audience**: End-users, Legal Analysts, Operations Teams, Administrators  
-> **Last Updated**: 2026-09-23  
+> **Last Updated**: 2026-09-24 · **Code references**: `frontend/src/lib/api.ts:23`, `backend/app/services/mapping/parser.py:32`, `backend/app/services/generation/extractor.py:220`  
 
 ---
 
@@ -26,9 +26,9 @@ TemplaFill inspects template files and preserves 100% of the original document's
 | **Microsoft PowerPoint** | `.pptx` | Slide body text frames, title boxes, slide tables |
 
 ### Placeholder Syntax Conventions
-TemplaFill recognizes four standard placeholder syntax styles. You can use any of them interchangeably:
+TemplaFill recognizes **five** standard placeholder syntax styles (`backend/app/services/mapping/parser.py:32` `_PLACEHOLDER_PATTERNS`, priority-ordered with `used_spans` dedup):
 
-1. **Double Braces (Recommended)**:
+1. **Double Braces (Recommended, highest priority)**:
    ```text
    {{client_name}}
    {{effective_date}}
@@ -44,13 +44,20 @@ TemplaFill recognizes four standard placeholder syntax styles. You can use any o
    [client_name]
    [notice_period_days]
    ```
-4. **Double Underscores**:
+4. **Single Braces**:
+   ```text
+   {client_name}
+   {notice_period}
+   ```
+5. **Double Underscores**:
    ```text
    __client_name__
    __authorized_signatory__
    ```
 
-*Naming Tip*: Use snake_case or clean alphanumeric labels (e.g. `{{party_b_address}}`) for the highest mapping precision.
+- **Case-insensitive + whitespace-normalized**: `{{  Client_Name }}` → `client_name` via `_normalize_field_name` (`[\s.\-]→_`, lower).
+- **Validation**: Warnings if 0 placeholders detected or `field_name>50 chars`; duplicate `normalized` names collapse with `occurrences++` (visible as single card, count in tooltip).
+- *Naming Tip*: Use snake_case (e.g. `{{party_b_address}}`) for highest precision — `FakeExtractor` term-scoring (`0.85` threshold for distinctive terms) biases toward exact matches.
 
 ---
 
@@ -64,11 +71,11 @@ TemplaFill recognizes four standard placeholder syntax styles. You can use any o
 5. Click **Start AI Extraction Pipeline**.
 
 ### Step 2: Processing & Pipeline Stages
-The application processes documents through 4 transparent stages with real-time radar feedback:
-1. **Document Parsing**: Extracting text layers and table structures using PyMuPDF and pdfplumber.
-2. **Semantic Chunking & Embedding**: Breaking text into 800-token chunks with 100-token overlap, indexed in vector storage.
-3. **Template Inspection**: Detecting placeholders across all paragraphs, cells, and slides.
-4. **Structured RAG Extraction**: Querying the vector index per field and generating structured extraction with confidence metrics.
+The application processes documents through 4 transparent stages with real-time radar + `percent/phase` polling (`GET /api/jobs/{id}`):
+1. **Document Parsing & Validation** (`15%→25%`): Extracting text layers + table structures via PyMuPDF (text+metadata) and pdfplumber (tables/layout); validates `%PDF`/`PK` magic beyond extensions; on `PdfExtractionError` job fails with actionable toast.
+2. **Semantic Chunking & Embedding** (`35%→55%`): Recursive 800-token chunks with 100-token overlap and header metadata (`rag/chunker.py`), batched embeddings via `gemini-embedding-001` (768d, 100/batch, 4s/15 RPM throttle) → `InMemoryVectorStore` (or `pgvector` prod), with deterministic fake fallback so pipeline never blocks offline.
+3. **Template Inspection** (`55%→70%`): Detecting placeholders across Word paragraphs/tables/headers, Excel cells (all sheets), PowerPoint text frames + group shapes — 5 syntaxes, case-insensitive.
+4. **Structured RAG Extraction** (`80%→98%` `ai_extraction`, ADR-015): Dedupes top-3 chunks per field (≤10 total), then **single-prompt batch** `gemini-3.6-flash` call (`extractor.py:426`) listing all fields → `{"extractions": [...]}` with `confidence` + `source_page` + `snippet`; candidate fallback `3.6→3.5→3.5-lite→3.7→3.8` with 404 blacklist + 1.2s pacing + 429/503 backoff; missing fields auto-heuristic-recovered; every field records `extracted_by` (`gemini`|`heuristic`|`hybrid`) + `fallback_reason` for the Review banner/badge.
 
 ### Step 3: Review & Edit Mapping
 TemplaFill offers two layout modes:
@@ -76,15 +83,16 @@ TemplaFill offers two layout modes:
 - **Table View**: Compact spreadsheet-style overview ideal for templates with 20+ fields.
 
 #### Working with Fields:
-- **Inline Value Editing**: Click any field value or the edit button to correct or type an alternative value.
-- **Confidence Badge**:
-  - 🟢 **High (>= 80%)**: Verbatim match with clear source context.
-  - 🟡 **Medium (50% - 79%)**: Inferred from surrounding text. Check snippet.
-  - 🔴 **Low (< 50%) / Not Found**: Requires user verification.
-- **View Source Citation**: Click the **View Citation** button to view the exact page number and text snippet from which the value was extracted.
-- **Re-Extract with Hint**: If an extraction missed a detail, click **Re-Extract** and provide a hint (e.g., *"Look at Schedule C on page 12 for the indemnification clause"*).
-- **Add Custom Field**: Click **Add Field** to insert an ad-hoc placeholder mapping on the fly.
-- **Skip Field**: Toggle a field as skipped if you wish to leave the template placeholder blank.
+- **Inline Value Editing**: Click any value or the pencil icon → `PATCH /jobs/{id}/fields/{id}` `action=edit` + `sanitize_text_input(5000)`; confidence resets to `1.0`; progress toast `Field Updated`.
+- **Confidence Badge** (`confidenceLevel` derived: `≥0.8 high`, `0.5–0.8 medium`, `<0.5 low`):
+  - 🟢 **High (≥80%)** + `[Gemini 3.6 Flash]` badge: Verbatim `extracted_by=gemini`
+  - 🟡 **Medium (50%–79%)**: Check snippet — often heuristic-recovered (`extracted_by=heuristic`)
+  - 🔴 **Low (<50%) / Not Found**: `status=not_found`, `confidence=0.0` — needs manual entry or skip
+- **Engine Provenance Banner (ADR-014)**: Top amber notice distinguishes `Gemini 100%` vs `Hybrid (partial AI + local)` vs `Heuristic Fallback` + `fallback_reason` tooltip (`GEMINI_API_KEY missing` / `404 Not Found` / `429 quota`); per-field hover shows the same.
+- **View Source Citation**: **View Citation** → `GET /jobs/{id}/source/page/{n}?highlight=…` modal with `page_number/total_pages + content + tables[{headers, rows}]`; verbatim `≤200 char` snippet highlighted.
+- **Re-Extract with Hint**: **Re-Extract** → `POST /jobs/{id}/fields/{id}/re-extract` (`hint` ≤2000 chars, `5/min` rate limit) with targeted prompt (e.g., *"Look at Schedule C on page 12"*); returns `previous_value`→`new_value` + confidence; toast `Field Re-extracted`.
+- **Add Custom Field**: **Add Field** (`AddFieldModal`) inserts an ad-hoc field not originally templated — mapped for `confirm` generation.
+- **Skip Field**: Toggle **Skip** (`action=skip`) — field omitted from `mapped` on `POST /confirm`; visual gray strike-through. **Filter Tabs** (All / Extracted / Not Found / Edited / Skipped) and **Confirm** checkboxes added 2026-09-24.
 
 ### Step 4: Confirm & Export
 1. Click **Confirm & Generate Document**.
@@ -108,12 +116,12 @@ TemplaFill offers both guest anonymous access and registered accounts:
 
 ---
 
-## 5. Security & Privacy Safeguards
+## 5. Security & Privacy Safeguards (see `SECURITY.md` + `DATA_PRIVACY.md` + ADR-012 VULN-1→10)
 
-- **Zero AI Training**: User documents and extracted variables are strictly confidential and are never used to train public models.
-- **In-Memory & Ephemeral Storage**: Files uploaded are held in isolated temporary scratchpads that are automatically purged upon session completion or after 1 hour.
-- **In-Flight Encryption**: All network traffic is encrypted via TLS 1.3 with strict Content Security Policy (CSP) headers.
-- **OWASP Compliance**: Automated input sanitization prevents formula injection in `.xlsx` and template injection attacks.
+- **Zero AI Training / Logging**: User documents never written to logs; free-tier Gemini data may be used by Google for improvement per `ADR-007` (upgrade to paid+DPA for production). 167 backend tests + eval pass without any live Gemini key via fake fallback.
+- **In-Memory & Ephemeral Storage**: InMemory jobs + `./uploads` (24h auto-delete) + pgvector lifetime tied to job; `CLEANUP` via hourly cron in prod (`SECURITY.md`), currently in-memory boards clear on restart.
+- **In-Flight Encryption & Headers**: TLS 1.3 + strict CSP (`default-src 'self'; frame-ancestors 'none'`), `nosniff`/`DENY`/`HSTS preload`/`Referrer-Policy`/`Permissions-Policy` triple-enforced in `backend/app/core/security.py:28` + `frontend/next.config.ts:24` + `frontend/vercel.json:33`.
+- **OWASP & Validation Compliance (ADR-012)**: `sanitize_filename()` strips `../`/null/path traversal + `sanitize_text_input` scrubs control codes (5000 edit / 2000 hint) + `validate_file_magic` (`%PDF`/`PK`) + `sanitize_filename` on `Content-Disposition: filename*=UTF-8''...` (RFC 5987) + no `str(e)` leak + `DEBUG` gates `/api/debug/gemini` + `docs` disabled when `DEBUG=False` + CORS whitelist + rate limit `10/hr, 30/min, 5/min` (CI exempt). Formula injection `= + - @` stripped on xlsx.
 
 ---
 

@@ -8,17 +8,17 @@
 
 | Layer | Technology | Version | Rationale |
 |-------|-----------|---------|-----------|
-| **Frontend** | Next.js (App Router) | 14.x | SSR, file-based routing, React Server Components, great DX |
-| **Frontend Language** | TypeScript | 5.x | Type safety, better IDE support, fewer runtime bugs |
-| **Styling** | Tailwind CSS | 3.x | Rapid UI development, consistent design tokens |
-| **Backend** | FastAPI | 0.110+ | Async Python, auto-generated OpenAPI docs, great for ML pipelines |
-| **Backend Language** | Python | 3.11+ | Best ML/AI ecosystem, rich PDF/document libraries |
-| **Database** | PostgreSQL | 16+ | Reliable, extensible, pgvector for embeddings |
-| **Vector Store** | pgvector (PostgreSQL extension) | 0.7+ | No separate service needed, embedded in PostgreSQL |
-| **ORM** | SQLAlchemy | 2.0+ | Async support, mature, flexible |
-| **LLM** | Gemini API (free plan) | gemini-2.0-flash | Free tier, structured output, function calling, fast |
-| **Embeddings** | Gemini Embedding API | text-embedding-004 | Free tier, 768 dimensions, good quality |
-| **Job Queue** | FastAPI BackgroundTasks (MVP) / Celery + Redis (scale) | 5.x | MVP uses BackgroundTasks to stay within Render Hobby 750h (no separate worker); scale to Celery when >$7 |
+| **Frontend** | Next.js (App Router) | 16.3.6 (`frontend/package.json`) | App Router + `next/font` (IBM Plex), static prerender, `next.config.ts` security headers; SSR for landing |
+| **Frontend Language** | TypeScript | 5.x | Type safety, IDE support, fewer runtime bugs |
+| **Styling** | Tailwind CSS | 4.x (`@tailwindcss/postcss`) | Utility-first, design tokens in `globals.css` |
+| **Backend** | FastAPI | 0.110+ | Async Python, auto-generated OpenAPI docs, great for ML pipelines, `BackgroundTasks` |
+| **Backend Language** | Python | 3.11+ (`python:3.11-slim` in Dockerfile) | Best ML/AI ecosystem, rich PDF/document libs |
+| **Database** | PostgreSQL | 16+ (+ `pgvector` via `pgvector/pgvector:pg16`) | Reliable, extensible, `vector` extension for `VECTOR(768)` |
+| **Vector Store** | pgvector (PostgreSQL extension) | 0.7+ *or* `InMemoryVectorStore` default for dev | `VECTOR(768)` + `ivfflat vector_cosine_ops`; `InMemory` avoids Postgres for 167 offline tests |
+| **ORM** | SQLAlchemy | 2.0+ (`sqlalchemy[asyncio]` + `asyncpg`) | Async support, mature, flexible; `alembic` migrations |
+| **LLM** | Gemini API (free plan) | `gemini-3.6-flash` (primary, candidates `3.5/3.5-lite/3.7/3.8` via `extractor.py:220`) | `GenerateContentConfig(response_mime_type="application/json")`, batch single-prompt, 404 blacklist + 1.2s pacing; free-tier 15 RPM/1M TPM/20–1500 RPD |
+| **Embeddings** | Gemini Embedding API | `gemini-embedding-001` (sanitized from legacy `text-embedding-004` at `embedder.py:107`) | 768 dims, batch 100, throttled 4s; `_fake_embedding` offline for 167 tests |
+| **Job Queue** | FastAPI BackgroundTasks (current) / Celery + Redis (scale) | `celery 5.x` optional | `manager.py:116` `background_tasks.add_task(process_job)` stays within Render Hobby 750h (no separate worker); switch to Celery when traffic > free tier |
 | **File Storage** | Local FS (dev) / Supabase Storage 1 GB free (prod) | — | MVP local FS (24h auto-delete), prod Supabase Storage unified with DB per free-forever choice |
 | **Auth** | NextAuth.js (frontend) + JWT (API) | 5.x | Simple auth, multiple providers |
 | **Deployment (FE)** | Vercel Hobby | — | Free 100 GB/mo, auto-deploy from Git, `vercel.json` headers, global edge |
@@ -37,26 +37,22 @@
 | `typescript` | Type safety |
 
 ### Styling & UI
-| Package | Purpose |
-|---------|---------|
-| `tailwindcss` | Utility-first CSS |
-| `@radix-ui/*` | Accessible, unstyled UI primitives (dialogs, dropdowns, etc.) |
-| `lucide-react` | Icon library |
-| `framer-motion` | Animations and micro-interactions |
-| `clsx` + `tailwind-merge` | Conditional class merging |
+| Package | Purpose | Notes |
+|---------|---------|-------|
+| `tailwindcss` + `@tailwindcss/postcss` | Utility-first CSS | 4.x in `frontend/package.json` |
+| `lucide-react` | Icon library | Used for step icons, badges |
+| `clsx` + `tailwind-merge` | Conditional class merging | — |
+| *(planned, not yet installed)* `@radix-ui/*`, `framer-motion` | Headless primitives / motion | Listed in early spec but deferred; custom modals + Tailwind handle current needs |
 
 ### State & Data
-| Package | Purpose |
-|---------|---------|
-| `@tanstack/react-query` | Server state management, caching, polling |
-| `zustand` | Lightweight client state (UI state) |
-| `zod` | Schema validation (form inputs, API responses) |
+| Package | Purpose | Actual |
+|---------|---------|--------|
+| `@tanstack/react-query` / `zustand` / `zod` | Server/client state + schema | Planned in early MVP spec; current MVP uses `useState` + `localStorage` (`templafill_auth_user`, `templafill_recent_sessions`) + manual polling (`api.getJobProgress`) — see `frontend/src/lib/api.ts:192` |
 
 ### File Handling
-| Package | Purpose |
-|---------|---------|
-| `react-dropzone` | Drag-and-drop file upload |
-| `react-pdf` | PDF preview in browser |
+| Package | Purpose | Actual |
+|---------|---------|--------|
+| `react-dropzone` / `react-pdf` | Drag & drop + PDF preview | Planned; actual is native HTML5 drag handlers in `DualDropzone.tsx` + `%PDF` magic check — no extra deps yet |
 
 ---
 
@@ -109,26 +105,30 @@
 
 ## Gemini API Usage Plan
 
-### Free Tier Limits (as of 2026)
-| Resource | Limit |
-|----------|-------|
-| Requests per minute (RPM) | 15 |
-| Tokens per minute (TPM) | 1,000,000 |
-| Requests per day (RPD) | 1,500 |
+### Free Tier Limits (as of 2026-09-24, Google AI Studio console)
 
-### Usage Strategy
-| Operation | Model | Est. calls per document |
-|-----------|-------|------------------------|
-| Generate embeddings | `text-embedding-004` | 1-5 calls (batched, 100 chunks each) |
-| Extract field value | `gemini-2.0-flash` | 1 call per field (5-50 fields typical) |
-| Re-extract on user request | `gemini-2.0-flash` | 1 call per re-extraction |
+| Resource | Limit | Observed |
+|----------|-------|----------|
+| Requests per minute (RPM) | 15 | Enforced by embedder 4s `MIN_INTERVAL_S` + extractor 1.2s `_MIN_CALL_INTERVAL` |
+| Tokens per minute (TPM) | 1,000,000 | — |
+| Requests per day (RPD) | 1,500 (some projects `20/day` on newer free tier) | `quota limit: 20 / RESOURCE_EXHAUSTED per day` now blacklists + advances (`extractor.py:332`) |
+| Models available | `gemini-3.6-flash` (primary) + fallbacks | Legacy `2.0/1.5/2.5` auto-sanitized to `3.6` (`extractor.py:199`) |
 
-### Rate Limiting Strategy
-- Queue all LLM calls through a rate limiter (max 15 RPM)
-- Batch embedding calls (up to 100 chunks per call)
-- For extraction: process fields sequentially with 4-second intervals to stay within RPM
-- If rate limited: exponential backoff with jitter
-- For high traffic: implement user-level queuing (first-come-first-served)
+### Usage Strategy (actual `backend/app/services/generation/extractor.py:426`)
+
+| Operation | Model | Calls per document | Notes |
+|-----------|-------|-------------------|-------|
+| Generate embeddings | `gemini-embedding-001` (sanitized from `text-embedding-004`) | 1–5 calls (batched, 100 chunks each, 4s throttle) | Fake fallback if key missing; offline-safe for CI |
+| **Batch extraction (current)** | `gemini-3.6-flash` → `3.5-flash` → `3.5-flash-lite` → `3.7` → `3.8` | **1 call per document (all fields in one JSON)** | ADR-013: consolidates deduped chunks ≤10 + all placeholders → `{"extractions": [...]}`; reduces 429 by >90% |
+| Legacy per-field (fallback `re_extract` only) | same candidates | 1 call per re-extraction | `PATCH /jobs/{id}/fields/{id}` with `hint` |
+| Re-extract on user request | `gemini-3.6-flash` candidates | 1 call per hint | 5/min per IP (`security.py:118` `re_extract`) |
+
+### Rate Limiting Strategy (implemented)
+
+- Embedder: sliding-window check `_last_call_ts` + `asyncio.Lock` (`embedder.py:123`) — 4s between live calls
+- Extractor: `_throttle_call` 1.2s + per-candidate `2.5s×attempt` exponential backoff (`extractor.py:236`); 404 → immediate blacklist `*_BLACKLISTED_MODELS*` + advance (`extractor.py:325`); daily quota `20/day` → blacklist + advance without sleep (`extractor.py:332`)
+- HTTP layer: `InMemoryRateLimiter` 10/hr upload / 30/min write / 5/min re_extract (`security.py:98`); `testclient` exempt so CI 167 tests never 429
+- High traffic: single `BackgroundTasks` worker keeps Hobby 750h; queue semantics via `JobStatus` (`queued→processing→extracting→mapping→completed`) + 18% progress sweep over batch fields (`manager.py:261`)
 
 ---
 
