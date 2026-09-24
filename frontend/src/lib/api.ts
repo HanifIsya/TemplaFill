@@ -288,6 +288,8 @@ class ApiClient {
                 isConfirmed: f.status === 'confirmed',
                 isSkipped: f.status === 'skipped',
                 fieldType: fType,
+                extractedBy: f.extracted_by || (f.source_reference?.snippet?.includes('AI_ERROR') ? 'heuristic' : 'gemini'),
+                fallbackReason: f.fallback_reason,
               };
             });
 
@@ -298,12 +300,21 @@ class ApiClient {
 
             const hasAiError = Boolean(
               data.has_ai_error ||
+              data.has_fallback ||
+              data.engine_used === 'heuristic' ||
               rawFields.some((f: any) =>
+                f.extracted_by === 'heuristic' ||
                 f.source_reference?.snippet?.includes('AI_ERROR') ||
                 f.source_reference?.snippet?.includes('404') ||
                 f.source_reference?.snippet?.includes('429')
               )
             );
+
+            const fallbackReason = data.fallback_reason || (hasAiError
+              ? 'Layanan AI mengalami kendala limit kuota/model (404/429/Missing Key). Mesin ekstraksi otomatis beralih ke Mesin Heuristik Lokal.'
+              : undefined);
+
+            const engineUsed = (data.engine_used as any) || (hasAiError ? 'heuristic' : 'gemini');
 
             return {
               sessionId,
@@ -314,10 +325,10 @@ class ApiClient {
               averageConfidence: avg,
               fields,
               hasAiError,
-              aiErrorMessage: hasAiError
-                ? 'Gemini API Error / Quota Limit (404/429). Mesin ekstraksi otomatis beralih ke Mesin Heuristik Lokal.'
-                : undefined,
-              engineUsed: hasAiError ? 'heuristic' : 'gemini',
+              hasFallback: hasAiError,
+              fallbackReason,
+              aiErrorMessage: fallbackReason,
+              engineUsed,
             };
           }
         }

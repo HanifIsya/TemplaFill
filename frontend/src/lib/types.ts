@@ -50,6 +50,8 @@ export interface FieldMapping {
   isSkipped?: boolean;
   reExtractHint?: string;
   fieldType: 'text' | 'date' | 'number' | 'currency' | 'table';
+  extractedBy?: 'gemini' | 'heuristic' | 'manual';
+  fallbackReason?: string;
 }
 
 export interface ExtractionResult {
@@ -61,8 +63,10 @@ export interface ExtractionResult {
   averageConfidence: number;
   fields: FieldMapping[];
   hasAiError?: boolean;
+  hasFallback?: boolean;
   aiErrorMessage?: string;
-  engineUsed?: 'gemini' | 'heuristic' | 'mock';
+  fallbackReason?: string;
+  engineUsed?: 'gemini' | 'heuristic' | 'hybrid' | 'mock';
 }
 
 export interface GenerationResult {

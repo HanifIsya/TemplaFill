@@ -215,4 +215,24 @@
   - Output tokens are properly produced and accounted for by Google AI Studio.
   - 167/167 backend unit tests and 1.00 eval benchmark verified green.
 
+---
+
+### ADR-014: Explicit Engine Source Tracking & Fallback User Notifications (2026-09-24)
+- **Date**: 2026-09-24
+- **Status**: Accepted
+- **Context**: When Gemini API encounters rate limits (429), server load (503), missing API key, or invalid model (404), TemplaFill gracefully falls back to the heuristic extractor. Previously, this occurred silently without informing the user, leading to confusion when reviewing Google AI Studio token counts (e.g. 0 or 0.03k output tokens) while results were still populated.
+- **Decision**:
+  1. **Backend Engine Tracking**:
+     - `FieldResult` now stores `extracted_by` ("gemini" | "heuristic" | "manual") and `fallback_reason`.
+     - `Job` stores `has_fallback: bool`, `engine_used: str`, and `fallback_reason: str`.
+     - `Extractor.extract_batch` and `extract` records `last_engine_used` and `last_fallback_reason`.
+     - `/api/health` reports `ai_configured: bool` and active `model`.
+  2. **Frontend Notifications & Badges**:
+     - Completion toast explicitly distinguishes between "Selesai dengan Gemini AI", "Selesai (Hybrid Mode)", and "Beralih ke Heuristic Fallback (Pemberitahuan Otomatis)".
+     - Top notice banner in `ReviewMappingView` highlights whether Gemini AI was used or why Fallback was triggered.
+     - Per-field badges (`[Gemini AI]` vs `[Fallback]`) in both Split View and Table View, with the fallback reason surfaced on hover and in the source citation inspector.
+- **Consequences**:
+  - Full transparency for users and developers on exactly which engine produced each field.
+  - Eliminates ambiguity when checking Google AI Studio token usage metrics.
+
 

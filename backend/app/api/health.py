@@ -13,13 +13,15 @@ settings = get_settings()
 
 @router.get("/health", summary="Health check")
 async def health_check():
-    """Return service health, version and timestamp."""
+    """Return service health, version, AI configuration status and timestamp."""
     return {
         "success": True,
         "data": {
             "status": "healthy",
             "version": settings.app_version,
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "ai_configured": bool(settings.gemini_api_key),
+            "model": settings.gemini_model,
         },
     }
 

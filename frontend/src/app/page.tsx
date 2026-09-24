@@ -232,17 +232,23 @@ export default function Home() {
             setExtractionResult(result);
             setIsProcessing(false);
             setCurrentStep('review');
-            if (result.hasAiError) {
+            if (result.hasFallback || result.hasAiError || result.engineUsed === 'heuristic') {
               addToast(
                 'warning',
-                'Gemini AI Limit / Error',
-                result.aiErrorMessage || 'Google AI Studio merespons dengan kendala kuota / 404. Sistem otomatis menggunakan Ekstraksi Heuristik Lokal.'
+                'Ekstraksi Menggunakan Fallback Heuristik',
+                result.fallbackReason || 'Layanan Gemini AI mengalami kendala kuota atau koneksi. Data diekstrak menggunakan Mesin Heuristik Lokal.'
+              );
+            } else if (result.engineUsed === 'hybrid') {
+              addToast(
+                'info',
+                'Ekstraksi Hybrid (AI + Fallback)',
+                'Sebagian field diekstrak oleh Gemini AI dan sebagian dipulihkan oleh mesin heuristik.'
               );
             } else {
               addToast(
                 'success',
-                'Extraction Complete',
-                `Found ${result.totalFields} fields with ${result.highConfidenceCount} high confidence.`
+                'Ekstraksi Gemini AI Berhasil',
+                `Berhasil mengekstrak ${result.totalFields} field langsung menggunakan Google Gemini AI.`
               );
             }
           } else if (updated.status === 'failed') {

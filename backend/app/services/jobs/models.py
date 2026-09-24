@@ -50,7 +50,8 @@ class FieldResult(BaseModel):
     status: str = Field(default="not_found")  # extracted|not_found|edited|skipped|confirmed
     is_manually_edited: bool = False
     user_edited_value: Optional[str] = None
-    # For re-extract hint tracking
+    extracted_by: str = Field(default="gemini")  # gemini | heuristic | manual
+    fallback_reason: Optional[str] = None
 
 
 class Job(BaseModel):
@@ -75,6 +76,9 @@ class Job(BaseModel):
     parsed_template: Optional[Any] = Field(default=None, exclude=True, repr=False)
     field_results: List[FieldResult] = Field(default_factory=list)
     overall_confidence: float = 0.0
+    engine_used: str = "gemini"  # gemini | heuristic | hybrid
+    has_fallback: bool = False
+    fallback_reason: Optional[str] = None
     # Generation
     filled_doc_bytes: Optional[bytes] = Field(default=None, exclude=True, repr=False)
     filled_doc_filename: Optional[str] = None
@@ -104,13 +108,29 @@ class Job(BaseModel):
     def to_results_dict(self) -> Dict[str, Any]:
         fields_found = sum(1 for f in self.field_results if f.status == "extracted" and f.extracted_value is not None)
         fields_not_found = len(self.field_results) - fields_found
-        has_ai_error = any("AI_ERROR" in (f.source_reference.snippet or "") for f in self.field_results if f.source_reference)
+        heuristic_count = sum(1 for f in self.field_results if f.extracted_by == "heuristic")
+        gemini_count = sum(1 for f in self.field_results if f.extracted_by == "gemini")
+
+        has_fallback = (
+            self.has_fallback
+            or heuristic_count > 0
+            or any("AI_ERROR" in (f.source_reference.snippet or "") for f in self.field_results if f.source_reference)
+        )
+        if gemini_count > 0 and heuristic_count > 0:
+            engine = "hybrid"
+        elif heuristic_count > 0 or has_fallback:
+            engine = "heuristic"
+        else:
+            engine = "gemini"
+
         return {
             "job_id": self.job_id,
             "overall_confidence": round(self.overall_confidence, 2),
             "fields_found": fields_found,
             "fields_not_found": fields_not_found,
-            "has_ai_error": has_ai_error,
-            "engine_used": "heuristic" if has_ai_error else "gemini",
+            "has_ai_error": has_fallback,
+            "has_fallback": has_fallback,
+            "engine_used": engine,
+            "fallback_reason": self.fallback_reason,
             "fields": [f.model_dump() for f in self.field_results],
         }

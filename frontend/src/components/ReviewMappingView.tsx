@@ -11,6 +11,7 @@ import {
   Columns,
   CheckCheck,
   AlertTriangle,
+  Sparkles,
 } from 'lucide-react';
 import { FieldMapping, ExtractionResult } from '../lib/types';
 import { CitationModal } from './CitationModal';
@@ -184,6 +185,31 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
     );
   };
 
+  const getEngineBadge = (field: FieldMapping) => {
+    if (field.extractedBy === 'heuristic') {
+      return (
+        <span
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-amber-50 dark:bg-amber-950/70 text-amber-800 dark:text-amber-300 border border-amber-300 dark:border-amber-700/60"
+          title={field.fallbackReason || 'Ekstraksi otomatis beralih ke Fallback Heuristik Lokal'}
+        >
+          Fallback
+        </span>
+      );
+    }
+    if (field.extractedBy === 'gemini') {
+      return (
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-indigo-50 dark:bg-indigo-950/50 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/60"
+          title="Diekstrak langsung oleh Google Gemini AI"
+        >
+          <Sparkles className="w-2.5 h-2.5" />
+          Gemini AI
+        </span>
+      );
+    }
+    return null;
+  };
+
   const activeSplitField = fields.find((f) => f.id === selectedFieldId) || fields[0];
 
   return (
@@ -216,23 +242,47 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
         </div>
       </div>
 
-      {/* Gemini AI Error / Quota Notice Banner */}
-      {extractionResult.hasAiError && (
+      {/* Engine Status / Fallback Notice Banner */}
+      {(extractionResult.hasFallback || extractionResult.hasAiError || extractionResult.engineUsed === 'heuristic') ? (
         <div className="p-3.5 rounded border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
           <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-semibold text-xs text-amber-800 dark:text-amber-300">
-                Pemberitahuan Gemini API: Layanan AI Mengalami Kendala (404 NotFound / 429 Quota Limit)
+                Pemberitahuan Ekstraksi: Mode Fallback Heuristik Aktif
               </span>
               <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-amber-400 dark:border-amber-700 bg-amber-100 dark:bg-amber-900/80 text-amber-800 dark:text-amber-200">
-                Heuristic Engine Active
+                Heuristic Fallback Engine
               </span>
             </div>
             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-              Request ke Google AI Studio mengembalikan kode error <strong>404 NotFound</strong> (model name) atau <strong>429 RateLimit</strong>. Sistem secara transparan beralih ke <strong>Mesin Ekstraksi Heuristik Lokal</strong> agar proses ekstraksi dokumen Anda tidak gagal. Anda dapat meninjau, mengedit, atau mengkonfirmasi field di bawah ini sebelum mengekspor.
+              {extractionResult.fallbackReason || extractionResult.aiErrorMessage || 'Layanan AI beralih ke Mesin Heuristik Lokal karena kendala Gemini API (404/429/Missing Key).'} Sistem secara transparan mengamankan proses ekstraksi dokumen Anda agar tidak gagal. Anda dapat meninjau, mengedit, atau mengkonfirmasi field di bawah ini sebelum mengekspor.
             </p>
           </div>
+        </div>
+      ) : extractionResult.engineUsed === 'hybrid' ? (
+        <div className="p-3 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="font-medium text-[11px]">
+              <strong>Ekstraksi Hybrid</strong>: Sebagian field diproses oleh <strong>Gemini AI</strong> dan sebagian dipulihkan oleh mesin heuristik lokal.
+            </span>
+          </div>
+          <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-blue-300 dark:border-blue-800 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 shrink-0">
+            Hybrid Mode
+          </span>
+        </div>
+      ) : (
+        <div className="p-2.5 rounded border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/60 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span className="text-[11px]">
+              <strong>Didukung Penuh oleh Gemini AI</strong>: Semua field berhasil diekstrak langsung menggunakan kecerdasan buatan Google Gemini.
+            </span>
+          </div>
+          <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800 bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-200 shrink-0">
+            Gemini AI Active
+          </span>
         </div>
       )}
 
@@ -374,6 +424,15 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
 
                 <div className="p-3 rounded border border-slate-200 dark:border-slate-800 space-y-1.5">
                   <div className="flex items-center justify-between">
+                    <span className="text-slate-500">Engine:</span>
+                    <div>{getEngineBadge(activeSplitField)}</div>
+                  </div>
+                  {activeSplitField.fallbackReason && (
+                    <div className="text-[11px] text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 p-1.5 rounded border border-amber-200 dark:border-amber-800/40 font-mono">
+                      {activeSplitField.fallbackReason}
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between">
                     <span className="text-slate-500">Extracted:</span>
                     <span className="font-semibold text-slate-900 dark:text-slate-100">
                       {activeSplitField.extractedValue || 'None'}
@@ -416,10 +475,11 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-semibold text-slate-900 dark:text-slate-100">
                           {field.label}
                         </span>
+                        {getEngineBadge(field)}
                         {field.isSkipped && (
                           <span className="font-mono text-[10px] text-slate-500">[Skipped]</span>
                         )}
@@ -477,8 +537,11 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
                   >
                     {/* Target Field */}
                     <td className="py-3 px-3 align-top">
-                      <div className="font-semibold text-slate-900 dark:text-slate-100">
-                        {field.label}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">
+                          {field.label}
+                        </span>
+                        {getEngineBadge(field)}
                       </div>
                       <div className="font-mono text-[11px] text-slate-500">
                         {field.templateField}

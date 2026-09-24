@@ -261,12 +261,16 @@ class JobManager:
                     conf = ext_res.confidence
                     src_page = ext_res.source_page
                     src_text = ext_res.source_text
+                    ext_by = ext_res.extracted_by
+                    fb_reason = ext_res.fallback_reason
                 else:
                     status = "not_found"
                     value = None
                     conf = 0.0
                     src_page = ext_res.source_page if ext_res else None
                     src_text = ext_res.source_text if ext_res else None
+                    ext_by = ext_res.extracted_by if ext_res else "heuristic"
+                    fb_reason = ext_res.fallback_reason if ext_res else extractor.last_fallback_reason
 
                 total_conf += conf
 
@@ -279,11 +283,16 @@ class JobManager:
                     source_reference=SourceReference(page=src_page, snippet=src_text[:200] if src_text else None) if src_page or src_text else None,
                     status=status,
                     is_manually_edited=False,
+                    extracted_by=ext_by,
+                    fallback_reason=fb_reason,
                 )
                 field_results.append(fr)
 
             job.field_results = field_results
             job.overall_confidence = round(total_conf / len(field_results), 2) if field_results else 0.0
+            job.has_fallback = any(fr.extracted_by == "heuristic" for fr in field_results) or extractor.last_engine_used != "gemini"
+            job.fallback_reason = extractor.last_fallback_reason
+            job.engine_used = extractor.last_engine_used
             job.progress.percent = 100
             job.progress.current_field = len(field_results)
             await self.update_status(job_id, JobStatus.completed)

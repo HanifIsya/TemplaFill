@@ -7,7 +7,7 @@
 ## Last Updated
 - **Date**: 2026-09-24
 - **By**: Antigravity
-- **Summary**: Resolved Gemini API 429 TooManyRequests and 404 NotFound error spikes causing 0 output tokens. Implemented Single-Prompt Batch Extraction (`extract_batch`) reducing API calls from 15+ per doc down to 1 single call. Added 404 model blacklisting (`_BLACKLISTED_MODELS`), request pacing (`_MIN_CALL_INTERVAL = 1.2s`), and exponential backoff on 429/503. Upgraded `JobManager.process_document` to batch extraction. Logged ADR-013 in DECISIONS.md. Verified with 167/167 backend pytest passing and eval suite at 1.00 PASS.
+- **Summary**: Implemented automatic fallback notification system and engine source tracking across the full stack. Resolved Gemini API 429 and 404 token issues via Single-Prompt Batch Extraction (`extract_batch`). Added backend tracking of `extracted_by` ("gemini" | "heuristic" | "manual"), `has_fallback`, and `fallback_reason`. Updated frontend with prominent fallback alerts, toasts, per-field badges (`[Gemini AI]` vs `[Fallback]`), and inspector diagnostics. Documented in ADR-014. Verified with 167/167 backend pytest, 13/13 frontend tests, and 1.00 eval suite PASS.
 
 ---
 

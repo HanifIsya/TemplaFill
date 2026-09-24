@@ -42,6 +42,8 @@ class ExtractionResult(BaseModel):
     source_page: Optional[int] = None
     source_text: Optional[str] = None
     status: str = Field(description="extracted|not_found|error")
+    extracted_by: str = Field(default="gemini", description="gemini|heuristic|manual")
+    fallback_reason: Optional[str] = None
 
 
 class FakeExtractor:
@@ -75,16 +77,13 @@ class FakeExtractor:
         for key, val, full, chunk_idx in all_lines:
             key_norm = key.lower().replace("_", " ").strip()
             key_terms = set(key_norm.split())
-            # Term overlap: how many field_terms appear in key
             matched = sum(1 for t in field_terms if t in key_norm)
             term_score = matched / len(field_terms) if field_terms else 0
             difflib_score = difflib.SequenceMatcher(None, field_norm, key_norm).ratio()
-            # Combined score: term_score weighted 0.7, difflib 0.3, but if term_score 0 then overall 0
             if term_score == 0 and difflib_score < 0.5:
                 combined = 0
             else:
                 combined = term_score * 0.7 + difflib_score * 0.3
-                # Boost perfect term match
                 if term_score == 1.0:
                     combined = max(combined, 0.9)
             if combined > best_score or (abs(combined - best_score) < 1e-6 and difflib_score > best_difflib):
@@ -96,9 +95,7 @@ class FakeExtractor:
         if best_match and best_score >= 0.5:
             key, val, full, chunk_idx = best_match
             distinctives = [t for t in field_terms if len(t) > 2 and t not in {"date", "name", "number", "amount", "total", "value", "phone", "email", "invoice", "contract", "customer", "student", "company", "report"}]
-            # For due_date, distinctives = ["due"]; key "Invoice Date" lacks "due" -> penalize
             if distinctives and not any(d in key.lower() for d in distinctives):
-                # Require high combined (>=0.85) to accept, else treat as not found
                 if best_score < 0.85:
                     best_match = None
                 else:
@@ -112,12 +109,11 @@ class FakeExtractor:
                     source_page=chunk_idx + 1,
                     source_text=full[:200],
                     status="extracted",
+                    extracted_by="heuristic",
                 )
-            # If penalized (distinctive missing and score <0.85), fall through to not_found
             if best_match is None:
                 pass
             else:
-                # Was penalized but score high enough (>=0.85) -> still extracted (rare)
                 return ExtractionResult(
                     field_name=field_name,
                     extracted_value=val[:100],
@@ -125,6 +121,7 @@ class FakeExtractor:
                     source_page=chunk_idx + 1,
                     source_text=full[:200],
                     status="extracted",
+                    extracted_by="heuristic",
                 )
 
         # Fallback regex for email/phone across all chunks
@@ -132,17 +129,38 @@ class FakeExtractor:
             for ch in chunks_texts:
                 m = re.search(r"[\w\.-]+@[\w\.-]+\.\w+", ch)
                 if m:
-                    return ExtractionResult(field_name=field_name, extracted_value=m.group(0), confidence=0.9, source_text=m.group(0), status="extracted")
+                    return ExtractionResult(
+                        field_name=field_name,
+                        extracted_value=m.group(0),
+                        confidence=0.9,
+                        source_text=m.group(0),
+                        status="extracted",
+                        extracted_by="heuristic",
+                    )
         if "phone" in field_norm:
             for ch in chunks_texts:
                 m = re.search(r"\+?[\d\s\-\(\)]{7,}", ch)
                 if m:
                     val = m.group(0).strip()
                     if sum(c.isdigit() for c in val) >= 7:
-                        return ExtractionResult(field_name=field_name, extracted_value=val, confidence=0.8, source_text=val, status="extracted")
+                        return ExtractionResult(
+                            field_name=field_name,
+                            extracted_value=val,
+                            confidence=0.8,
+                            source_text=val,
+                            status="extracted",
+                            extracted_by="heuristic",
+                        )
 
         snippet = best_match[2][:200] if best_match else (chunks_texts[0][:200] if chunks_texts else None)
-        return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, source_text=snippet, status="not_found")
+        return ExtractionResult(
+            field_name=field_name,
+            extracted_value=None,
+            confidence=0.0,
+            source_text=snippet,
+            status="not_found",
+            extracted_by="heuristic",
+        )
 
     def extract_batch(
         self,
@@ -156,6 +174,7 @@ class FakeExtractor:
             fname = f.get("field_name", "")
             fdesc = f.get("description", "")
             res = self.extract(fname, chunks_texts, fdesc)
+            res.extracted_by = "heuristic"
             if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]
             results[fname] = res
@@ -185,12 +204,18 @@ class GeminiExtractor:
             self.use_fake = not bool(self.api_key) or not _HAS_GENAI
         self._client: Any = None
         self._fake = FakeExtractor()
+        self.last_engine_used: str = "gemini" if not self.use_fake else "heuristic"
+        self.last_fallback_reason: Optional[str] = (
+            None if not self.use_fake else ("GEMINI_API_KEY is not configured in backend environment" if not self.api_key else "google-genai SDK not available")
+        )
         if not self.use_fake and _HAS_GENAI:
             try:
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:  # noqa: BLE001
                 logger.warning("Failed to initialize genai.Client: %s. Using fake fallback.", e)
                 self.use_fake = True
+                self.last_engine_used = "heuristic"
+                self.last_fallback_reason = f"Failed to initialize Gemini Client: {e}"
 
     def _get_candidate_models(self) -> List[str]:
         """Returns prioritized candidate models excluding blacklisted (404) ones."""
@@ -318,10 +343,20 @@ Respond ONLY in valid JSON matching this schema:
     ) -> ExtractionResult:
         """Extract a single field with Gemini, fallback to FakeExtractor on error."""
         if not chunks:
-            return ExtractionResult(field_name=field_name, extracted_value=None, confidence=0.0, status="not_found")
+            return ExtractionResult(
+                field_name=field_name,
+                extracted_value=None,
+                confidence=0.0,
+                status="not_found",
+                extracted_by="gemini",
+            )
 
         if self.use_fake or self._client is None:
+            self.last_engine_used = "heuristic"
+            fb_reason = self.last_fallback_reason or "Fallback mode active (Gemini API key missing or client not initialized)"
             res = self._fake.extract(field_name, chunks, field_description)
+            res.extracted_by = "heuristic"
+            res.fallback_reason = fb_reason
             if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]
             return res
@@ -330,10 +365,15 @@ Respond ONLY in valid JSON matching this schema:
         response, last_error = await self._call_gemini_with_fallback(prompt)
 
         if not response:
+            self.last_engine_used = "heuristic"
+            reason_str = f"Gemini API Error: {str(last_error)[:120]}" if last_error else "Empty response from Gemini API"
+            self.last_fallback_reason = reason_str
             res = self._fake.extract(field_name, chunks, field_description)
+            res.extracted_by = "heuristic"
+            res.fallback_reason = reason_str
             if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]
-            res.source_text = f"[AI_ERROR: {str(last_error)[:120]}] {res.source_text or ''}"
+            res.source_text = f"[AI_ERROR: {reason_str}] {res.source_text or ''}"
             return res
 
         try:
@@ -347,6 +387,8 @@ Respond ONLY in valid JSON matching this schema:
             if source_pages and isinstance(source_page, int) and 1 <= source_page <= len(source_pages):
                 source_page = source_pages[source_page - 1]
             status = "extracted" if value is not None else "not_found"
+            self.last_engine_used = "gemini"
+            self.last_fallback_reason = None
             return ExtractionResult(
                 field_name=field_name,
                 extracted_value=value,
@@ -354,9 +396,15 @@ Respond ONLY in valid JSON matching this schema:
                 source_page=source_page,
                 source_text=source_text[:500] if isinstance(source_text, str) else None,
                 status=status,
+                extracted_by="gemini",
+                fallback_reason=None,
             )
-        except Exception:
+        except Exception as e:
+            self.last_engine_used = "heuristic"
+            self.last_fallback_reason = f"JSON parse error: {e}"
             res = self._fake.extract(field_name, chunks, field_description)
+            res.extracted_by = "heuristic"
+            res.fallback_reason = self.last_fallback_reason
             if source_pages and res.source_page and 1 <= res.source_page <= len(source_pages):
                 res.source_page = source_pages[res.source_page - 1]
             return res
@@ -372,14 +420,28 @@ Respond ONLY in valid JSON matching this schema:
             return {}
 
         if not chunks or self.use_fake or self._client is None:
-            return self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+            self.last_engine_used = "heuristic"
+            fb_reason = self.last_fallback_reason or "Fallback mode active (GEMINI_API_KEY missing or client not initialized)"
+            res_dict = self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+            for r in res_dict.values():
+                r.extracted_by = "heuristic"
+                r.fallback_reason = fb_reason
+            return res_dict
 
         prompt = self._build_batch_prompt(fields, chunks)
         response, last_error = await self._call_gemini_with_fallback(prompt)
 
         if not response:
+            self.last_engine_used = "heuristic"
+            reason_str = f"Gemini API Error: {str(last_error)[:120]}" if last_error else "Empty response from Gemini API"
+            self.last_fallback_reason = reason_str
             logger.warning("[GeminiExtractor] Batch extraction fallback to fake: %s", last_error)
-            return self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+            res_dict = self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+            for r in res_dict.values():
+                r.extracted_by = "heuristic"
+                r.fallback_reason = reason_str
+                r.source_text = f"[AI_ERROR: {reason_str}] {r.source_text or ''}"
+            return res_dict
 
         try:
             extractions = self._parse_batch_json_response(response)
@@ -404,21 +466,35 @@ Respond ONLY in valid JSON matching this schema:
                     source_page=spage,
                     source_text=str(stext)[:500] if stext else None,
                     status=status,
+                    extracted_by="gemini",
+                    fallback_reason=None,
                 )
 
             # Ensure every requested field has a result (fallback any missing field)
+            has_missing = False
             for f in fields:
                 fname = f.get("field_name", "")
                 if fname not in results:
+                    has_missing = True
                     fake_res = self._fake.extract(fname, chunks, f.get("description", ""))
+                    fake_res.extracted_by = "heuristic"
+                    fake_res.fallback_reason = "Field missing in Gemini response, recovered by heuristic"
                     if source_pages and fake_res.source_page and 1 <= fake_res.source_page <= len(source_pages):
                         fake_res.source_page = source_pages[fake_res.source_page - 1]
                     results[fname] = fake_res
 
+            self.last_engine_used = "hybrid" if has_missing else "gemini"
+            self.last_fallback_reason = "Some fields recovered by heuristic fallback" if has_missing else None
             return results
         except Exception as e:
+            self.last_engine_used = "heuristic"
+            self.last_fallback_reason = f"Failed to parse Gemini batch response: {e}"
             logger.warning("[GeminiExtractor] Failed to parse batch JSON response (%s), falling back to fake", e)
-            return self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+            res_dict = self._fake.extract_batch(fields, chunks, source_pages=source_pages)
+            for r in res_dict.values():
+                r.extracted_by = "heuristic"
+                r.fallback_reason = self.last_fallback_reason
+            return res_dict
 
     async def _call_gemini(self, prompt: str) -> str:
         """Call Gemini generate_content and return text."""
