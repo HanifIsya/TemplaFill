@@ -43,8 +43,9 @@ app.add_middleware(
 )
 
 # ----- Routers -----
-# Health check at /api/health
+# Health check at /api/health and /health (supports UptimeRobot and load balancer probes)
 app.include_router(health_router, prefix="/api", tags=["health"])
+app.include_router(health_router, prefix="", tags=["health"])
 # Upload & Jobs under /api
 app.include_router(upload_router, prefix="/api", tags=["upload"])
 app.include_router(jobs_router, prefix="/api", tags=["jobs"])
