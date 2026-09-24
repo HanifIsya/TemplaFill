@@ -159,50 +159,47 @@ class ApiClient {
   }
 
   async getJobProgress(jobId: string, currentPercent: number = 0): Promise<JobProgress> {
-    const health = await this.checkHealth();
-    if (health.isLive) {
-      try {
-        const res = await fetch(`${this.baseUrl}/jobs/${jobId}`, { cache: 'no-store' });
-        if (res.ok) {
-          const json = await res.json();
-          const job = json.data || json;
-          const progress = job.progress || {};
-          const status = (job.status as JobStatusType) || 'processing';
-          const phase = progress.phase || '';
-          let pct = progress.percent;
-          if (pct === undefined || pct === null) {
-            pct = status === 'completed' ? 100 : currentPercent;
-          }
-
-          let currentStep = 'Processing document pipeline...';
-          if (status === 'completed' || pct >= 100) {
-            currentStep = '4/4: Field extraction complete!';
-          } else if (status === 'failed') {
-            currentStep = `Extraction failed: ${job.error || 'Pipeline error'}`;
-          } else if (status === 'extracting' || phase === 'ai_extraction' || pct >= 75) {
-            currentStep = '4/4: Structured Extraction via Gemini 3.6 Flash...';
-          } else if (status === 'mapping' || phase === 'template_mapping' || pct >= 50) {
-            currentStep = `3/4: Inspecting placeholders & mapping (${progress.current_field || 0}/${progress.total_fields || 8})...`;
-          } else if (phase === 'embedding' || pct >= 25) {
-            currentStep = '2/4: Chunking text & generating embeddings...';
-          } else {
-            currentStep = '1/4: Parsing and OCR on Source PDF...';
-          }
-
-          return {
-            jobId,
-            sessionId: jobId,
-            status,
-            progressPercent: pct,
-            currentStep,
-            fieldsProcessed: progress.current_field || 0,
-            totalFields: progress.total_fields || 8,
-            errorMessage: job.error,
-          };
+    try {
+      const res = await fetch(`${this.baseUrl}/jobs/${jobId}`, { cache: 'no-store' });
+      if (res.ok) {
+        const json = await res.json();
+        const job = json.data || json;
+        const progress = job.progress || {};
+        const status = (job.status as JobStatusType) || 'processing';
+        const phase = progress.phase || '';
+        let pct = progress.percent;
+        if (pct === undefined || pct === null) {
+          pct = status === 'completed' ? 100 : currentPercent;
         }
-      } catch (err) {
-        console.warn('Polling job error, falling back to simulated progress', err);
+
+        let currentStep = 'Processing document pipeline...';
+        if (status === 'completed' || pct >= 100) {
+          currentStep = '4/4: Field extraction complete!';
+        } else if (status === 'failed') {
+          currentStep = `Extraction failed: ${job.error || 'Pipeline error'}`;
+        } else if (status === 'extracting' || phase === 'ai_extraction' || pct >= 75) {
+          currentStep = '4/4: Structured Extraction via Gemini AI...';
+        } else if (status === 'mapping' || phase === 'template_mapping' || pct >= 50) {
+          currentStep = `3/4: Inspecting placeholders & mapping (${progress.current_field || 0}/${progress.total_fields || 8})...`;
+        } else if (phase === 'embedding' || pct >= 25) {
+          currentStep = '2/4: Chunking text & generating embeddings...';
+        } else {
+          currentStep = '1/4: Parsing and OCR on Source PDF...';
+        }
+
+        return {
+          jobId,
+          sessionId: jobId,
+          status,
+          progressPercent: pct,
+          currentStep,
+          fieldsProcessed: progress.current_field || 0,
+          totalFields: progress.total_fields || 8,
+          errorMessage: job.error,
+        };
       }
+    } catch (err) {
+      console.warn('Direct job polling error, falling back to simulated progress', err);
     }
 
     // Mock progress simulation

@@ -327,16 +327,14 @@ class GeminiExtractor:
         prompt while 3.6-flash gave 503. 3.5 is thus first after self.model.
         """
         candidates: List[str] = []
-        # Prefer self.model first, then proven 3.5, 3.6, 3-preview, lite, 3.7, 3.8
+        # Prefer self.model first, then proven 3.5, 3.6, 3-preview, 3.7, 3.8 (exclude hanging lite models)
         preferred = [
             self.model,
             "gemini-3.5-flash",
             "gemini-3.6-flash",
             "gemini-3-flash-preview",
-            "gemini-3.5-flash-lite",
             "gemini-3.7-flash",
             "gemini-3.8-flash",
-            "gemini-3.1-flash-lite",
         ]
         for m in preferred:
             if m and m not in candidates and m not in self._BLACKLISTED_MODELS:
@@ -425,6 +423,7 @@ Respond ONLY in valid JSON matching this schema:
         max_key_rotations = max(1, self.key_pool.total_keys)
         for _ in range(max_key_rotations):
             candidate_models = self._get_candidate_models()
+            key_rotated = False
             for candidate in candidate_models:
                 for attempt in range(2):
                     try:
@@ -452,7 +451,8 @@ Respond ONLY in valid JSON matching this schema:
                                     logger.info("[GeminiExtractor] Rotating to fresh API key from pool, retrying candidate models")
                                     self._switch_api_key(next_key)
                                     GeminiExtractor._BLACKLISTED_MODELS.clear()
-                                    break  # Advance to next key iteration
+                                    key_rotated = True
+                                    break
                             GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
                             logger.warning("[GeminiExtractor] Model '%s' quota exhausted, advancing to next candidate model", candidate)
                             break
@@ -473,7 +473,7 @@ Respond ONLY in valid JSON matching this schema:
                                 continue
                         break
 
-                if response:
+                if key_rotated or response:
                     break
 
             if response:
@@ -662,7 +662,7 @@ Respond ONLY in valid JSON matching this schema:
             "contents": [{"parts": [{"text": prompt}]}],
             "generationConfig": {"responseMimeType": "application/json"},
         }
-        timeout_sec = 60.0
+        timeout_sec = 20.0
         try:
             import httpx
 
@@ -683,20 +683,14 @@ Respond ONLY in valid JSON matching this schema:
                     data=json.dumps(payload).encode("utf-8"),
                     headers={"Content-Type": "application/json"},
                 )
-                with urllib.request.urlopen(req, timeout=35.0) as resp:
+                with urllib.request.urlopen(req, timeout=20.0) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
                     return data["candidates"][0]["content"]["parts"][0]["text"]
 
             return await loop.run_in_executor(None, _sync_post)
 
     async def _call_gemini(self, prompt: str) -> str:
-        """Call Gemini generate_content and return text.
-
-        SDK path first (fast when available), then automatic REST fallback
-        within the same call so a 503 SDK overload can still succeed via
-        direct generativelanguage.googleapis.com — validated 2026-09-24
-        where SDK 3.6 503 + REST 3.5 succeeded for 51-field prompt.
-        """
+        """Call Gemini generate_content and return text."""
         # Try SDK if client exists
         if self._client:
             config = None
@@ -706,7 +700,7 @@ Respond ONLY in valid JSON matching this schema:
                 except Exception:
                     config = None
 
-            timeout_sec = 35.0
+            timeout_sec = 18.0
             sdk_error: Optional[Exception] = None
             try:
                 if hasattr(self._client, "aio"):

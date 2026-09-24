@@ -225,7 +225,7 @@ export default function Home() {
           }
 
           const isComplete = updated.status === 'completed';
-          const isTimeout = pollAttempts >= 120; // 120 * 1s = 2 minutes
+          const isTimeout = pollAttempts >= 300; // 300 * 1s = 5 minutes allowance for cloud processing and cold starts
 
           if (isComplete) {
             clearInterval(interval);
@@ -255,7 +255,7 @@ export default function Home() {
             }
           } else if (isTimeout) {
             clearInterval(interval);
-            throw new Error('Extraction timed out. The backend is taking longer than expected. Please check again in a moment.');
+            throw new Error('Proses ekstraksi membutuhkan waktu lebih lama dari biasanya di server cloud. Silakan periksa koneksi atau coba sesaat lagi.');
           } else if (updated.status === 'failed') {
             clearInterval(interval);
             throw new Error(updated.errorMessage || 'Job failed during backend processing');
@@ -265,7 +265,7 @@ export default function Home() {
           console.error('Extraction polling failed:', pollErr);
           addToast(
             'error',
-            'Extraction Failed',
+            'Extraction Notice',
             pollErr?.message || 'Backend processing encountered an issue.'
           );
           setIsProcessing(false);
