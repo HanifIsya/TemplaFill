@@ -219,20 +219,21 @@ class JobManager:
             extractor = get_extractor(force_fake=False)
 
             # Step 1: Collect relevant chunks across fields and deduplicate
-            unique_chunks_dict = {}
-            for field in parsed.fields:
-                try:
-                    retrieved = await retriever.retrieve_for_field(field.field_name, top_k=3)
-                    for r in retrieved:
-                        if r.chunk.chunk_id not in unique_chunks_dict:
-                            unique_chunks_dict[r.chunk.chunk_id] = r.chunk
-                except Exception:
-                    pass
-
-            if not unique_chunks_dict:
-                batch_chunks = chunks[:10]
+            # For documents with <= 15 chunks (~15,000 words), pass all document chunks directly.
+            # This avoids 50+ separate embedding API calls that trigger Google's 15 RPM free-tier rate limit!
+            if len(chunks) <= 15:
+                batch_chunks = chunks
             else:
-                batch_chunks = list(unique_chunks_dict.values())[:10]
+                unique_chunks_dict = {}
+                for field in parsed.fields[:8]:
+                    try:
+                        retrieved = await retriever.retrieve_for_field(field.field_name, top_k=3)
+                        for r in retrieved:
+                            if r.chunk.chunk_id not in unique_chunks_dict:
+                                unique_chunks_dict[r.chunk.chunk_id] = r.chunk
+                    except Exception:
+                        pass
+                batch_chunks = list(unique_chunks_dict.values())[:12] if unique_chunks_dict else chunks[:12]
 
             batch_chunk_texts = [c.text for c in batch_chunks]
             batch_source_pages = [c.page_number for c in batch_chunks]

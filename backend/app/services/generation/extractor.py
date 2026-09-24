@@ -201,37 +201,34 @@ class GeminiExtractor:
         if use_fake is not None:
             self.use_fake = use_fake
         else:
-            self.use_fake = not bool(self.api_key) or not _HAS_GENAI
+            self.use_fake = not bool(self.api_key)
         self._client: Any = None
         self._fake = FakeExtractor()
         self.last_engine_used: str = "gemini" if not self.use_fake else "heuristic"
         self.last_fallback_reason: Optional[str] = (
-            None if not self.use_fake else ("GEMINI_API_KEY is not configured in backend environment" if not self.api_key else "google-genai SDK not available")
+            None if not self.use_fake else "GEMINI_API_KEY is not configured in backend environment"
         )
         if not self.use_fake and _HAS_GENAI:
             try:
                 self._client = genai.Client(api_key=self.api_key)
             except Exception as e:  # noqa: BLE001
-                logger.warning("Failed to initialize genai.Client: %s. Using fake fallback.", e)
-                self.use_fake = True
-                self.last_engine_used = "heuristic"
-                self.last_fallback_reason = f"Failed to initialize Gemini Client: {e}"
+                logger.warning("Failed to initialize genai.Client (%s). Using REST fallback.", e)
+                self._client = None
 
     def _get_candidate_models(self) -> List[str]:
         """Returns prioritized candidate models excluding blacklisted (404/quota-exhausted) ones."""
         candidates: List[str] = []
         preferred = [
             self.model,
-            "gemini-3.6-flash",
             "gemini-3.5-flash",
+            "gemini-3.6-flash",
             "gemini-3.5-flash-lite",
             "gemini-3.7-flash",
-            "gemini-3.8-flash",
         ]
         for m in preferred:
             if m and m not in candidates and m not in self._BLACKLISTED_MODELS:
                 candidates.append(m)
-        return candidates or ["gemini-3.6-flash"]
+        return candidates or ["gemini-3.5-flash"]
 
     async def _throttle_call(self) -> None:
         """Paces API calls to avoid 429 TooManyRequests bursts."""
@@ -334,11 +331,18 @@ Respond ONLY in valid JSON matching this schema:
                         logger.warning("[GeminiExtractor] Model '%s' quota exhausted, advancing to next candidate model", candidate)
                         break
 
-                    # On transient 429 RateLimit (burst) or 503 ServiceUnavailable: backoff exponentially
-                    if any(x in err_str for x in ("503", "unavailable", "overload", "429", "too many")):
+                    # On 503 ServiceUnavailable or overload:
+                    # Google's model cluster is overloaded. Do not retry the same model — advance immediately!
+                    if any(x in err_str for x in ("503", "unavailable", "overload")):
+                        GeminiExtractor._BLACKLISTED_MODELS.add(candidate)
+                        logger.warning("[GeminiExtractor] Model '%s' service unavailable, advancing to next candidate model", candidate)
+                        break
+
+                    # On transient 429 RateLimit (burst): backoff exponentially
+                    if any(x in err_str for x in ("429", "too many")):
                         if attempt < 1:
-                            delay = 2.5 * (attempt + 1)
-                            logger.info("[GeminiExtractor] Rate limited / service unavailable, backing off %.1fs...", delay)
+                            delay = 2.0 * (attempt + 1)
+                            logger.info("[GeminiExtractor] Rate limited, backing off %.1fs...", delay)
                             await asyncio.sleep(delay)
                             continue
                     break
@@ -365,9 +369,9 @@ Respond ONLY in valid JSON matching this schema:
                 extracted_by="gemini",
             )
 
-        if self.use_fake or self._client is None:
+        if self.use_fake or (not self._client and not self.api_key):
             self.last_engine_used = "heuristic"
-            fb_reason = self.last_fallback_reason or "Fallback mode active (Gemini API key missing or client not initialized)"
+            fb_reason = self.last_fallback_reason or "Fallback mode active (Gemini API key missing)"
             res = self._fake.extract(field_name, chunks, field_description)
             res.extracted_by = "heuristic"
             res.fallback_reason = fb_reason
@@ -433,9 +437,9 @@ Respond ONLY in valid JSON matching this schema:
         if not fields:
             return {}
 
-        if not chunks or self.use_fake or self._client is None:
+        if not chunks or self.use_fake or (not self._client and not self.api_key):
             self.last_engine_used = "heuristic"
-            fb_reason = self.last_fallback_reason or "Fallback mode active (GEMINI_API_KEY missing or client not initialized)"
+            fb_reason = self.last_fallback_reason or "Fallback mode active (GEMINI_API_KEY missing)"
             res_dict = self._fake.extract_batch(fields, chunks, source_pages=source_pages)
             for r in res_dict.values():
                 r.extracted_by = "heuristic"
@@ -510,10 +514,44 @@ Respond ONLY in valid JSON matching this schema:
                 r.fallback_reason = self.last_fallback_reason
             return res_dict
 
+    async def _call_gemini_rest(self, prompt: str) -> str:
+        """Direct REST fallback to generativelanguage.googleapis.com if SDK client is not initialized."""
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:generateContent?key={self.api_key}"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"responseMimeType": "application/json"},
+        }
+        timeout_sec = 60.0
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=timeout_sec) as client:
+                res = await client.post(url, json=payload)
+                if res.status_code != 200:
+                    raise RuntimeError(f"HTTP {res.status_code}: {res.text[:300]}")
+                data = res.json()
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+        except Exception:
+            import urllib.request
+
+            loop = asyncio.get_running_loop()
+
+            def _sync_post() -> str:
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=35.0) as resp:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+            return await loop.run_in_executor(None, _sync_post)
+
     async def _call_gemini(self, prompt: str) -> str:
         """Call Gemini generate_content and return text."""
         if not self._client:
-            raise RuntimeError("Gemini client is not initialized")
+            return await self._call_gemini_rest(prompt)
 
         config = None
         if _HAS_GENAI and hasattr(types, "GenerateContentConfig"):
@@ -522,12 +560,19 @@ Respond ONLY in valid JSON matching this schema:
             except Exception:
                 config = None
 
-        # Try async client
+        # Try async client with strict 35s timeout
+        timeout_sec = 35.0
         if hasattr(self._client, "aio"):
             if config:
-                resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt, config=config)
+                resp = await asyncio.wait_for(
+                    self._client.aio.models.generate_content(model=self.model, contents=prompt, config=config),
+                    timeout=timeout_sec,
+                )
             else:
-                resp = await self._client.aio.models.generate_content(model=self.model, contents=prompt)
+                resp = await asyncio.wait_for(
+                    self._client.aio.models.generate_content(model=self.model, contents=prompt),
+                    timeout=timeout_sec,
+                )
             return str(getattr(resp, "text", "") or "")
         else:
             loop = asyncio.get_running_loop()
@@ -539,7 +584,7 @@ Respond ONLY in valid JSON matching this schema:
                     resp = self._client.models.generate_content(model=self.model, contents=prompt)
                 return str(getattr(resp, "text", "") or "")
 
-            return await loop.run_in_executor(None, sync_call)
+            return await asyncio.wait_for(loop.run_in_executor(None, sync_call), timeout=timeout_sec)
 
     def _parse_json_response(self, text: str) -> Dict[str, Any]:
         """Parse JSON from model text (handles markdown code block)."""
@@ -603,7 +648,7 @@ Respond ONLY in valid JSON matching this schema:
 def get_extractor(force_fake: bool = False) -> GeminiExtractor:
     """Factory for extractor singleton."""
     settings = get_settings()
-    use_fake = force_fake or not bool(settings.gemini_api_key) or not _HAS_GENAI
+    use_fake = force_fake or not bool(settings.gemini_api_key)
     return GeminiExtractor(use_fake=use_fake)
 
 

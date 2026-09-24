@@ -10,14 +10,34 @@ import {
 } from './types';
 import { MOCK_FIELDS, MOCK_GENERATION } from './mockData';
 
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+export function getApiBaseUrl(): string {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL;
+  }
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '0.0.0.0') {
+      return 'https://templafill-backend.onrender.com/api';
+    }
+  }
+  return 'http://localhost:8000/api';
+}
+
+const BASE_URL = getApiBaseUrl();
 
 class ApiClient {
-  private baseUrl: string;
+  private _baseUrl: string;
   private isBackendAvailable: boolean | null = null;
 
   constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
+    this._baseUrl = baseUrl;
+  }
+
+  get baseUrl(): string {
+    if (this._baseUrl && !this._baseUrl.includes('localhost') && !this._baseUrl.includes('127.0.0.1')) {
+      return this._baseUrl;
+    }
+    return getApiBaseUrl();
   }
 
   async checkHealth(options: { timeoutMs?: number } = {}): Promise<{

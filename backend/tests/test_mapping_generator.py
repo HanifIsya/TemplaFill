@@ -139,6 +139,8 @@ class TestDocxGenerator:
         doc = Document(io.BytesIO(filled))
         text = "\n".join(p.text for p in doc.paragraphs)
         assert "Jane" in text
+        assert "{{Jane}}" not in text
+        assert "{{full_name}}" not in text
 
     def test_leave_unmapped_placeholder(self):
         tpl = make_docx(["{{found}}", "{{not_found}}"])

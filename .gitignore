@@ -16,6 +16,8 @@
 uploads/
 temp/
 tmp/
+Test source/
+test_source/
 
 # ----- Evaluation Data (may contain real documents / PII) -----
 # The eval runner script (run_eval.py) IS safe to commit

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { getApiBaseUrl } from '@/lib/api';
 
 interface BackendWakingBannerProps {
   status: 'checking' | 'waking' | 'live' | 'offline' | 'mock';
@@ -50,7 +51,7 @@ export function BackendWakingBanner({ status, retryCount, onRetry }: BackendWaki
             <span className="hidden md:inline"> Your upload will be enabled once live.</span>
           </>
         ) : isChecking ? (
-          'Contacting API at ' + (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api')
+          'Contacting API at ' + getApiBaseUrl()
         ) : (
           'Backend unreachable. Check Render dashboard or try mock mode.'
         )}

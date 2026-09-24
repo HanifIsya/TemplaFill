@@ -26,42 +26,34 @@ from __future__ import annotations
 import io
 import re
 from pathlib import Path
-from typing import Dict, Union
+from typing import Dict, Tuple, Union
 
-from app.services.mapping.parser import _find_placeholders
+from app.services.mapping.parser import _find_placeholders, _normalize_field_name
 
 
-def _build_replacement_map(mapped: Dict[str, str]) -> Dict[str, str]:
+def _build_replacement_map(mapped: Dict[str, str]) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Normalize mapped dict to handle both raw placeholder and field_name keys.
 
     The mapper returns both; generator should handle either.
     We build a map that can replace any placeholder pattern that normalizes to a known field.
     """
-    # Direct map for raw placeholders
     direct: Dict[str, str] = {}
-    # Normalized field_name -> value for flexible substitution
     normalized_to_value: Dict[str, str] = {}
     for k, v in mapped.items():
         if not isinstance(k, str):
             continue
         val = str(v) if v is not None else ""
-        direct[k] = val
-        # Also store normalized version if k looks like field name (no braces/brackets)
-        # Detect if k is raw placeholder vs field name
         placeholders = _find_placeholders(k)
         if placeholders:
-            # k is a raw placeholder; extract normalized
+            # k is a raw placeholder like {{nomor_kontrak}}
+            direct[k] = val
             for raw, norm, _ in placeholders:
                 normalized_to_value[norm] = val
         else:
-            # k is likely a normalized field name
-            # Normalize it similarly to parser
-            norm = re.sub(r"[\s.\-]+", "_", k.strip()).strip("_").lower()
-            norm = re.sub(r"__+", "_", norm)
+            # k is a bare field name like 'nomor_kontrak'
+            norm = _normalize_field_name(k)
             if norm:
                 normalized_to_value[norm] = val
-                # Also allow direct replacement of normalized name alone? For templates that use plain name without braces?
-                # We don't auto-replace plain words to avoid false positives
 
     return direct, normalized_to_value
 
@@ -70,28 +62,28 @@ def _replace_in_text(text: str, direct_map: Dict[str, str], norm_map: Dict[str, 
     """Replace placeholders in a single text string.
 
     Strategy:
-     1. Direct string replacement for raw placeholders (longest first to avoid substring issues)
-     2. For remaining placeholders found via regex, replace using norm_map
+     1. Find all bracketed/enclosed placeholders via regex first. Replace using direct_map or norm_map.
+        This ensures full placeholders (e.g. {{nomor_kontrak}}) are replaced atomically without
+        leaving behind wrapper braces.
+     2. Replace any remaining direct_map keys.
     """
     if not text:
         return text
 
-    # Step 1: direct raw replacement (exact)
-    # Sort by length descending to replace longer placeholders first
-    for raw in sorted(direct_map.keys(), key=len, reverse=True):
-        if raw in text:
-            text = text.replace(raw, direct_map[raw])
-
-    # Step 2: regex-based replacement for any remaining placeholder patterns
-    # Find placeholders still present and replace via norm_map
-    # We iterate patterns again to catch variants not in direct_map
+    # Step 1: Replace enclosed placeholders found via regex
     placeholders = _find_placeholders(text)
-    for raw, norm, _ in placeholders:
-        if norm in norm_map:
+    for raw, norm, _ in sorted(placeholders, key=lambda x: len(x[0]), reverse=True):
+        if raw in direct_map:
+            text = text.replace(raw, direct_map[raw])
+        elif norm in norm_map:
             text = text.replace(raw, norm_map[norm])
         elif norm in direct_map:
             text = text.replace(raw, direct_map[norm])
-        # If not found, leave as is (unmapped field) — generator preserves placeholder
+
+    # Step 2: Direct raw replacement for any remaining non-standard placeholder keys
+    for raw in sorted(direct_map.keys(), key=len, reverse=True):
+        if raw in text:
+            text = text.replace(raw, direct_map[raw])
 
     return text
 
@@ -120,12 +112,11 @@ def _generate_docx(template_bytes: bytes, mapped: Dict[str, str]) -> bytes:
         full_text = paragraph.text
         if not full_text:
             return
-        # Check if any placeholder present in full paragraph text
-        if not any(raw in full_text for raw in direct_map) and not _find_placeholders(full_text):
-            # Also check norm-based placeholders
-            found = _find_placeholders(full_text)
-            if not found or not any(norm in norm_map for _, norm, _ in found):
-                return
+        found = _find_placeholders(full_text)
+        has_direct = any(raw in full_text for raw in direct_map)
+        has_norm = any(norm in norm_map for _, norm, _ in found)
+        if not has_direct and not has_norm:
+            return
 
         new_text = _replace_in_text(full_text, direct_map, norm_map)
         if new_text == full_text:
