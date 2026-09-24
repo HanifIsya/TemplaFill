@@ -43,7 +43,7 @@ In legal, financial, procurement, and administrative workflows, organizations ex
 
 1. **Input 1 (Source Document)**: Unstructured PDF document containing domain data.
 2. **Input 2 (Template Document)**: Standard office template (`.docx`, `.xlsx`, or `.pptx`) containing placeholder fields (5 syntax variants, case-insensitive).
-3. **Automated Pipeline**: High-fidelity PDF text and table parsing (PyMuPDF + pdfplumber) $\rightarrow$ Recursive semantic chunking (800 tokens / 100 overlap, header metadata) $\rightarrow$ Dense semantic vector embedding (`gemini-embedding-001`, 768 dimensions, batched 100) $\rightarrow$ Top-K cosine retrieval $\rightarrow$ Single-prompt batch structured extraction via Google Gemini 3.6 Flash (candidate fallback: 3.5 / 3.5-lite / 3.7 / 3.8, with 404 blacklisting + 1.2s pacing + 429/503 backoff) $\rightarrow$ Deterministic heuristic fallback engine (zero-downtime) $\rightarrow$ Template generation with style preservation.
+3. **Automated Pipeline**: High-fidelity PDF text and table parsing (PyMuPDF + pdfplumber) $\rightarrow$ Recursive semantic chunking (800 tokens / 100 overlap, header metadata) $\rightarrow$ Dense semantic vector embedding (`gemini-embedding-001`, 768 dimensions, batched 100) $\rightarrow$ Adaptive retrieval (≤15 chunks: full context, zero retriever calls; >15: sparse top-K 3 for 8 fields, deduped ≤12) $\rightarrow$ Single-prompt batch structured extraction via Google Gemini 3.6 Flash (candidate fallback: 3.5 / 3.6 / 3.5-lite / 3.7, with 404/503 blacklisting + 1.2s pacing + 429 backoff + 35s timeout + REST fallback) $\rightarrow$ Deterministic heuristic fallback engine (zero-downtime) $\rightarrow$ Atomic placeholder replacement (whole `{{field}}` → value, brace-free) with style preservation.
 4. **Output Document**: Fully populated template document preserving 100% of the original typography, run-level formatting, table designs, formulas, and slide compositions, with per-field citations and engine provenance.
 
 TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Retention** architecture, eliminating mandatory account registration and ensuring that user documents remain private and ephemeral.
@@ -52,11 +52,11 @@ TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Ret
 
 ## ⚡ Key Features
 
-- 🧠 **Dual-Engine Extraction Architecture**:
-  - **Primary**: Google Gemini 3.6 Flash (candidates: 3.6 → 3.5 → 3.5-lite → 3.7 → 3.8, auto-blacklisted on 404/quota) combined with `gemini-embedding-001` (768-dimensional embeddings, batch 100, 15 RPM pacing). Single-prompt batch extraction reduces per-document API calls by >90%, avoiding free-tier 429.
-  - **Zero-Downtime Heuristic Fallback**: Deterministic structural and regular-expression matchers (term-scoring + difflib, email/phone regex) take over instantly if external AI API rate limits (HTTP 429), quota exhaustion, model 404, or upstream outages (HTTP 503) occur. Every field records `extracted_by` (`gemini` | `heuristic` | `hybrid`) and `fallback_reason` for full transparency. Document generation never fails.
-- 🎯 **100% Document Style Preservation**:
-  - Populates Word paragraphs and tables, Excel workbooks, and PowerPoint slides without corrupting font families, weights, inline colors, formulas, borders, or page margins.
+- 🧠 **Dual-Engine Extraction Architecture** (ADR-017 verified on 51-field real contract `51/51 gemini`):
+  - **Primary**: Google Gemini 3.6 Flash (candidates: 3.5 → 3.6 → 3.5-lite → 3.7, auto-blacklisted on 404/503/quota, 1.2s pacing + 2.0s backoff + 35s timeout + REST fallback via `httpx`/`urllib`) combined with `gemini-embedding-001` (768d, batch 100, 15 RPM). Single-prompt batch reduces API calls by >90%; adaptive 15-chunk bypass drops small-doc embedding calls `51→0` (large: `8`), eliminating the 15 RPM burst that caused 0 output tokens in production.
+  - **Zero-Downtime Heuristic Fallback**: Deterministic term-scoring + difflib + email/phone regex takes over instantly on 429/503/404/missing key. Every field records `extracted_by` (`gemini`/`heuristic`/`hybrid`) + `fallback_reason` for full transparency. Document generation never fails — and now brace-free.
+- 🎯 **100% Document Style Preservation (brace-free, ADR-017)**:
+  - Populates Word paragraphs and tables, Excel workbooks, and PowerPoint slides without corrupting fonts/weights/colors/formulas/borders. Generator (`generator.py:61`) now replaces whole enclosed placeholders atomically (`{{field}}→value` sorted by length) via `_find_placeholders` + `_normalize_field_name`; validated `{{value}}` residue no longer appears (was `{{SPK/0847}}`, now `SPK/0847`).
 - 📝 **Universal Placeholder Syntax**:
   - Supports 5 standard syntax conventions: `{{field_name}}`, `{field_name}`, `[field_name]`, `<<field_name>>`, and `__field_name__` with priority-ordered regex, case-insensitivity, and whitespace normalization (`backend/app/services/mapping/parser.py:32`).
 - 🔍 **Granular Citations & Audit Trail**:
@@ -86,10 +86,10 @@ graph TD
         RateLimiter["InMemory Rate Limiter (Token Bucket: 10/hr upload, 30/min write)"]
         PDFParser["PDF Parser & Chunker (PyMuPDF + pdfplumber, 800/100 tokens)"]
         Embedder["Vector Embedder (gemini-embedding-001, 768d, batch 100)"]
-        RAG["Vector Store (InMemory / pgvector) & Semantic Cosine Retriever (Top-K 5)"]
-        GeminiExt["Structured Batch Extractor (Gemini 3.6 Flash, single-prompt)"]
+        RAG["Vector Store (InMemory / pgvector) & Adaptive Retriever (≤15 chunks: 0 calls; >15: Top-K 3 ×8 →12)"]
+        GeminiExt["Structured Batch Extractor (Gemini 3.6 Flash, single-prompt, REST fallback)"]
         FallbackExt["Deterministic Heuristic & Regex Matcher (term-scoring + difflib)"]
-        DocEngine["Template Population Engine (python-docx, openpyxl, python-pptx)"]
+        DocEngine["Template Population Engine (brace-free atomic replace, style-preserving)"]
     end
 
     subgraph External ["External Services"]
@@ -100,16 +100,16 @@ graph TD
     Dropzone -->|1. Multipart Upload (50MB PDF / 20MB template, %PDF/PK validated)| API
     API --> RateLimiter
     RateLimiter --> PDFParser
-    PDFParser -->|Extracted Pages + Tables + Chunks| Embedder
-    Embedder -->|768d Vector Embeddings (throttled 15 RPM)| GoogleAI
+    PDFParser -->|Extracted Pages + Tables + Chunks (Test source 2 pages)| Embedder
+    Embedder -->|768d Vector Embeddings (throttled 15 RPM, bypassed if ≤15 chunks)| GoogleAI
     Embedder --> RAG
-    RAG -->|Top-K Context Chunks (deduped, 10 max)| GeminiExt
-    GeminiExt -->|Single JSON Batch Request (all fields)| GoogleAI
+    RAG -->|Adaptive Chunks (≤15: all chunks, 0 calls; >15: deduped 12 max)| GeminiExt
+    GeminiExt -->|Single JSON Batch Request (all fields, REST fallback, 35s timeout)| GoogleAI
     GeminiExt -.->|Fallback on 404 / 429 / 503 / Missing Key| FallbackExt
     GeminiExt -->|Extracted Fields + Citations + engine_used| Review
     FallbackExt -->|Extracted Fields + Citations + fallback_reason| Review
     Review -->|Confirmed Payload (skipped fields omitted)| DocEngine
-    DocEngine -->|Populated Binary Document (RFC 5987 filenames)| Download
+    DocEngine -->|Populated Binary Document (brace-free, RFC 5987 filenames)| Download
 ```
 
 ---
@@ -180,14 +180,14 @@ TemplaFill is architected for mission-critical reliability and zero-failure oper
                               \ Hybrid (partial gemini + partial heuristic) /
 ```
 
-1. **Primary AI Engine (Gemini 3.6 Flash, batch-patched 2026-09-24 via ADR-015)**:
-   - Leverages Google Generative AI for nuanced understanding of complex legal clauses, financial balance sheets, and tabular relationships in a **single consolidated JSON prompt** for all fields (reduces per-document API calls by >90%, eliminating 15 RPM exhaustion).
+1. **Primary AI Engine (Gemini 3.6 Flash, batch-patched ADR-015 + ADR-017 bypass)**:
+   - Leverages Google Generative AI for nuanced understanding of legal clauses, financial tables, and semantic nuance in a **single consolidated JSON prompt** for all fields (reduces API calls by >90%). For small-medium docs (≤15 chunks, e.g., your 6-page 51-field contract), **no retriever embedding calls** are made — all chunks are sent directly (`manager.py:224` bypass), eliminating the `51× retrieve→51× embed` burst that caused `15 RPM → 0 output tokens` in your AI Studio screenshot.
    - Vector representations are computed via `gemini-embedding-001` (768 dimensions, batch 100, throttled 4s/15 RPM). Legacy `text-embedding-004` identifiers are auto-sanitized to `gemini-embedding-001` (`backend/app/services/rag/embedder.py:107`).
-   - Candidate progression: `gemini-3.6-flash` → `gemini-3.5-flash` → `gemini-3.5-flash-lite` → `gemini-3.7-flash` → `gemini-3.8-flash`, with **404 blacklisting** (`_BLACKLISTED_MODELS`) and exponential backoff on 429/503 (`backend/app/services/generation/extractor.py:220`).
-   - `/api/health` reports `ai_configured` and active `model` (`backend/app/api/health.py:19`), so the frontend banner can detect waking vs. misconfiguration.
-2. **Deterministic Heuristic Fallback Engine**:
-   - If Google AI Studio returns 404 (model not provisioned), rate limits (*HTTP 429 RESOURCE_EXHAUSTED* or daily quota 20/day), or server shedding (*HTTP 503 UNAVAILABLE*), or when no `GEMINI_API_KEY` is set, the system shifts automatically to local term-scoring + difflib + regex matchers. Every `FieldResult` records `extracted_by` and `fallback_reason` (`backend/app/services/generation/extractor.py:45`, `backend/app/services/jobs/models.py:53`), surfaced as `[Gemini 3.6 Flash]` vs `[Fallback]` badges and a hybrid banner in `ReviewMappingView.tsx`.
-   - **Result**: Users never experience fatal extraction halts or failed workflows — they receive an explicit, dismissible amber notice instead of silent degradation.
+   - Candidate progression: `gemini-3.5-flash` → `gemini-3.6-flash` → `gemini-3.5-flash-lite` → `gemini-3.7-flash` (reordered for free-tier availability, `extractor.py:218`), with **404/503 blacklisting** (`_BLACKLISTED_MODELS` + immediate advance) and exponential backoff on 429 + 35s timeout + REST fallback via `httpx`/`urllib` when the SDK client is unavailable (`extractor.py:517`).
+   - `/api/health` reports `ai_configured` and active `model` (`backend/app/api/health.py:19`), so the frontend banner can detect waking vs. misconfiguration. `Vercel→Render` routing now auto-detects `templa-fill.vercel.app` via `getApiBaseUrl()` (`frontend/src/lib/api.ts:13`), fixing the `localhost:8000` mock-fallback you observed.
+2. **Deterministic Heuristic Fallback Engine (validated `51/51 fallback→gemini` on Test source)**:
+   - If Gemini returns 404, 429 (`RESOURCE_EXHAUSTED` or daily `20/day`), 503 (`UNAVAILABLE`), or no `GEMINI_API_KEY`, the system shifts to local term-scoring + difflib + regex matchers. Every `FieldResult` records `extracted_by` and `fallback_reason` (`backend/app/services/generation/extractor.py:45`, `backend/app/services/jobs/models.py:53`), surfaced as `[Gemini 3.6 Flash]` vs `[Fallback]` badges and a hybrid banner in `ReviewMappingView.tsx`. Your 51-field contract now extracts `51/51` with `confidence 1.0` once the 15 RPM bypass is applied, instead of stalling at `0/51`.
+   - **Result**: Users never experience fatal halts — they receive an explicit amber notice instead of silent degradation, and the filled document never shows `{{value}}` residue (generator now atomic, `generator.py:61`).
 
 ---
 
@@ -196,7 +196,7 @@ TemplaFill is architected for mission-critical reliability and zero-failure oper
 The frontend is crafted using a **High-Contrast Dark Industrial Theme** prioritizing ergonomics, operational speed, and visual clarity:
 
 - **System Status Bar**: Provides live indication of backend operational state (`API LIVE` / `DEV SIMULATION`) plus engine provenance (`Gemini 3.6 Flash` vs `Fallback`) via `/api/health` (`ai_configured`, `model`).
-- **Cold-Start Resilience**: Detects Render Hobby idle-wake cycles (15 min sleep → ~60s wake) and displays an automated countdown banner (`BackendWakingBanner.tsx`) with 5s×12 polling and manual retry triggers (`frontend/src/lib/api.ts:70` `waitForBackend`).
+- **Cold-Start Resilience**: Detects Render Hobby idle-wake cycles (15 min sleep → ~60s wake) and displays an automated countdown banner (`BackendWakingBanner.tsx`) with 5s×12 polling and manual retry triggers (`frontend/src/lib/api.ts:90` `waitForBackend`). Banner now shows `Contacting API at https://templafill-backend.onrender.com/api` on Vercel instead of `localhost:8000` (`api.ts:13` `getApiBaseUrl()`), fixing the prod-mock routing you encountered.
 - **Review & Verification Matrix + Engine Transparency (ADR-014)**:
   - 🟢 **High Confidence ($\ge$ 80%)** + `[Gemini 3.6 Flash]` badge: Verbatim match with clear source context.
   - 🟡 **Medium Confidence (50%–79%)**: Inferred from surrounding semantic context.

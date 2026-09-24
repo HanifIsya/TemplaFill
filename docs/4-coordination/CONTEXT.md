@@ -6,8 +6,8 @@
 
 ## Last Updated
 - **Date**: 2026-09-24
-- **By**: OpenCode
-- **Summary**: **Docs-wide 3.6-flash sync sweep (ADR-016)**: Unified model to `gemini-3.6-flash` across `config.py:50`/`render.yaml:30`/`.env.example:32`/`extractor.py:199`/`api.ts:214`, retained candidate fallback chain `3.6→3.5→3.5-lite→3.7→3.8` with `_BLACKLISTED_MODELS` + 1.2s pacing + 429/503 backoff, updated `README.md` (badges 167, 16.3.6, 768 dims, architecture mermaid, provenance), `CHANGELOG.md` `v0.2.0` delta, `backend/README.md`/`frontend/README.md` rewrites, `ARCHITECTURE.md`/`TECH_STACK.md`/`DATA_MODEL.md`/`API.md`/`SETUP.md`/`DECISIONS.md` (new ADR-016). Batch extraction + engine badges + phase fidelity (ADR-013→015) now fully surfaced. Verified `167/167` backend pytest, `13/13` frontend, `1.00` eval PASS (halluc 0.00) — docs-only, no behavior change.
+- **By**: OpenCode (validation) + Antigravity (fix)
+- **Summary**: **Validated Antigravity fixes 1e0eebb + ADR-017 sweep**: Embedding 15 RPM bottleneck bypass (`manager.py:224` ≤15 chunks → 0 retriever calls, else 8×3→12 deduped; `51/51 gemini` on real 51-field contract), generator brace corruption atomic replace (`generator.py:34/61` `_find_placeholders` sorted, no `{{value}}` residue), frontend `getApiBaseUrl()` (`api.ts:13` auto `templafill-backend.onrender.com` on Vercel vs `localhost`), extractor REST fallback + 35s timeout + 503 blacklist (`extractor.py:335/517/565`, candidate reorder `3.5→3.6`). Updated `README.md` pipeline/dual-engine/mermaid, `ARCHITECTURE.md` alt block + generator section, `CHANGELOG.md` v0.2.0 `Fixed`, `DECISIONS.md` ADR-017, `CONTEXT.md`/`TASKS.md` provenance. Verified `167/167` pytest, `13/13` frontend, `51/51` real-file extraction.
 
 ---
 
@@ -15,13 +15,13 @@
 
 ### Overall Status: 🟢 All Phases (0, 1, 2, 3, 4, 5) 100% Complete & Production Ready ✅
 
-All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→016):
+All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - Phase 0: Foundation documentation & project scaffolds ✅
-- Phase 1: Core backend extraction & RAG pipeline (140→167 tests) ✅
-- Phase 2: FastAPI API layer (25 API tests, 167 total pytest green) ✅ — single-prompt batch, engine provenance (`extracted_by`), phase-80 fix
-- Phase 3: Next.js 16.3.6 frontend with IBM Plex, Auth stub, engine badges + fallback banner, all workflows ✅
-- Phase 4: Evaluation suite (5 synthetic domains, `generate_eval_datasets.py` + `run_eval.py` PASS 1.00 halluc 0.00) ✅
-- Phase 5: Polish, CI/CD (167 cov + lint/build + eval + audit + docker), security VULN-1→10, Docker/Render/Supabase free-forever ✅
+- Phase 1: Core backend extraction & RAG pipeline (140→167 tests, now with real 51-field contract validation) ✅
+- Phase 2: FastAPI API layer (25 API tests, 167 total pytest green) ✅ — batch single-prompt + 15-chunk bypass, brace-free generator, engine provenance (`extracted_by`), phase-80 fix
+- Phase 3: Next.js 16.3.6 frontend with IBM Plex, `getApiBaseUrl()` prod routing, engine badges + fallback banner, all workflows ✅
+- Phase 4: Evaluation suite (5 synthetic 1.00 + real 51-field `51/51 gemini` contract test) ✅
+- Phase 5: Polish, CI/CD (167 cov + lint/build + eval + audit + docker), security VULN-1→10, Docker/Render/Supabase free-forever, `.gitignore` `Test source/` ✅
 
 ### What Exists
 - [x] `AGENTS.md` — Agent coordination contract (root)
@@ -59,16 +59,17 @@ _All planned tasks in Phase 0 through Phase 5 have been completed._
 | Decision | Rationale | Date | Logged in DECISIONS.md? |
 |----------|-----------|------|------------------------|
 | Product name: TemplaFill | User-defined | 2026-09-23 | ADR-001 |
-| LLM: Gemini free plan (`gemini-3.6-flash` current) | Cost-effective + structured JSON + 768d embeddings | 2026-09-23 (migrated 2026-09-24 ADR-016) | ADR-001→015→016 ✅ |
-| Multi-format templates (.docx/.xlsx/.pptx) + 5 syntaxes | User req. + parser `{{}}/{}/[]/<<>>/__` `parser.py:32` | 2026-09-23 | ADR-006 ✅ |
-| UI language: English/Indonesian (banner toast ID) | User preference + hybrid notice | 2026-09-23 | — |
-| Frontend: Next.js 16.3.6 + React 19.2 + Tailwind 4 | SSR + static prerender + CSP | 2026-09-23 (updated 2026-09-24) | ADR-004 ✅ |
-| Backend: Python 3.11 + FastAPI + google-genai | Best ML/AI + async + batch | 2026-09-23 (batch ADR-013) | ADR-003/005 ✅ |
-| Embeddings: `gemini-embedding-001` 768d (legacy 004 sanitized) | Free-tier 100 batch + fake offline | 2026-09-24 `embedder.py:107` | ADR-016 ✅ |
-| Deployment: Vercel Hobby + Render Hobby $0 + Supabase 500MB | Free-forever 750h + 12×5s wake banner | 2026-09-23 | ADR-010 ✅ |
+| LLM: Gemini free plan (`gemini-3.6-flash`/`3.5-flash` primary) | Cost-effective + structured JSON + 768d + REST fallback + 35s timeout | 2026-09-23 (migrated ADR-017: reorder `3.5→3.6`) | ADR-001→015→017 ✅ |
+| Multi-format templates (.docx/.xlsx/.pptx) + 5 syntaxes | User req. + parser `{{}}/{}/[]/<<>>/__` `parser.py:32`; generator `generator.py:61` brace-free | 2026-09-23 (fixed 2026-09-24) | ADR-006/017 ✅ |
+| UI language: English (professional, general audience) | Translated from ID; general public target | 2026-09-24 (sweep) | — |
+| Frontend: Next.js 16.3.6 + React 19.2 + Tailwind 4 | SSR + `getApiBaseUrl()` prod auto-routing (`api.ts:13`) + CSP | 2026-09-24 (ADR-017) | ADR-004 ✅ |
+| Backend: Python 3.11 + FastAPI + google-genai + httpx REST | Best ML/AI + async + batch + 15-chunk bypass (`manager.py:224`) | 2026-09-24 (ADR-017) | ADR-003/005/017 ✅ |
+| Embeddings: `gemini-embedding-001` 768d (legacy 004 sanitized) | Free-tier 100 batch + `≤15→0 calls` bypass + fake offline | 2026-09-24 `embedder.py:107`/`manager.py:224` | ADR-016/017 ✅ |
+| Deployment: Vercel Hobby + Render Hobby $0 + Supabase 500MB | Free-forever 750h + `getApiBaseUrl()` + 12×5s wake banner | 2026-09-23 | ADR-010/017 ✅ |
 | Security: VULN-1→10 zero-trust pipeline | Rate limiter + sanitize + CSP + 404 gate | 2026-09-23 | ADR-012 ✅ |
-| Batch extraction: single-prompt all fields | >90% fewer calls, kills 429 | 2026-09-24 | ADR-013 ✅ |
+| Batch extraction: single-prompt all fields | >90% fewer calls, kills 429; small docs 0 retriever calls | 2026-09-24 | ADR-013/017 ✅ |
 | Engine provenance: extracted_by/fallback_reason badges | Transparency over silent fallback | 2026-09-24 | ADR-014 ✅ |
+| Generator: atomic `{{field}}→value` (no `{{value}}`) | Borrowed brace corruption fix | 2026-09-24 | ADR-017 ✅ |
 
 ---
 

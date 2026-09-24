@@ -112,9 +112,13 @@ sequenceDiagram
     TP-->>Q: List of fields with metadata (occurrences, location)
 
     Note over RAG,LLM: Phase 3: Field Extraction — Single-Prompt Batch (80%→98%)
-    RAG->>VDB: Query top-K (3) per field, dedupe chunks (≤10 total)
-    VDB-->>RAG: Relevant chunks + scores
-    RAG->>LLM: Single JSON batch request (all fields + deduped chunks + candidate fallback 3.6→3.5→3.7/3.8, 404 blacklist, 1.2s pacing, 429/503 backoff)
+    alt small-medium doc (≤15 chunks, ~15k tokens)
+        RAG->>RAG: Use all document chunks directly (0 retriever calls) — avoids 51× embedding burst
+    else large doc (>15 chunks)
+        RAG->>VDB: Query top-K (3) for first 8 fields, dedupe to ≤12 chunks
+        VDB-->>RAG: Relevant chunks + scores
+    end
+    RAG->>LLM: Single JSON batch request (all fields + batch chunks + candidate fallback 3.5→3.6→3.7, 404/503 blacklist + 1.2s pacing, 429 backoff, 35s timeout)
     LLM-->>RAG: {extractions: [{field_name, value, confidence, source_page, source_text}]}
     RAG-->>RAG: Missing fields → heuristic term-scoring per field (FakeExtractor)
     RAG-->>API: Extraction results (all fields) with extracted_by + fallback_reason
@@ -185,12 +189,13 @@ sequenceDiagram
 
 **Responsibility**: Use Gemini to extract precise field values from retrieved chunks — single-prompt batch with resilient candidate fallback, plus deterministic `FakeExtractor` for offline/tests.
 
-**Approach** (ADR-013/014/015):
+**Approach** (ADR-013/014/015 + ADR-017 embedding bypass):
 
-- **Batch path** (`extractor.py:426` `extract_batch`): Input is `fields: [{field_name, description}]` + deduped chunk texts (≤10) + `source_pages`. Builds one JSON schema prompt (`_build_batch_prompt`) listing all fields → single `GenerateContentConfig(response_mime_type="application/json")` → parses `{"extractions": [...]}`. On missing fields, per-field `FakeExtractor` recovery (`extracted_by="heuristic"`, `fallback_reason="Field missing in Gemini response"`); `last_engine_used` is `hybrid` if any recovered. `JobManager.process_job` (`manager.py:250`) calls this once per document (not 1-per-field), cutting API calls by >90%.
-- **Single-field path** (`extractor.py:350` `extract`): used by `PATCH /fields/{id}` `re_extract` with `hint` appended as `field_description` + top-5 reranked chunks.
-- **Resilience** (`_call_gemini_with_fallback` + `_throttle_call`): Candidate list `self.model, gemini-3.6-flash, gemini-3.5-flash, gemini-3.5-flash-lite, gemini-3.7-flash, gemini-3.8-flash` deduped via `_BLACKLISTED_MODELS`; 404 immediately blacklists + advances; daily quota `limit: 20 / RESOURCE_EXHAUSTED per day` also blacklists without sleep; 429/503 triggers 1.2s pacing + 2.5s×attempt backoff (2 attempts/candidate). Every failure path sets `extracted_by="heuristic"` + `fallback_reason` + `source_text` prefix `[AI_ERROR: ...]`.
-- **Model sanitization**: `__init__` rewrites legacy `gemini-2.0-flash-exp/1.5-flash/1.5-pro/2.5-flash` → `gemini-3.6-flash`.
+- **Batch path** (`extractor.py:430` `extract_batch`): Input is `fields: [{field_name, description}]` + chunk texts (≤15 all-chunks shortcut or ≤12 deduped) + `source_pages`. Builds one JSON schema prompt (`_build_batch_prompt`) listing all fields → single `GenerateContentConfig(response_mime_type="application/json")` → parses `{"extractions": [...]}`. On missing fields, per-field `FakeExtractor` recovery (`extracted_by="heuristic"`, `fallback_reason="Field missing in Gemini response"`); `last_engine_used` is `hybrid` if any recovered. `JobManager.process_job` (`manager.py:250`) calls this once per document (not 1-per-field), cutting API calls by >90%.
+- **Chunk selection optimization** (`manager.py:224`): `if len(chunks) ≤15` → `batch_chunks = chunks` (0 embedding retriever calls) for small-medium docs (~6 pages, 51 fields) to avoid `51× retrieve_for_field` → `51× embed` 15 RPM burst (root cause of 0 output tokens in user screenshot). Else sparse probe `first 8 fields × top_k=3 → ≤12 deduped` (8 embedding calls, still under burst). Validated `51/51 extracted, confidence 1.0` on `Test source/*` with batch.
+- **Single-field path** (`extractor.py:355` `extract`): used by `PATCH /fields/{id}` `re_extract` with `hint` appended as `field_description` + top-5 reranked chunks.
+- **Resilience** (`_call_gemini_with_fallback` + `_throttle_call` + `_call_gemini_rest`): Candidate list `self.model, gemini-3.5-flash, gemini-3.6-flash, gemini-3.5-flash-lite, gemini-3.7-flash` (reordered to prefer `3.5` on free tier) deduped via `_BLACKLISTED_MODELS`; `404→blacklist+advance`; daily quota `limit:20 / RESOURCE_EXHAUSTED per day→blacklist` without sleep; `503→blacklist+advance` (`extractor.py:335`) instead of retry; `429→1.2s pacing + 2.0s×attempt backoff` (2 attempts/candidate, `extractor.py:341`). `_call_gemini` now has `_call_gemini_rest` fallback (`httpx` 60s + `urllib` sync executor) when `_client is None`, and both SDK+REST paths have `35s` `asyncio.wait_for` timeout. Every failure path sets `extracted_by="heuristic"` + `fallback_reason` + `source_text` prefix `[AI_ERROR: ...]`. `use_fake` no longer requires `_HAS_GENAI` (`extractor.py:204` `not bool(api_key)` only).
+- **Model sanitization**: `__init__` rewrites legacy `gemini-2.0-flash-exp/1.5-flash/1.5-pro/2.5-flash` → `gemini-3.6-flash` (`extractor.py:199`).
 - **Provenance**: `ExtractionResult.extracted_by` (`gemini|heuristic`) + `fallback_reason` propagated to `FieldResult` (`jobs/models.py:53`) and surfaced via `GET /api/jobs/{id}/results` `engine_used/hasFallback/fallback_reason` → frontend badges + banner + toast (`page.tsx:235`).
 - System prompt invariant: *“Only extract data explicitly stated in the provided context. If the data is not found, return null.”* — enforced in both `_build_prompt` and `_build_batch_prompt` to prevent hallucination; `_fake` path uses term-scoring + distinctive guard (≥0.5, `0.85` for distinctive terms) to mirror the same behavior for eval 1.00 PASS.
 
@@ -218,13 +223,14 @@ Detection: case-insensitive, whitespace-normalized (`_normalize_field_name` repl
 
 ### 8. Document Generator (`backend/app/services/mapping/generator.py`)
 
-**Responsibility**: Produce the final filled document.
+**Responsibility**: Produce the final filled document without brace corruption (ADR-017).
 
 **Process**:
-1. Clone the original template file
-2. Replace all placeholders with their mapped values
-3. Preserve all original formatting (fonts, styles, colors, layouts)
-4. Generate extraction summary report (optional, appended or separate file)
+1. Clone the original template file (docx/xlsx/pptx) in memory
+2. Build `direct` (raw `{{x}}→value`) + `normalized_to_value` (`x→value`) via `_build_replacement_map` (`generator.py:34`) feeding keys through `_find_placeholders` + `_normalize_field_name`
+3. Replace atomically via `_replace_in_text` (`generator.py:61`): scans `_find_placeholders` sorted by `len(raw)` descending and replaces whole enclosed `raw` with `direct_map[raw]` or `norm_map[norm]`, then direct keys. This fixes the prior bug where `nomor_kontrak→SPK/0847` left `{{SPK/0847}}`; now `{{nomor_kontrak}}→SPK/0847` cleanly.
+4. Preserve formatting: docx saves `first_run` bold/italic/underline/color/name/size (`generator.py:143`), xlsx keeps cell style on `cell.value` change, pptx saves first run font via `text_frame` (`generator.py:226`). Validated `Test source/target_* → filled: contains SPK true, {{SPK}} false, {{nomor}} false`.
+5. Generate extraction summary report (optional, appended or separate file — `GET /download?type=summary` `501` stub, `jobs.py:310`)
 
 ---
 

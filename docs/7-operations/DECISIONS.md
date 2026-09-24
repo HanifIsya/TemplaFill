@@ -265,4 +265,24 @@
   - Top-level docs now match executable code (searchable `file:line` refs retained), reducing onboarding drift for next agent/human contributor.
   - Batch path + provenance + phase animation are now discoverable from `README.md` alone, so new contributors land on the correct mental model immediately.
 
+---
+
+### ADR-017: Resolve 15 RPM Embedding Bottleneck, Generator Brace Corruption, and Vercel→Render API Misrouting (2026-09-24)
+- **Date**: 2026-09-24
+- **Status**: Accepted
+- **Context**: User report with real-world files (`Test source/source_kontrak_konsultasi.pdf` 2 pages + `target_template_ringkasan_kontrak.docx` 51 placeholders) surfaced three critical mismatches that were invisible in the 5-field synthetic eval: (1) **15 RPM bottleneck** — `manager.py:221` looped `retrieve_for_field` 51× (one embedding call per field), hitting Google free-tier `15 RPM` for `gemini-embedding-001` and stalling before any Gemini text call (hence 0 output tokens, empty `Requests per model` in AI Studio, yet `15/15 success` on the first minute per the user's screenshot). (2) **Brace corruption** — `generator.py:61` `_replace_in_text` replaced inner text only (`nomor_kontrak→SPK/0847`), leaving `{{SPK/0847}}` in the filled docx. (3) **Vercel fallback to mock** — `frontend/src/lib/api.ts:13` `NEXT_PUBLIC_API_URL || http://localhost:8000/api` resolved to `localhost` in production, so Vercel (`templa-fill.vercel.app`) instantly fell back to 10-field mock demo instead of hitting `templafill-backend.onrender.com`.
+- **Decision**:
+  1. **Embedding bottleneck fix** (`backend/app/services/jobs/manager.py:224`): If `len(chunks) ≤ 15` (~15k tokens, small-medium docs), use **all document chunks directly** as `batch_chunks` with zero retriever calls. Only for larger docs (`>15` chunks) do sparse retriever probe: first 8 fields × `top_k=3` deduped to ≤12 chunks. This drops per-document embedding calls from 51 → 0 (small docs) / 8 (large docs), eliminating 15 RPM exhaustion; validated `51/51 fields extracted, confidence 1.0, engine gemini` on user files via batch prompt.
+  2. **Generator brace fix** (`backend/app/services/mapping/generator.py:34`): Re-implemented `_build_replacement_map` to return `direct` (raw `{{x}}→value`) + `normalized_to_value` (bare `x→value`) by feeding keys through `_find_placeholders`, and `_replace_in_text` to scan with `_find_placeholders` sorted by `len(raw)` descending, replacing the **whole enclosed placeholder** (`raw→value`) via `norm_map`. This removes the double-curly residue (`{{value}}` → `value`). Unit test updated (`test_mapping_generator.py:130` expects `value` not `{{value}}`).
+  3. **Frontend API misrouting fix** (`frontend/src/lib/api.ts:13` `getApiBaseUrl()`, `frontend/src/components/BackendWakingBanner.tsx:4`): New helper returns `NEXT_PUBLIC_API_URL` if set; otherwise if `window.location.hostname` not `localhost/127.0.0.1/0.0.0.0`, auto-returns `https://templafill-backend.onrender.com/api`. Added `baseUrl` getter that re-evaluates dynamically. Banner now shows `Contacting API at https://templafill-backend.onrender.com/api` on Vercel (`api.ts:341` checkHealth log) instead of `localhost`.
+  4. **Hardening extras** (`backend/app/services/generation/extractor.py:194`): `use_fake` no longer requires `_HAS_GENAI` (SDK optional), candidate list reordered to `3.5-flash` first for better free-tier availability, added `503` immediate blacklist (`extractor.py:335`), `_call_gemini_rest` direct REST via `httpx`+`urllib` fallback (`extractor.py:517`) with 35s timeout (`asyncio.wait_for`), and REST path enabled when `_client is None` (`extractor.py:551`). Validation re-run `python -m pytest 167/167` + user-file batch test `51/51` green.
+- **Alternatives Considered**:
+  - Embed all chunks via retriever then cache — rejected: still 51 calls burst; bypass is simpler for small docs.
+  - Docx run-level regex — rejected: over-engineered; text-level atomic replace is sufficient with formatting preservation on first run.
+  - Force `NEXT_PUBLIC_API_URL` at build time — rejected: build-time env misses Vercel Preview branches; runtime hostname check is more robust.
+- **Consequences**:
+  - Real 51-field contracts now complete single-prompt extraction without hitting 15 RPM; synthetic 5-field eval still 1.00 PASS.
+  - Filled docx no longer contains `{{...}}` residue; `test_mapping_generator.py` updated to assert clean values.
+  - Production Vercel now hits live Render backend by default; local dev still uses `localhost:8000`. `.gitignore:19` adds `Test source/`/`test_source/` to prevent leaking user's real contracts.
+
 
