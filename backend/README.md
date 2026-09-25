@@ -36,10 +36,11 @@ API docs (debug mode): `http://localhost:8000/docs` · `http://localhost:8000/op
 ## Testing
 
 ```bash
-pytest -v                          # 167 tests (all offline-safe; no API key needed)
+pytest -v                          # 180 tests (all offline-safe; no API key needed)
 pytest --cov=app --cov-report=term-missing
 pytest tests/test_api.py -v        # 25 API tests (upload/status/results/patch/re-extract/confirm/download)
-pytest tests/test_generation_extractor.py -v  # 11+2 batch/blacklist tests
+pytest tests/test_privacy_masker.py -v # 8 PII masking tests
+pytest tests/test_generation_extractor.py -v  # 14 batch/pii-masking/blacklist tests
 ```
 
 Eval harness (force-fake embeddings, hallucination guard 1.00 PASS):
@@ -55,27 +56,30 @@ python ../eval/run_eval.py --dataset ../eval/datasets --output ../eval/results
 app/
 ├── main.py                         # FastAPI entry (CORS localhost:3000, GZip 1KB+, SecurityHeaders, RequestId)
 ├── core/
-│   ├── config.py                   # pydantic-settings (gemini-3.6-flash, gemini-embedding-001 768d, 800/100 chunk, 5 top-K)
+│   ├── config.py                   # pydantic-settings (gemini-3-flash-preview, gemini-embedding-001 768d, enable_pii_masking)
+│   ├── key_pool.py                 # Multi-key rotation pool with automatic failover
 │   └── security.py                 # CSP/HSTS/RequestId, sanitize_filename/text, InMemoryRateLimiter (10/hr upload, 30/min write, 5/min re-extract)
 ├── api/
 │   ├── health.py                   # GET /api/health + GET /api/debug/gemini (DEBUG gate)
 │   ├── upload.py                   # POST /api/upload (multipart, %PDF/PK magic, 202)
 │   └── jobs.py                     # GET /jobs/{id}, /results, PATCH /fields/{id}, POST confirm/download/re-extract/source/page/{n}
 ├── services/
+│   ├── privacy/                    # masker.py (SelectivePIIMasker: NPWP, NIK, Bank Accounts, Emails, Phone numbers)
 │   ├── extraction/                 # text_extractor.py (PyMuPDF blocks/bbox/metadata), table_extractor.py (pdfplumber), pdf_extractor.py (ExtractedDocument)
 │   ├── rag/                        # chunker.py (recursive 800/100 + header), embedder.py (gemini-embedding-001 768d batch 100 / fake fallback), vector_store.py (InMemory+PgVector cosine), retriever.py (top-K)
 │   ├── mapping/                    # parser.py (docx/xlsx/pptx, 5 syntaxes {{}} {}/<<>>/[]/__), mapper.py (exact/fuzzy/synonym), generator.py (preserve formatting)
-│   ├── generation/                 # extractor.py (Gemini batch single-prompt + Fake term-scoring, 404 blacklist, 1.2s throttle)
+│   ├── generation/                 # extractor.py (Gemini batch single-prompt + Fake term-scoring, 404/503 blacklist, multi-key pool, PII masking)
 │   └── jobs/                       # manager.py (queued→processing→extracting(80%)→mapping→completed + BackgroundTasks), models.py (Job/FieldResult extracted_by, has_fallback)
 ├── models/                         # Pydantic schemas
 └── utils/                          # Helpers
-tests/                              # pytest: test_pdf_extraction (37), test_chunker (20), test_rag (19), test_generation_extractor (13), test_template_parser (24), test_mapping_generator (20), test_health (8), test_api (25) = 167
+tests/                              # pytest: 180 total green tests (privacy, extractor, chunker, rag, pdf, template, generator, api, health)
 ```
 
-### Key Behaviors (stay in sync with docs/2-architecture/* & ADR-012→015)
+### Key Behaviors (stay in sync with docs/2-architecture/* & ADR-012→018)
 
-- **Batch extraction** (`extractor.py:426`): `extract_batch(fields, chunks)` consolidates all field prompts into 1 Gemini JSON call, reducing 429 risk by >90%; per-field fallback to heuristic if batch JSON incomplete.
-- **Model candidates** (`extractor.py:220`): `gemini-3.6-flash → 3.5-flash → 3.5-flash-lite → 3.7-flash → 3.8-flash`, auto-sanitizes legacy `2.0/1.5/2.5` identifiers, blacklists 404/quota models for the session.
+- **Selective PII Masking** (`privacy/masker.py`, ADR-018): Masks NPWP, NIK, Bank Accounts, Emails, Phone numbers into surrogate tokens before calling Gemini API, then restores real values on extraction. Preserves company names, titles, scopes, dates, and amounts for 100% extraction accuracy.
+- **Batch extraction** (`extractor.py:560`): `extract_batch(fields, chunks)` consolidates all field prompts into 1 Gemini JSON call, reducing 429 risk by >90%; per-field fallback to heuristic if batch JSON incomplete.
+- **Model candidates & Multi-Key Pool** (`extractor.py` + `key_pool.py`): Prioritizes `gemini-3-flash-preview` and `gemini-3.6-flash`, auto-rotates across comma-separated keys in `GEMINI_API_KEY` upon 429/quota exhaustion.
 - **Embedding sanitization** (`embedder.py:107`): legacy `text-embedding-004` → `gemini-embedding-001`.
 - **Phase tracking** (`manager.py:210`): sets `status=extracting, percent=80, phase=ai_extraction` before batch, so frontend spinner for Phase 4 is faithful.
 - **Rate & safety** (`security.py` + `jobs.py`): every write path applies `sanitize_text_input(max_len=5000/2000)` and `sanitize_filename`; download uses RFC 5987 `filename*=UTF-8''`; raw exception `str(e)` never leaves the API.

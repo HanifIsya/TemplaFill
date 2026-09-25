@@ -9,7 +9,7 @@
 [![Gemini](https://img.shields.io/badge/AI-Gemini%203.6%20Flash-4285F4?logo=google)](https://ai.google.dev/)
 [![Embeddings](https://img.shields.io/badge/Embeddings-gemini--embedding--001-blue)](https://ai.google.dev/)
 [![Evaluation Benchmark](https://img.shields.io/badge/Evaluation%20F1-1.00%20(5%20Domains)-success)](docs/5-quality/EVAL.md)
-[![Test Suite](https://img.shields.io/badge/Tests-167%20Pytest%20%7C%2013%20E2E-brightgreen)](tests/)
+[![Test Suite](https://img.shields.io/badge/Tests-180%20Pytest%20%7C%2013%20E2E-brightgreen)](tests/)
 
 ---
 
@@ -43,7 +43,7 @@ In legal, financial, procurement, and administrative workflows, organizations ex
 
 1. **Input 1 (Source Document)**: Unstructured PDF document containing domain data.
 2. **Input 2 (Template Document)**: Standard office template (`.docx`, `.xlsx`, or `.pptx`) containing placeholder fields (5 syntax variants, case-insensitive).
-3. **Automated Pipeline**: High-fidelity PDF text and table parsing (PyMuPDF + pdfplumber) $\rightarrow$ Recursive semantic chunking (800 tokens / 100 overlap, header metadata) $\rightarrow$ Dense semantic vector embedding (`gemini-embedding-001`, 768 dimensions, batched 100) $\rightarrow$ Adaptive retrieval (≤15 chunks: full context, zero retriever calls; >15: sparse top-K 3 for 8 fields, deduped ≤12) $\rightarrow$ Single-prompt batch structured extraction via Google Gemini 3.6 Flash (candidate fallback: 3.5 / 3.6 / 3.5-lite / 3.7, with 404/503 blacklisting + 1.2s pacing + 429 backoff + 35s timeout + REST fallback) $\rightarrow$ Deterministic heuristic fallback engine (zero-downtime) $\rightarrow$ Atomic placeholder replacement (whole `{{field}}` → value, brace-free) with style preservation.
+3. **Automated Pipeline**: High-fidelity PDF text and table parsing (PyMuPDF + pdfplumber) $\rightarrow$ Recursive semantic chunking (800 tokens / 100 overlap, header metadata) $\rightarrow$ Dense semantic vector embedding (`gemini-embedding-001`, 768 dimensions, batched 100) $\rightarrow$ Adaptive retrieval (≤15 chunks: full context, zero retriever calls; >15: sparse top-K 3 for 8 fields, deduped ≤12) $\rightarrow$ **Selective PII Masking** (Sanitize high-entropy identifiers: NPWP, NIK, Bank Accounts, Emails, Phones into surrogate tokens) $\rightarrow$ Single-prompt batch structured extraction via Google Gemini (candidate fallback: `gemini-3-flash-preview` / `gemini-3.6-flash`, multi-key rotation on 429/503/timeout + REST fallback) $\rightarrow$ Deterministic heuristic fallback engine (zero-downtime) $\rightarrow$ Post-extraction restoration (Unmasking real values) $\rightarrow$ Atomic placeholder replacement (whole `{{field}}` → value, brace-free) with style preservation.
 4. **Output Document**: Fully populated template document preserving 100% of the original typography, run-level formatting, table designs, formulas, and slide compositions, with per-field citations and engine provenance.
 
 TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Retention** architecture, eliminating mandatory account registration and ensuring that user documents remain private and ephemeral.
@@ -52,9 +52,12 @@ TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Ret
 
 ## ⚡ Key Features
 
-- 🧠 **Dual-Engine Extraction Architecture** (ADR-017 verified on 51-field real contract `51/51 gemini`):
-  - **Primary**: Google Gemini 3.6 Flash (candidates: 3.5 → 3.6 → 3.5-lite → 3.7, auto-blacklisted on 404/503/quota, 1.2s pacing + 2.0s backoff + 35s timeout + REST fallback via `httpx`/`urllib`) combined with `gemini-embedding-001` (768d, batch 100, 15 RPM). Single-prompt batch reduces API calls by >90%; adaptive 15-chunk bypass drops small-doc embedding calls `51→0` (large: `8`), eliminating the 15 RPM burst that caused 0 output tokens in production.
+- 🧠 **Dual-Engine Extraction Architecture** (ADR-017/018 verified on 51-field real contract `51/51 gemini`):
+  - **Primary**: Google Gemini (`gemini-3-flash-preview` / `gemini-3.6-flash`, auto-blacklisted on 404/503/quota, multi-key rotation pool with 1.2s pacing + 2.0s backoff + 20s timeout + REST fallback via `httpx`/`urllib`) combined with `gemini-embedding-001` (768d, batch 100, 15 RPM). Single-prompt batch reduces API calls by >90%; adaptive 15-chunk bypass drops small-doc embedding calls `51→0` (large: `8`), eliminating the 15 RPM burst that caused 0 output tokens in production.
   - **Zero-Downtime Heuristic Fallback**: Deterministic term-scoring + difflib + email/phone regex takes over instantly on 429/503/404/missing key. Every field records `extracted_by` (`gemini`/`heuristic`/`hybrid`) + `fallback_reason` for full transparency. Document generation never fails — and now brace-free.
+- 🔒 **Selective PII Masking (Zero-Leakage AI Processing, ADR-018)**:
+  - Automated regex pseudonymization intercepts document text before transmission to Google Gemini. Sensitive personal and financial identifiers (**NPWP, NIK/KTP, Bank Accounts, Emails, Phone numbers**) are converted to surrogate tokens (`[TOKEN_NPWP_1]`, `[TOKEN_REK_1]`). Real data never reaches external AI servers and is automatically unmasked on the local server upon response.
+  - **100% Semantic Preservation**: Structural elements (Company names `PT`/`CV`, Representative names & titles, narrative scopes, dates, amounts) remain unmasked so LLM reasoning and role disambiguation stay flawless.
 - 🎯 **100% Document Style Preservation (brace-free, ADR-017)**:
   - Populates Word paragraphs and tables, Excel workbooks, and PowerPoint slides without corrupting fonts/weights/colors/formulas/borders. Generator (`generator.py:61`) now replaces whole enclosed placeholders atomically (`{{field}}→value` sorted by length) via `_find_placeholders` + `_normalize_field_name`; validated `{{value}}` residue no longer appears (was `{{SPK/0847}}`, now `SPK/0847`).
 - 📝 **Universal Placeholder Syntax**:
@@ -404,7 +407,7 @@ Extraction accuracy and model fidelity are verified across 5 synthetic domains (
 ### Executing Test Suites
 
 ```bash
-# Backend Pytest (167 tests, offline-safe, no GEMINI_API_KEY required):
+# Backend Pytest (180 tests, offline-safe, no GEMINI_API_KEY required):
 cd backend
 pytest -v
 pytest --cov=app --cov-report=term-missing   # coverage
@@ -429,9 +432,16 @@ docker compose up -d && docker compose logs -f
 
 TemplaFill adheres to strict defense-in-depth principles:
 
+- 🔒 **Selective PII Masking (Zero-Leakage AI Architecture, ADR-018)**:
+  - Document text chunks pass through automated pseudonymization before reaching Google Gemini endpoints.
+  - **Sanitized & Masked**: Indonesian Tax IDs (**NPWP** 15/16 digits), National Citizen IDs (**NIK/KTP**), Bank Account Numbers (**Nomor Rekening**), **Email addresses**, and **Phone / WhatsApp numbers** are substituted with anonymous tokens (e.g. `[TOKEN_NPWP_1]`, `[TOKEN_REK_1]`).
+  - **Preserved for 100% Accuracy**: Company names (`PT`/`CV`), authorized representative names & titles, narrative contract scopes, dates, financial amounts, and payment milestone terms remain untouched to ensure the LLM's semantic reasoning is never degraded.
+  - **Local Restoration**: Surrogate tokens are safely unmasked on the local server post-extraction before template generation and user display.
+- 📜 **Privacy Tiers & Zero Model Training**:
+  - *Free Tier*: Protected by Selective PII Masking, ensuring sensitive credentials are never stored or trained on by external AI providers.
+  - *Commercial Paid Tier*: Supports Google Cloud / AI Studio keys with billing enabled, backed by Google's commercial Data Processing Addendum (DPA) legally guaranteeing 0% data usage for model training.
 - 🔒 **Zero Data Retention**: Document binaries, embeddings, and filled outputs are retained exclusively in volatile / ephemeral storage (in-memory jobs, `./uploads` 24h auto-delete, vector store tied to job lifetime; see `SECURITY.md` & `DATA_PRIVACY.md`).
-- 🚫 **No Upstream Model Training**: Free-tier Gemini calls may be used by Google for improvement per `ADR-007`; production upgrade to paid tier with DPA is planned. No document content is ever written to logs.
-- 🛡️ **Zero Credential Dependency (MVP)**: The platform operates in anonymous guest mode (`free` tier, 3 fills/day local; `pro` unlimited after login). `AuthModal` + `localStorage` tokens exist only as UI stub for future JWT Phase 2 (`OWNERShip.md`).
+- 🛡️ **Zero Credential Dependency (MVP)**: The platform operates in anonymous guest mode (`free` tier, 3 fills/day local; `pro` unlimited after login). `AuthModal` + `localStorage` tokens exist only as UI stub for future JWT Phase 2 (`OWNERSHIP.md`).
 - 🧱 **Injection & Validation Armor (VULN-1 → 10, ADR-012)**: `sanitize_filename()` strips `../`/null/path traversal; `sanitize_text_input(max_len=5000)` scrubs control codes; `validate_file_magic` enforces `%PDF`/`PK` beyond extensions; `sanitize_text_input` limits hints to 2000 chars; download `Content-Disposition` uses RFC 5987 `filename*=UTF-8''`; raw exception traces are never leaked to clients.
 - 🛡️ **Defense-in-Depth Headers**: Enforced via `SecurityHeadersMiddleware` (`backend/app/core/security.py:28`) + `next.config.ts` + `vercel.json`: strict `Content-Security-Policy` (no `frame-ancestors`, limited `connect-src`), `HSTS preload`, `nosniff`, `DENY` frames, `Referrer-Policy strict-origin-when-cross-origin`, `Permissions-Policy` + `x-powered-by: false`. Rate limiting: 10/hr upload, 30/min write, 5/min re-extract, with `testclient` exemption for CI.
 

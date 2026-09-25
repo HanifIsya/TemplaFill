@@ -77,10 +77,10 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDem
 
           <div className="grid grid-cols-1 md:grid-cols-4 p-4 gap-2">
             <span className="font-semibold text-slate-900 dark:text-slate-100 md:col-span-1">
-              Data Retention
+              Privacy &amp; PII Protection
             </span>
             <span className="text-slate-600 dark:text-slate-300 md:col-span-3">
-              Zero persistent document retention. Uploaded and generated files are automatically deleted after 24 hours.
+              Automated <strong>Selective PII Masking</strong> shields sensitive identifiers (NPWP, NIK/KTP, Bank Accounts, Emails, Phones) with surrogate tokens before AI transmission. 24-hour ephemeral auto-purge with zero persistent document retention.
             </span>
           </div>
         </div>

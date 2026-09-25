@@ -333,39 +333,83 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
             <div className="space-y-4">
               <div>
                 <h3 className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold mb-1">
-                  Zero Data Retention Policy
+                  Privacy & Data Protection Architecture
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  TemplaFill is built to strict privacy standards aligned with GDPR principles. Your documents remain your confidential property.
+                  TemplaFill is built to strict privacy-by-design standards aligned with GDPR and Indonesian UU PDP principles. Because public AI free-tiers may use prompt data for model training, TemplaFill enforces automated client/server <strong>Selective PII Masking</strong> to protect confidential identifiers.
                 </p>
+              </div>
+
+              {/* Selective PII Masking Feature Card */}
+              <div className="p-3 bg-blue-950/20 border border-blue-800/60 rounded space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-blue-400 font-semibold text-xs uppercase flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                    Selective PII Masking (Active by Default)
+                  </span>
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700/50">
+                    Sanitize → Store Map → Call AI → Restore
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Before any document text is transmitted to Google Gemini, sensitive personal and financial identifiers are replaced with anonymous surrogate tokens (e.g. <code>[TOKEN_NPWP_1]</code>, <code>[TOKEN_REK_1]</code>). Google only sees surrogate tokens and never receives your real confidential data. Once Gemini extracts the values, TemplaFill automatically restores the original data on the local server.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-800/80 text-[11px]">
+                  <div className="p-2 bg-slate-950/80 rounded border border-emerald-900/50">
+                    <span className="font-mono font-bold text-emerald-400 block mb-1">
+                      🔒 Masked &amp; Protected (Zero-Leakage):
+                    </span>
+                    <ul className="text-slate-300 space-y-0.5 list-disc list-inside">
+                      <li><strong>NPWP:</strong> Indonesian Tax IDs (15 &amp; 16 digits)</li>
+                      <li><strong>NIK / KTP:</strong> National Citizen IDs</li>
+                      <li><strong>Bank Accounts:</strong> Account numbers (Rekening)</li>
+                      <li><strong>Email Addresses:</strong> Contact emails</li>
+                      <li><strong>Phone Numbers:</strong> Telepon, HP, &amp; WhatsApp</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-2 bg-slate-950/80 rounded border border-amber-900/50">
+                    <span className="font-mono font-bold text-amber-400 block mb-1">
+                      ⚡ Preserved (For 100% Accuracy):
+                    </span>
+                    <ul className="text-slate-300 space-y-0.5 list-disc list-inside">
+                      <li><strong>Company Names:</strong> PT / CV (to preserve roles)</li>
+                      <li><strong>Names &amp; Titles:</strong> Full names with job titles</li>
+                      <li><strong>Project Scopes:</strong> Narrative clauses &amp; terms</li>
+                      <li><strong>Contract Values:</strong> Amounts &amp; payment milestones</li>
+                      <li><strong>Dates &amp; Durations:</strong> Timelines &amp; schedules</li>
+                    </ul>
+                  </div>
+                </div>
               </div>
 
               <div className="space-y-2 text-xs">
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
-                  <span className="font-mono text-blue-400 font-semibold uppercase">1. No Login Required:</span>
+                  <span className="font-mono text-blue-400 font-semibold uppercase">1. Zero Credential Requirement:</span>
                   <p className="text-slate-400 mt-1">
-                    No email, phone, or personal credentials are needed. Use the platform instantly as a guest.
+                    No email, phone, password, or credit card are required. Process your documents anonymously with complete peace of mind.
                   </p>
                 </div>
 
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
-                  <span className="font-mono text-blue-400 font-semibold uppercase">2. Never Used for AI Training:</span>
+                  <span className="font-mono text-blue-400 font-semibold uppercase">2. 24-Hour Ephemeral Auto-Purge:</span>
                   <p className="text-slate-400 mt-1">
-                    Your PDFs and template values are never used to train or fine-tune any public AI models.
+                    Uploaded source PDFs, templates, and vector embeddings reside only in volatile server memory and are permanently purged within 24 hours.
                   </p>
                 </div>
 
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
-                  <span className="font-mono text-blue-400 font-semibold uppercase">3. Automatic Purging:</span>
+                  <span className="font-mono text-blue-400 font-semibold uppercase">3. Free Tier vs. Paid Commercial Tier:</span>
                   <p className="text-slate-400 mt-1">
-                    Temporary files in backend memory are deleted automatically after the job completes or within one hour of session expiry.
+                    On the Gemini Free Tier, our Selective PII Masking keeps confidential credentials off Google servers. For enterprise zero-data-logging guarantees across the entire document text, supply an API key with billing enabled (under Google&apos;s commercial Data Processing Addendum).
                   </p>
                 </div>
 
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
                   <span className="font-mono text-blue-400 font-semibold uppercase">4. End-to-End Encryption:</span>
                   <p className="text-slate-400 mt-1">
-                    All data exchanged between your browser and the server is protected with industry-standard HTTPS TLS 1.3 encryption.
+                    All network traffic between your web browser and the server is secured using modern TLS 1.3 encryption with strict Content-Security-Policy headers.
                   </p>
                 </div>
               </div>
