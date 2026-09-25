@@ -297,6 +297,7 @@ class GeminiExtractor:
         else:
             self.use_fake = not bool(self.api_key)
         self._client: Any = None
+        self.enable_pii_masking: bool = getattr(settings, "enable_pii_masking", True)
         self._fake = FakeExtractor()
         self.last_engine_used: str = "gemini" if not self.use_fake else "heuristic"
         self.last_fallback_reason: Optional[str] = (
@@ -500,7 +501,15 @@ Respond ONLY in valid JSON matching this schema:
                 res.source_page = source_pages[res.source_page - 1]
             return res
 
-        prompt = self._build_prompt(field_name, field_description, chunks)
+        target_chunks = chunks
+        unmask_map: Dict[str, str] = {}
+        if self.enable_pii_masking and not self.use_fake and (self._client or self.api_key):
+            from app.services.privacy.masker import SelectivePIIMasker
+
+            masker = SelectivePIIMasker()
+            target_chunks, unmask_map = masker.mask_chunks(chunks)
+
+        prompt = self._build_prompt(field_name, field_description, target_chunks)
         response, last_error = await self._call_gemini_with_fallback(prompt)
 
         if not response:
@@ -531,6 +540,16 @@ Respond ONLY in valid JSON matching this schema:
             source_text = data.get("source_text")
             if source_pages and isinstance(source_page, int) and 1 <= source_page <= len(source_pages):
                 source_page = source_pages[source_page - 1]
+
+            if unmask_map:
+                from app.services.privacy.masker import SelectivePIIMasker
+
+                masker = SelectivePIIMasker()
+                if value:
+                    value = masker.unmask(value, unmask_map)
+                if source_text:
+                    source_text = masker.unmask(source_text, unmask_map)
+
             status = "extracted" if value is not None else "not_found"
             self.last_engine_used = "gemini"
             self.last_fallback_reason = None
@@ -573,7 +592,15 @@ Respond ONLY in valid JSON matching this schema:
                 r.fallback_reason = fb_reason
             return res_dict
 
-        prompt = self._build_batch_prompt(fields, chunks)
+        target_chunks = chunks
+        unmask_map: Dict[str, str] = {}
+        if self.enable_pii_masking and not self.use_fake and (self._client or self.api_key):
+            from app.services.privacy.masker import SelectivePIIMasker
+
+            masker = SelectivePIIMasker()
+            target_chunks, unmask_map = masker.mask_chunks(chunks)
+
+        prompt = self._build_batch_prompt(fields, target_chunks)
         response, last_error = await self._call_gemini_with_fallback(prompt)
 
         if not response:
@@ -633,6 +660,16 @@ Respond ONLY in valid JSON matching this schema:
                     if source_pages and fake_res.source_page and 1 <= fake_res.source_page <= len(source_pages):
                         fake_res.source_page = source_pages[fake_res.source_page - 1]
                     results[fname] = fake_res
+
+            if unmask_map:
+                from app.services.privacy.masker import SelectivePIIMasker
+
+                masker = SelectivePIIMasker()
+                for r in results.values():
+                    if r.extracted_value:
+                        r.extracted_value = masker.unmask(r.extracted_value, unmask_map)
+                    if r.source_text:
+                        r.source_text = masker.unmask(r.source_text, unmask_map)
 
             self.last_engine_used = "hybrid" if has_missing else "gemini"
             self.last_fallback_reason = "Some fields recovered by heuristic fallback" if has_missing else None

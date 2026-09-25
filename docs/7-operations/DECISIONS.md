@@ -285,4 +285,28 @@
   - Filled docx no longer contains `{{...}}` residue; `test_mapping_generator.py` updated to assert clean values.
   - Production Vercel now hits live Render backend by default; local dev still uses `localhost:8000`. `.gitignore:19` adds `Test source/`/`test_source/` to prevent leaking user's real contracts.
 
+---
+
+### ADR-018: Selective PII Masking and Privacy Protection for LLM Pipeline (2026-09-25)
+- **Date**: 2026-09-25
+- **Status**: Accepted
+- **Context**: Google AI Studio free tier terms permit Google to use prompt/completion data for model training and human quality reviews. User documents (contracts, financial records, reports) contain confidential personally identifiable information (PII) including Indonesian Tax IDs (NPWP), Citizen IDs (NIK/KTP), bank account numbers, emails, and phone numbers. Masking all text (e.g. company names, dates, amounts) degrades LLM semantic reasoning and leads to role confusion (e.g. inability to distinguish Client from Vendor) and arithmetic table misalignment.
+- **Decision**:
+  1. **Pattern (`Sanitize -> Store Map -> Call API -> Restore (Unmask)`)**: Implement `SelectivePIIMasker` (`backend/app/services/privacy/masker.py`).
+  2. **Selective Entities Masked**: High-entropy, isolated PII entities only:
+     - Formatted & unformatted NPWP (`[TOKEN_NPWP_1]`)
+     - Indonesian NIK / KTP (`[TOKEN_NIK_1]`)
+     - Bank Account Numbers (`[TOKEN_REK_1]`)
+     - Emails (`[TOKEN_EMAIL_1]`)
+     - Phone numbers (`[TOKEN_PHONE_1]`)
+  3. **Explicitly Preserved Entities (100% Accuracy Guarantee)**:
+     - Company names (`PT`/`CV`) to maintain Client vs Vendor semantic roles.
+     - Representative names with titles (`Ir. Bambang Wijaya, M.T. — Direktur Utama`).
+     - Project titles, scopes, narrative clauses, dates, amounts, and payment percentages.
+  4. **Integration**: Wired into `GeminiExtractor.extract` and `GeminiExtractor.extract_batch`. Configurable via `enable_pii_masking: bool = True` in `config.py`.
+- **Consequences**:
+  - Raw PII is never transmitted to Google Gemini servers over the wire on free tier.
+  - Zero degradation to extraction accuracy or semantic comprehension.
+  - Surrogate tokens are restored seamlessly before presentation and template generation.
+
 

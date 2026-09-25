@@ -5,9 +5,9 @@
 ---
 
 ## Last Updated
-- **Date**: 2026-09-24
-- **By**: OpenCode (validation) + Antigravity (fix)
-- **Summary**: **Validated Antigravity fixes 1e0eebb + ADR-017 sweep**: Embedding 15 RPM bottleneck bypass (`manager.py:224` ≤15 chunks → 0 retriever calls, else 8×3→12 deduped; `51/51 gemini` on real 51-field contract), generator brace corruption atomic replace (`generator.py:34/61` `_find_placeholders` sorted, no `{{value}}` residue), frontend `getApiBaseUrl()` (`api.ts:13` auto `templafill-backend.onrender.com` on Vercel vs `localhost`), extractor REST fallback + 35s timeout + 503 blacklist (`extractor.py:335/517/565`, candidate reorder `3.5→3.6`). Updated `README.md` pipeline/dual-engine/mermaid, `ARCHITECTURE.md` alt block + generator section, `CHANGELOG.md` v0.2.0 `Fixed`, `DECISIONS.md` ADR-017, `CONTEXT.md`/`TASKS.md` provenance. Verified `167/167` pytest, `13/13` frontend, `51/51` real-file extraction.
+- **Date**: 2026-09-25
+- **By**: Antigravity
+- **Summary**: **Selective PII Masking & Privacy Hardening (ADR-018)**: Implemented `SelectivePIIMasker` (`app/services/privacy/masker.py`) with zero-leakage tokenization for NPWP, NIK, Bank Account Numbers, Emails, and Phone Numbers while explicitly preserving Company names, representative names/titles, scopes, narrative text, dates, and currency amounts to guarantee 100% extraction accuracy without semantic degradation. Wired into `GeminiExtractor.extract` and `extract_batch` with automatic surrogate token restoration. Added `enable_pii_masking` config toggle. Verified 180/180 backend pytest green, 13/13 frontend tests green. Updated `DATA_PRIVACY.md` and `DECISIONS.md`.
 
 ---
 

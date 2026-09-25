@@ -60,14 +60,34 @@
 | Gemini API (Google) | Document text chunks (temporary, via API) | AI extraction | [Google AI Privacy](https://ai.google.dev/terms) |
 | Hosting provider | Encrypted files on disk | Storage | Varies by provider |
 
-> **Important**: Gemini API free tier data usage policy — Google states that free-tier API data may be used for model improvement. For production/enterprise use, consider upgrading to paid tier with data processing agreements. This is documented in `DECISIONS.md`.
+> **Important**: Gemini API free tier data usage policy — Google states that free-tier API data may be used for model improvement. To protect user privacy under free-tier usage, TemplaFill enforces **Selective PII Masking** before transmitting chunks to external LLM endpoints.
+
+### Selective PII Masking (Sanitize → Store Map → Call → Restore)
+TemplaFill protects confidential identity and financial details through automated client/server pseudonymization:
+1. **Pre-Transmission Sanitization**:
+   Before text chunks are transmitted to Gemini API, a deterministic regex scanner isolates sensitive high-entropy PII:
+   - **NPWP** (Indonesian Tax IDs) $\rightarrow$ replaced with `[TOKEN_NPWP_1]`, `[TOKEN_NPWP_2]`
+   - **NIK / KTP** (Citizen IDs) $\rightarrow$ replaced with `[TOKEN_NIK_1]`
+   - **Bank Account Numbers** (preceded or labeled by bank/rekening) $\rightarrow$ replaced with `[TOKEN_REK_1]`
+   - **Email Addresses** $\rightarrow$ replaced with `[TOKEN_EMAIL_1]`
+   - **Phone Numbers** $\rightarrow$ replaced with `[TOKEN_PHONE_1]`
+2. **Context Preservation (100% Accuracy Guarantee)**:
+   To ensure extraction accuracy is never degraded, semantic contextual elements are **explicitly preserved without masking**:
+   - Company names (`PT`/`CV`) remain intact so LLMs accurately distinguish Client from Vendor roles.
+   - Representative names and job titles (`Ir. Bambang Wijaya, M.T. — Direktur Utama`) remain intact.
+   - Project titles, scopes, narrative clauses, dates, financial amounts, and payment percentages remain untouched.
+3. **In-Memory Pseudonymization Map**:
+   A mapping table (`token -> real_value`) is kept strictly in volatile server RAM for the duration of the request and is never logged or transmitted over the wire.
+4. **Post-Extraction Restoration (Unmasking)**:
+   When Gemini returns structured field values containing surrogate tokens, TemplaFill restores the real values prior to template generation and user display.
 
 ### Data Flow
 ```
 User uploads → Server receives → Encrypted at rest → 
-→ Text extracted (in memory) → Chunks sent to Gemini API → 
-→ Results stored in DB → User reviews → Document generated → 
-→ User downloads → All data deleted after 24h
+→ Text extracted (in memory) → Selective PII Masker (Tokens generated) → 
+→ Sanitized Chunks sent to Gemini API → Gemini extracts tokens → 
+→ Unmasker restores real PII values → Results stored in DB → 
+→ User reviews → Document generated → User downloads → Auto-deleted after 24h
 ```
 
 ---

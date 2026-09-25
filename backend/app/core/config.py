@@ -49,6 +49,10 @@ class Settings(BaseSettings):
     gemini_api_key: str = Field(default="", description="Gemini API key")
     gemini_model: str = Field(default="gemini-3-flash-preview")
     gemini_embedding_model: str = Field(default="gemini-embedding-001")
+    enable_pii_masking: bool = Field(
+        default=True,
+        description="Enable selective PII masking before sending document chunks to Gemini API",
+    )
 
     # ----- File Storage -----
     upload_dir: str = Field(default="./uploads")

@@ -151,3 +151,64 @@ class TestGeminiExtractorFakeFallback:
         assert parsed[0]["field_name"] == "full_name"
         assert parsed[0]["value"] == "Alice Wonder"
         assert parsed[1]["value"] is None
+
+    @pytest.mark.asyncio
+    async def test_extractor_pii_masking_and_unmasking(self, monkeypatch):
+        """Verify GeminiExtractor sanitizes chunks before API call and restores real values upon receiving surrogate tokens."""
+        ext = GeminiExtractor(api_key="mock_key", use_fake=False)
+        captured_prompts = []
+
+        async def mock_call(prompt):
+            captured_prompts.append(prompt)
+            return """
+            {
+              "extractions": [
+                {
+                  "field_name": "npwp_vendor",
+                  "value": "[TOKEN_NPWP_1]",
+                  "confidence": 1.0,
+                  "source_page": 1,
+                  "source_text": "NPWP: [TOKEN_NPWP_1]"
+                },
+                {
+                  "field_name": "email_vendor",
+                  "value": "[TOKEN_EMAIL_1]",
+                  "confidence": 1.0,
+                  "source_page": 1,
+                  "source_text": "Email: [TOKEN_EMAIL_1]"
+                }
+              ]
+            }
+            """
+
+        monkeypatch.setattr(ext, "_call_gemini_with_fallback", lambda p: mock_call(p).then(lambda r: (r, None)) if hasattr(mock_call(p), 'then') else asyncio.sleep(0, (mock_call(p), None)))
+        
+        async def mock_fallback_wrapper(prompt):
+            res = await mock_call(prompt)
+            return res, None
+        monkeypatch.setattr(ext, "_call_gemini_with_fallback", mock_fallback_wrapper)
+
+        raw_chunks = [
+            "Vendor terdaftar dengan NPWP: 01.234.567.8-615.000 dan Email: secret@vendor.co.id."
+        ]
+        fields = [
+            {"field_name": "npwp_vendor", "description": "NPWP of vendor"},
+            {"field_name": "email_vendor", "description": "Email of vendor"},
+        ]
+
+        results = await ext.extract_batch(fields, raw_chunks)
+
+        # 1. Verify raw PII NEVER entered the prompt sent to Google Gemini
+        assert len(captured_prompts) == 1
+        prompt_sent = captured_prompts[0]
+        assert "01.234.567.8-615.000" not in prompt_sent
+        assert "secret@vendor.co.id" not in prompt_sent
+        assert "[TOKEN_NPWP_1]" in prompt_sent
+        assert "[TOKEN_EMAIL_1]" in prompt_sent
+
+        # 2. Verify results are restored (unmasked) back to the real values for user
+        assert results["npwp_vendor"].extracted_value == "01.234.567.8-615.000"
+        assert results["npwp_vendor"].source_text == "NPWP: 01.234.567.8-615.000"
+        assert results["email_vendor"].extracted_value == "secret@vendor.co.id"
+        assert results["email_vendor"].source_text == "Email: secret@vendor.co.id"
+
