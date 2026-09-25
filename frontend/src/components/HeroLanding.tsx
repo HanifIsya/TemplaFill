@@ -20,16 +20,16 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDem
         </p>
 
         {/* Action Controls */}
-        <div className="flex flex-wrap items-center gap-3 pt-2">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
           <button
             onClick={onGetStarted}
-            className="px-5 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs sm:text-sm transition-colors cursor-pointer"
+            className="w-full sm:w-auto text-center px-5 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs sm:text-sm transition-colors cursor-pointer"
           >
             Start Document Processing
           </button>
           <button
             onClick={onTryDemo}
-            className="px-5 py-2.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium text-xs sm:text-sm transition-colors cursor-pointer"
+            className="w-full sm:w-auto text-center px-5 py-2.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 font-medium text-xs sm:text-sm transition-colors cursor-pointer"
           >
             Load Sample Contract & Template
           </button>
@@ -38,7 +38,7 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDem
 
       {/* Technical Specifications Workbench Table */}
       <div className="border border-slate-200 dark:border-slate-800 rounded bg-white dark:bg-slate-900 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
           <span className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
             System Specifications & Supported Formats
           </span>

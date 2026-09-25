@@ -16,59 +16,62 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="help-modal-title"
     >
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-lg shadow-2xl overflow-hidden font-sans flex flex-col max-h-[90vh]">
+      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-lg shadow-2xl overflow-hidden font-sans flex flex-col max-h-[92vh] sm:max-h-[90vh]">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950">
+        <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-slate-950 shrink-0">
           <div>
             <div className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-blue-500" />
-              <h2 id="help-modal-title" className="text-sm font-semibold text-slate-100 uppercase tracking-wider font-mono">
+              <h2 id="help-modal-title" className="text-xs sm:text-sm font-semibold text-slate-100 uppercase tracking-wider font-mono">
                 TemplaFill Documentation & User Guide
               </h2>
             </div>
-            <p className="text-xs text-slate-400 mt-1">
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
               Complete guide to workflows, template syntax, the Gemini extraction engine, and data security
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-100 text-sm font-mono px-2 py-1 rounded border border-slate-800 hover:bg-slate-800 transition-colors"
+            className="text-slate-400 hover:text-slate-100 text-xs font-mono px-2 py-1 rounded border border-slate-800 hover:bg-slate-800 transition-colors shrink-0 ml-2 cursor-pointer"
             aria-label="Close dialog"
           >
             ESC / [✕]
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex border-b border-slate-800 bg-slate-950/60 overflow-x-auto scrollbar-thin">
+        {/* Tab Navigation - Responsive Grid without horizontal scrollbar */}
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-2 sm:p-2.5 border-b border-slate-800 bg-slate-950/90 shrink-0">
           {[
-            { id: 'workflow', label: '1. Workflow' },
-            { id: 'syntax', label: '2. Template Syntax' },
-            { id: 'engine', label: '3. Dual Engine' },
-            { id: 'review', label: '4. Review & Edit' },
-            { id: 'privacy', label: '5. Privacy & Security' },
-          ].map((t) => (
+            { id: 'workflow', label: '1. Workflow', fullLabel: '1. Workflow' },
+            { id: 'syntax', label: '2. Syntax', fullLabel: '2. Template Syntax' },
+            { id: 'engine', label: '3. Dual Engine', fullLabel: '3. Dual Engine' },
+            { id: 'review', label: '4. Review & Edit', fullLabel: '4. Review & Edit' },
+            { id: 'privacy', label: '5. Privacy & Security', fullLabel: '5. Privacy & Security' },
+          ].map((t, idx) => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id as TabKey)}
-              className={`px-4 py-2.5 text-xs font-mono font-medium tracking-wide transition-colors whitespace-nowrap ${
+              className={`px-2 py-2 rounded text-xs font-mono font-medium transition-all text-center cursor-pointer select-none flex items-center justify-center min-h-[38px] ${
+                idx === 4 ? 'col-span-2 sm:col-span-1' : ''
+              } ${
                 activeTab === t.id
-                  ? 'text-blue-400 border-b-2 border-blue-500 bg-slate-800/40 font-semibold'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/20'
+                  ? 'bg-blue-600 text-white font-semibold shadow-xs border border-blue-500'
+                  : 'text-slate-400 bg-slate-900/60 border border-slate-800/80 hover:text-slate-200 hover:bg-slate-800/60 hover:border-slate-700'
               }`}
             >
-              {t.label}
+              <span className="hidden sm:inline">{t.fullLabel}</span>
+              <span className="sm:hidden">{t.label}</span>
             </button>
           ))}
         </div>
 
         {/* Content Area */}
-        <div className="p-6 overflow-y-auto space-y-5 text-sm text-slate-300">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-sm text-slate-300 min-h-0 flex-1">
           {/* TAB 1: WORKFLOW */}
           {activeTab === 'workflow' && (
             <div className="space-y-4">
@@ -139,7 +142,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 <h3 className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold mb-1">
                   Supported Template Formats
                 </h3>
-                <div className="grid grid-cols-3 gap-2 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-2">
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded text-center">
                     <span className="text-blue-400 font-mono font-bold text-xs">Microsoft Word</span>
                     <p className="text-[11px] font-mono text-slate-400 mt-0.5">.DOCX</p>
@@ -166,36 +169,36 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                   Use any of the following placeholder styles in your template — all are supported interchangeably:
                 </p>
                 <div className="space-y-2 font-mono text-xs">
-                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex items-center justify-between">
+                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
                       <span className="text-blue-300 font-bold">{'{{field_name}}'}</span>
                       <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. {'{{client_name}}'}, {'{{total_amount}}'}</span>
                     </div>
-                    <span className="text-[11px] px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">Highly Recommended</span>
+                    <span className="text-[11px] px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800 self-start sm:self-auto">Highly Recommended</span>
                   </div>
 
-                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex items-center justify-between">
+                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
                       <span className="text-indigo-300 font-bold">{'[field_name]'}</span>
                       <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. [effective_date], [vendor_name]</span>
                     </div>
-                    <span className="text-[11px] text-slate-400">Square Brackets</span>
+                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Square Brackets</span>
                   </div>
 
-                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex items-center justify-between">
+                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
                       <span className="text-indigo-300 font-bold">{'<<field_name>>'}</span>
                       <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. &lt;&lt;contract_title&gt;&gt;</span>
                     </div>
-                    <span className="text-[11px] text-slate-400">Double Angle Brackets</span>
+                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Double Angle Brackets</span>
                   </div>
 
-                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex items-center justify-between">
+                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
                       <span className="text-indigo-300 font-bold">{'__field_name__'}</span>
                       <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. __invoice_number__</span>
                     </div>
-                    <span className="text-[11px] text-slate-400">Double Underscores</span>
+                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Double Underscores</span>
                   </div>
                 </div>
               </div>
@@ -418,11 +421,11 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between px-6 py-3 border-t border-slate-800 bg-slate-950 text-xs font-mono text-slate-400">
-          <span>TemplaFill v0.1.0 • Google Gemini 3.6 Flash</span>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 px-4 py-3 sm:px-6 sm:py-3 border-t border-slate-800 bg-slate-950 text-xs font-mono text-slate-400 shrink-0">
+          <span className="text-[11px] sm:text-xs text-center sm:text-left">TemplaFill v0.1.0 • Google Gemini 3.6 Flash</span>
           <button
             onClick={onClose}
-            className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded font-medium uppercase tracking-wider text-[11px] transition-colors"
+            className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded font-medium uppercase tracking-wider text-[11px] sm:text-xs transition-colors cursor-pointer text-center"
           >
             Close Guide
           </button>

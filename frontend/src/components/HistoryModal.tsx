@@ -22,8 +22,8 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60">
-      <div className="w-full max-w-2xl rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-5 space-y-4 text-xs">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
+      <div className="w-full max-w-2xl rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-4 sm:p-5 space-y-4 text-xs max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
           <div>
@@ -54,20 +54,20 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
             {sessions.map((s) => (
               <div
                 key={s.sessionId}
-                className="p-3 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50 dark:hover:bg-slate-800/40"
               >
-                <div className="space-y-0.5">
-                  <div className="font-semibold text-slate-900 dark:text-slate-100">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
                     {s.downloadFilename}
                   </div>
-                  <div className="font-mono text-[11px] text-slate-500">
+                  <div className="font-mono text-[11px] text-slate-500 break-words">
                     Source: {s.sourceFilename} | {s.fieldCount} fields | {new Date(s.date).toLocaleDateString()}
                   </div>
                 </div>
 
                 <button
                   onClick={() => onDownloadSessionFile(s)}
-                  className="px-2.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono text-[11px] flex items-center gap-1 cursor-pointer"
+                  className="w-full sm:w-auto justify-center px-2.5 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-mono text-[11px] flex items-center gap-1 cursor-pointer shrink-0"
                 >
                   <Download className="w-3 h-3" />
                   <span>Download</span>
@@ -78,7 +78,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
         )}
 
         {/* Footer */}
-        <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
           {sessions.length > 0 && (
             <button
               onClick={onClearHistory}
@@ -90,7 +90,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
           )}
           <button
             onClick={onClose}
-            className="px-3.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer ml-auto"
+            className="w-full sm:w-auto px-3.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer ml-auto text-center"
           >
             Close
           </button>
