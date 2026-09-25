@@ -327,19 +327,18 @@ class GeminiExtractor:
         prompt while 3.6-flash gave 503. 3.5 is thus first after self.model.
         """
         candidates: List[str] = []
-        # Prioritize gemini-3-flash-preview (proven 200 OK across all user API keys)
+        # Prioritize models with proven capacity & 200 OK (gemini-3-flash-preview & gemini-3.6-flash)
         preferred = [
             "gemini-3-flash-preview",
-            self.model,
-            "gemini-3.5-flash",
             "gemini-3.6-flash",
+            self.model,
             "gemini-3.7-flash",
-            "gemini-3.8-flash",
+            "gemini-3.5-flash",
         ]
         for m in preferred:
             if m and m not in candidates and m not in self._BLACKLISTED_MODELS:
                 candidates.append(m)
-        return candidates or ["gemini-3.5-flash"]
+        return candidates or ["gemini-3-flash-preview", "gemini-3.6-flash"]
 
     async def _throttle_call(self) -> None:
         """Paces API calls to avoid 429 TooManyRequests bursts."""
