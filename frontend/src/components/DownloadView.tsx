@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Download, RotateCcw, FileText } from 'lucide-react';
 import { GenerationResult, SessionInfo } from '../lib/types';
+import { api } from '../lib/api';
 
 interface DownloadViewProps {
   generationResult: GenerationResult;
@@ -15,8 +16,11 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
   sessionInfo,
   onReset,
 }) => {
-  const handleDownload = () => {
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
     const url = generationResult.downloadUrl;
+    // Demo/sample output is served as a static file.
     if (url === '#' || url.startsWith('/samples/')) {
       const a = document.createElement('a');
       a.href = url.startsWith('/samples/') ? url : '/samples/sample_template.docx';
@@ -24,7 +28,14 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-    } else {
+      return;
+    }
+    // Live backend output must be fetched with the job session token.
+    setIsDownloading(true);
+    const ok = await api.downloadDocument(sessionInfo.sessionId, generationResult.filename);
+    setIsDownloading(false);
+    if (!ok) {
+      // Fall back to opening the URL if the authenticated fetch failed.
       window.open(url, '_blank');
     }
   };
@@ -86,10 +97,11 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             onClick={handleDownload}
-            className="px-4 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            disabled={isDownloading}
+            className="px-4 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Download Populated Document</span>
+            <span>{isDownloading ? 'Downloading…' : 'Download Populated Document'}</span>
           </button>
 
           <button

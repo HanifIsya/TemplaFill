@@ -110,10 +110,11 @@ jobs:
           echo "No .env found in tracked files — OK"
           echo "Scanning for API keys..."
           ! grep -R "sk-" --include="*.py" --include="*.ts" --include="*.tsx" . || echo "Warning: potential key pattern found"
-      - name: pip audit
+      - name: pip audit (blocking)
         run: |
           pip install pip-audit
-          pip-audit --requirement backend/requirements.txt || true
+          # VULN-13: dependency vulnerabilities must fail the build.
+          pip-audit --requirement backend/requirements.txt
       - name: Check backend security headers (smoke)
         run: |
           cd backend

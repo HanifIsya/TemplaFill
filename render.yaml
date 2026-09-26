@@ -16,6 +16,7 @@ services:
         value: production
       - key: DEBUG
         value: "false"
+      # Exact allowed origins only — set your deployed frontend URL(s) here.
       - key: CORS_ORIGINS
         value: "http://localhost:3000"
       - key: DATABASE_URL
@@ -30,3 +31,17 @@ services:
         value: gemini-3.6-flash
       - key: GEMINI_EMBEDDING_MODEL
         value: gemini-embedding-001
+      # ----- Security hardening -----
+      - key: REQUIRE_SESSION_TOKEN
+        value: "true"
+      - key: SESSION_COOKIE_SECURE
+        value: "true"
+      - key: SESSION_COOKIE_SAMESITE
+        value: "none"
+      # Set to Render's proxy egress IP ranges that appear in X-Forwarded-For.
+      - key: TRUSTED_PROXIES
+        sync: false
+      - key: MAX_REQUEST_BODY_MB
+        value: "90"
+      - key: MAX_CONCURRENT_JOBS
+        value: "100"

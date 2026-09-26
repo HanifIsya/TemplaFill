@@ -25,12 +25,41 @@ export function getApiBaseUrl(): string {
 
 const BASE_URL = getApiBaseUrl();
 
+/** Shape of a raw `/jobs/{id}/results` field entry before mapping to `FieldMapping`. */
+interface RawApiField {
+  field_id?: string;
+  field_name?: string;
+  field_label?: string;
+  placeholder?: string;
+  confidence?: number;
+  status?: string;
+  extracted_value?: string;
+  user_edited_value?: string;
+  is_manually_edited?: boolean;
+  extracted_by?: string;
+  fallback_reason?: string;
+  source_reference?: { page?: number; snippet?: string };
+}
+
 class ApiClient {
   private _baseUrl: string;
   private isBackendAvailable: boolean | null = null;
+  // VULN-01: per-job session token received at upload, sent on subsequent calls.
+  private sessionTokens: Record<string, string> = {};
 
   constructor(baseUrl: string) {
     this._baseUrl = baseUrl;
+  }
+
+  private setSessionToken(jobId: string, token?: string): void {
+    if (token) {
+      this.sessionTokens[jobId] = token;
+    }
+  }
+
+  private authHeaders(jobId: string): Record<string, string> {
+    const token = this.sessionTokens[jobId];
+    return token ? { 'X-Session-Token': token } : {};
   }
 
   get baseUrl(): string {
@@ -60,7 +89,7 @@ class ApiClient {
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
         // API returns {success:true, data:{status, version}} ; handle both shapes
-        const version = (data as any)?.data?.version || (data as any)?.version || '0.1.0';
+        const version = data?.data?.version || data?.version || '0.1.0';
         this.isBackendAvailable = true;
         return { status: 'healthy', version, isLive: true };
       }
@@ -69,8 +98,9 @@ class ApiClient {
         this.isBackendAvailable = false;
         return { status: 'waking', version: '0.1.0', isLive: false, isWaking: true, error: `Backend waking (HTTP ${res.status})` };
       }
-    } catch (e: any) {
-      const msg = e?.name === 'AbortError' ? 'Health check timed out (Render may be waking)' : String(e?.message || e);
+    } catch (e: unknown) {
+      const err = e as { name?: string; message?: string };
+      const msg = err?.name === 'AbortError' ? 'Health check timed out (Render may be waking)' : String(err?.message || e);
       // Timeout after 15 min idle is expected for Render Hobby
       const isWaking = msg.includes('timed out') || msg.includes('Failed to fetch') || msg.includes('NetworkError');
       this.isBackendAvailable = false;
@@ -132,6 +162,8 @@ class ApiClient {
       const data = await res.json();
       const jobData = data.data || data;
       const jobId = jobData.job_id || `job-${Date.now().toString(36)}`;
+      // Store the session token issued for this job so later calls are authorized.
+      this.setSessionToken(jobId, jobData.session_token);
       return {
         sessionId: jobId,
         sourceDoc: {
@@ -160,7 +192,10 @@ class ApiClient {
 
   async getJobProgress(jobId: string, currentPercent: number = 0): Promise<JobProgress> {
     try {
-      const res = await fetch(`${this.baseUrl}/jobs/${jobId}`, { cache: 'no-store' });
+      const res = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
+        cache: 'no-store',
+        headers: this.authHeaders(jobId),
+      });
       if (res.ok) {
         const json = await res.json();
         const job = json.data || json;
@@ -234,13 +269,16 @@ class ApiClient {
     if (!isMock) {
       for (let attempt = 0; attempt < 6; attempt++) {
         try {
-          const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/results`, { cache: 'no-store' });
+          const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/results`, {
+            cache: 'no-store',
+            headers: this.authHeaders(sessionId),
+          });
           if (res.ok) {
             const json = await res.json();
             const data = json.data || json;
-            const rawFields: any[] = data.fields || [];
+            const rawFields: RawApiField[] = data.fields || [];
             if (rawFields.length > 0) {
-              const fields: FieldMapping[] = rawFields.map((f: any, idx: number) => {
+              const fields: FieldMapping[] = rawFields.map((f: RawApiField, idx: number) => {
                 const conf = typeof f.confidence === 'number' ? f.confidence : 0.85;
                 const confLevel: 'high' | 'medium' | 'low' = conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low';
                 const fieldName = f.field_name || `field_${idx}`;
@@ -264,7 +302,7 @@ class ApiClient {
                   isConfirmed: f.status === 'confirmed',
                   isSkipped: f.status === 'skipped',
                   fieldType: fType,
-                  extractedBy: f.extracted_by || (f.source_reference?.snippet?.includes('AI_ERROR') ? 'heuristic' : 'gemini'),
+                  extractedBy: (f.extracted_by as FieldMapping['extractedBy']) || (f.source_reference?.snippet?.includes('AI_ERROR') ? 'heuristic' : 'gemini'),
                   fallbackReason: f.fallback_reason,
                 };
               });
@@ -278,7 +316,7 @@ class ApiClient {
                 data.has_ai_error ||
                 data.has_fallback ||
                 data.engine_used === 'heuristic' ||
-                rawFields.some((f: any) =>
+                rawFields.some((f: RawApiField) =>
                   f.extracted_by === 'heuristic' ||
                   f.source_reference?.snippet?.includes('AI_ERROR') ||
                   f.source_reference?.snippet?.includes('404') ||
@@ -290,7 +328,7 @@ class ApiClient {
                 ? 'AI service hit a quota or model limit (404/429/Missing Key). The extraction engine automatically switched to the local heuristic fallback.'
                 : undefined);
 
-              const engineUsed = (data.engine_used as any) || (hasAiError ? 'heuristic' : 'gemini');
+              const engineUsed = (data.engine_used as ExtractionResult['engineUsed']) || (hasAiError ? 'heuristic' : 'gemini');
 
               return {
                 sessionId,
@@ -350,7 +388,7 @@ class ApiClient {
       try {
         const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/fields/${fieldId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...this.authHeaders(sessionId) },
           body: JSON.stringify({ action: 'edit', value: extractedValue }),
         });
         if (res.ok) {
@@ -394,7 +432,7 @@ class ApiClient {
       try {
         const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/fields/${fieldId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...this.authHeaders(sessionId) },
           body: JSON.stringify({ action: 're_extract', hint }),
         });
         if (res.ok) {
@@ -433,7 +471,7 @@ class ApiClient {
       try {
         const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/confirm`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...this.authHeaders(sessionId) },
           body: JSON.stringify({
             include_summary_report: true,
           }),
@@ -464,6 +502,35 @@ class ApiClient {
 
   getDownloadUrl(sessionId: string): string {
     return `${this.baseUrl}/jobs/${sessionId}/download?type=filled`;
+  }
+
+  /**
+   * VULN-01: download the filled document with an authenticated request.
+   * window.open() cannot attach the X-Session-Token header, so we fetch the
+   * blob and trigger a client-side save instead of exposing an unauthenticated URL.
+   */
+  async downloadDocument(sessionId: string, filename?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/download?type=filled`, {
+        cache: 'no-store',
+        headers: this.authHeaders(sessionId),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || `filled_${sessionId.slice(0, 8)}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // Authentication & Session Management (Task 3.8)

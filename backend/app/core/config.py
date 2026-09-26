@@ -8,7 +8,7 @@ See .env.example at project root.
 from functools import lru_cache
 from typing import List
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -26,7 +26,8 @@ class Settings(BaseSettings):
     app_env: str = Field(default="development", description="Runtime environment")
     app_name: str = Field(default="TemplaFill")
     app_version: str = Field(default="0.1.0")
-    debug: bool = Field(default=True)
+    # VULN-09: default False — interactive docs/debug endpoints must be opt-in.
+    debug: bool = Field(default=False)
 
     # ----- Backend Server -----
     backend_host: str = Field(default="0.0.0.0")
@@ -34,6 +35,27 @@ class Settings(BaseSettings):
     cors_origins: str = Field(
         default="http://localhost:3000",
         description="Comma-separated list of allowed CORS origins",
+    )
+
+    # ----- Session / Anonymous auth (VULN-01) -----
+    require_session_token: bool = Field(
+        default=True,
+        description="Require a per-job session token to access /jobs/* (set false only for trusted local dev)",
+    )
+    session_cookie_name: str = Field(default="tf_session")
+    session_cookie_secure: bool = Field(
+        default=False,
+        description="Set true in production (HTTPS) so the session cookie is Secure",
+    )
+    session_cookie_samesite: str = Field(
+        default="lax",
+        description="Session cookie SameSite attribute: lax (same-site) or none (cross-site, requires Secure)",
+    )
+
+    # ----- Trusted proxies (VULN-05) -----
+    trusted_proxies: str = Field(
+        default="",
+        description="Comma-separated list of trusted proxy IPs/CIDRs allowed to set X-Forwarded-For",
     )
 
     # ----- Database -----
@@ -61,11 +83,32 @@ class Settings(BaseSettings):
     max_source_pages: int = Field(default=500)
     file_retention_hours: int = Field(default=24)
 
+    # ----- Resource limits / DoS controls (VULN-02, VULN-03, VULN-11) -----
+    max_request_body_mb: int = Field(
+        default=90,
+        description="Hard cap for the entire multipart upload body (source + template + overhead)",
+    )
+    max_concurrent_jobs: int = Field(
+        default=100,
+        description="Maximum number of jobs retained in memory before oldest are evicted",
+    )
+    max_template_uncompressed_mb: int = Field(
+        default=500,
+        description="Maximum total uncompressed size of a template archive (ZIP-bomb guard)",
+    )
+    max_template_zip_ratio: int = Field(
+        default=100,
+        description="Maximum uncompressed/compressed size ratio for a template archive (ZIP-bomb guard)",
+    )
+
     # ----- Security -----
     secret_key: str = Field(default="change_this_to_a_random_string_in_production")
     jwt_algorithm: str = Field(default="HS256")
     jwt_access_token_expire_minutes: int = Field(default=15)
     jwt_refresh_token_expire_days: int = Field(default=7)
+    session_token_expire_hours: int = Field(
+        default=24, description="Lifetime of a per-job anonymous session token"
+    )
 
     # ----- Rate Limiting -----
     rate_limit_upload: str = Field(default="10/hour")
@@ -85,6 +128,12 @@ class Settings(BaseSettings):
             return []
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    @property
+    def trusted_proxies_list(self) -> List[str]:
+        if not self.trusted_proxies:
+            return []
+        return [p.strip() for p in self.trusted_proxies.split(",") if p.strip()]
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _coerce_cors_origins(cls, v):  # type: ignore[no-untyped-def]
@@ -92,6 +141,17 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return ",".join(v)
         return v
+
+    @model_validator(mode="after")
+    def _enforce_production_secrets(self) -> "Settings":
+        """VULN-14: fail fast if production runs with the placeholder secret."""
+        placeholder = "change_this_to_a_random_string_in_production"
+        if self.app_env.lower() in ("production", "prod") and self.secret_key == placeholder:
+            raise ValueError(
+                "SECRET_KEY must be set to a strong random value when APP_ENV=production "
+                "(refusing to start with the placeholder value)."
+            )
+        return self
 
 
 @lru_cache

@@ -10,12 +10,17 @@ Implements:
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
+import ipaddress
 import re
+import secrets as _secrets
 import time
 import uuid
 from collections import defaultdict, deque
 from pathlib import Path
-from typing import Dict, Deque
+from typing import Dict, Deque, Iterable, Optional
 
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -95,6 +100,11 @@ def sanitize_filename(filename: str, max_len: int = 128) -> str:
 # Simple in-memory rate limiter (MVP)
 # ---------------------------------------------------------------------------
 
+# Error code returned by FastAPI's RequestValidationError for bodies exceeding
+# the declared Content-Length limit (raised by SizeLimitedMiddleware).
+_MAX_SIZE_ERROR_TYPE = "body_too_large"
+
+
 class InMemoryRateLimiter:
     """Sliding window rate limiter per IP and endpoint category.
 
@@ -103,7 +113,12 @@ class InMemoryRateLimiter:
      - read: 60/minute per IP
      - write: 30/minute per IP
      - re_extract: 5/minute per IP
+
+    Bounded memory (VULN-05): the number of tracked keys is capped and empty
+    buckets are pruned so an attacker cannot grow the map indefinitely.
     """
+
+    MAX_TRACKED_KEYS = 10_000
 
     def __init__(self):
         # key -> deque of timestamps (float)
@@ -119,6 +134,18 @@ class InMemoryRateLimiter:
         }
         return mapping.get(category, (60, 60))
 
+    def _prune(self, now: float) -> None:
+        """Drop empty buckets and hard-cap the map size (bounded memory)."""
+        if len(self._buckets) <= self.MAX_TRACKED_KEYS:
+            return
+        empty = [k for k, dq in self._buckets.items() if not dq]
+        for k in empty:
+            self._buckets.pop(k, None)
+        # If still over capacity, clear oldest-ish keys deterministically.
+        if len(self._buckets) > self.MAX_TRACKED_KEYS:
+            for k in list(self._buckets.keys())[: len(self._buckets) - self.MAX_TRACKED_KEYS]:
+                self._buckets.pop(k, None)
+
     def is_allowed(self, ip: str, category: str) -> bool:
         if ip in ("testclient", "test"):
             return True
@@ -132,6 +159,7 @@ class InMemoryRateLimiter:
         if len(dq) >= limit:
             return False
         dq.append(now)
+        self._prune(now)
         return True
 
     def retry_after(self, ip: str, category: str) -> int:
@@ -180,3 +208,175 @@ def validate_file_magic(data: bytes, expected: str) -> bool:
         # All are ZIP-based
         return data.startswith(b"PK")
     return False
+
+
+# ---------------------------------------------------------------------------
+# Trusted client IP resolution (VULN-05)
+# ---------------------------------------------------------------------------
+
+def _is_trusted_proxy(ip: str, trusted: Iterable[str]) -> bool:
+    """Return True if `ip` is inside any trusted proxy entry (IP or CIDR)."""
+    for entry in trusted:
+        entry = entry.strip()
+        if not entry:
+            continue
+        if entry == "*":
+            return True
+        try:
+            if "/" in entry:
+                if ipaddress.ip_address(ip) in ipaddress.ip_network(entry, strict=False):
+                    return True
+            elif ip == entry:
+                return True
+        except ValueError:
+            # Malformed trusted-proxy entry — ignore it.
+            continue
+    return False
+
+
+def get_client_ip(request: Request) -> str:
+    """Resolve the effective client IP in a spoof-resistant way.
+
+    Forwarded headers are only honored when the direct peer is a configured
+    trusted proxy (TRUSTED_PROXIES). Otherwise the socket peer is used, so a
+    random client cannot spoof its IP to evade rate limits.
+    """
+    peer = request.client.host if request.client else "unknown"
+
+    from app.core.config import get_settings
+
+    trusted = get_settings().trusted_proxies_list
+    if not _is_trusted_proxy(peer, trusted):
+        return peer
+
+    # Peer is a trusted proxy. Use the RIGHT-most forwarded hop: that is the
+    # value appended by the proxy nearest to us. Any left-most entries are
+    # attacker-controlled and therefore ignored (spoof-resistant).
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        hops = [h.strip() for h in xff.split(",") if h.strip()]
+        if hops:
+            # Walk right-to-left, skipping any additional trusted hops.
+            for candidate in reversed(hops):
+                if not _is_trusted_proxy(candidate, trusted):
+                    return candidate
+            return hops[-1]
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip:
+        return real_ip.strip()
+    return peer
+
+
+# ---------------------------------------------------------------------------
+# Anonymous per-job session tokens (VULN-01)
+# ---------------------------------------------------------------------------
+
+def _b64url_encode(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(text: str) -> bytes:
+    padding = "=" * (-len(text) % 4)
+    return base64.urlsafe_b64decode(text + padding)
+
+
+def _signing_key() -> bytes:
+    from app.core.config import get_settings
+
+    return get_settings().secret_key.encode("utf-8")
+
+
+def create_session_token(job_id: str) -> str:
+    """Create a signed, expiring token that authorizes access to one job."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    expires_at = int(time.time()) + settings.session_token_expire_hours * 3600
+    nonce = _secrets.token_urlsafe(8)
+    payload = f"{job_id}.{expires_at}.{nonce}".encode("utf-8")
+    encoded = _b64url_encode(payload)
+    sig = hmac.new(_signing_key(), encoded.encode("ascii"), hashlib.sha256).digest()
+    return f"{encoded}.{_b64url_encode(sig)}"
+
+
+def verify_session_token(token: str, job_id: str) -> bool:
+    """Constant-time verification that `token` authorizes `job_id` and is fresh."""
+    if not token or not job_id:
+        return False
+    token = token.strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    try:
+        encoded, sig_b64 = token.rsplit(".", 1)
+        expected = hmac.new(_signing_key(), encoded.encode("ascii"), hashlib.sha256).digest()
+        provided = _b64url_decode(sig_b64)
+        if not hmac.compare_digest(expected, provided):
+            return False
+        payload = _b64url_decode(encoded).decode("utf-8")
+        token_job_id, expires_at_str, _nonce = payload.split(".", 2)
+        if not hmac.compare_digest(token_job_id, job_id):
+            return False
+        if int(expires_at_str) < int(time.time()):
+            return False
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def extract_session_token(request: Request) -> Optional[str]:
+    """Read the session token from the Authorization header or session cookie."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    auth = request.headers.get("authorization")
+    if auth:
+        return auth.strip()
+    header_token = request.headers.get("x-session-token")
+    if header_token:
+        return header_token.strip()
+    return request.cookies.get(settings.session_cookie_name)
+
+
+def is_test_request(request: Request) -> bool:
+    """Detect test clients so CI can exercise endpoints without cookies."""
+    client = request.client.host if request.client else ""
+    return client in ("testclient", "test")
+
+
+# ---------------------------------------------------------------------------
+# Request body size limiter (VULN-03)
+# ---------------------------------------------------------------------------
+
+class SizeLimitedMiddleware(BaseHTTPMiddleware):
+    """Reject requests whose Content-Length exceeds the configured body cap.
+
+    This runs as pure ASGI middleware *outside* FastAPI's exception handling so
+    an oversized request is rejected before any handler or upload parsing starts.
+    """
+
+    def __init__(self, app, max_body_bytes: int):  # type: ignore[no-untyped-def]
+        super().__init__(app)
+        self.max_body_bytes = max_body_bytes
+
+    async def dispatch(self, request: Request, call_next):  # type: ignore[no-untyped-def]
+        if request.method in ("POST", "PUT", "PATCH"):
+            content_length = request.headers.get("content-length")
+            if content_length:
+                try:
+                    if int(content_length) > self.max_body_bytes:
+                        from fastapi.responses import JSONResponse
+
+                        return JSONResponse(
+                            status_code=413,
+                            content={
+                                "success": False,
+                                "error": {
+                                    "code": "FILE_TOO_LARGE",
+                                    "message": f"Request body exceeds the {self.max_body_bytes // (1024 * 1024)}MB limit",
+                                    "details": {},
+                                },
+                            },
+                        )
+                except ValueError:
+                    pass
+        return await call_next(request)

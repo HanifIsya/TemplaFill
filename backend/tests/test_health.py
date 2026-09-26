@@ -61,20 +61,23 @@ def test_cors_headers_present() -> None:
     assert "access-control-allow-origin" in {k.lower() for k in response.headers.keys()}
 
 
-def test_openapi_schema_accessible() -> None:
-    """OpenAPI schema is generated (FastAPI docs)."""
+def test_openapi_schema_disabled_by_default() -> None:
+    """VULN-09: interactive schema is disabled unless DEBUG=true."""
     response = client.get("/openapi.json")
-    assert response.status_code == 200
-    schema = response.json()
-    assert "paths" in schema
-    # Health path must be in schema
-    assert "/api/health" in schema["paths"]
+    assert response.status_code == 404
 
 
-def test_docs_accessible() -> None:
-    """Swagger docs endpoint is reachable."""
+def test_docs_disabled_by_default() -> None:
+    """VULN-09: Swagger docs are not exposed in the secure default config."""
     response = client.get("/docs")
-    assert response.status_code == 200
+    assert response.status_code == 404
+
+
+def test_debug_gemini_disabled_for_non_test_client() -> None:
+    """VULN-09: /api/debug/gemini is gated behind DEBUG and a test-only bypass."""
+    response = client.get("/api/debug/gemini")
+    # Test client is trusted for CI, but DEBUG defaults to False -> 404.
+    assert response.status_code == 404
 
 
 def test_unknown_route_returns_404() -> None:

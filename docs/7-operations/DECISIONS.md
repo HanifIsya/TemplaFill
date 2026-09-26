@@ -305,8 +305,32 @@
      - Project titles, scopes, narrative clauses, dates, amounts, and payment percentages.
   4. **Integration**: Wired into `GeminiExtractor.extract` and `GeminiExtractor.extract_batch`. Configurable via `enable_pii_masking: bool = True` in `config.py`.
 - **Consequences**:
-  - Raw PII is never transmitted to Google Gemini servers over the wire on free tier.
+- Raw PII is never transmitted to Google Gemini servers over the wire on free tier.
   - Zero degradation to extraction accuracy or semantic comprehension.
   - Surrogate tokens are restored seamlessly before presentation and template generation.
+  - **Accuracy note (2026-09-26):** "never transmitted" applies only to the five
+    masked identifier categories. Names, addresses, companies, contract numbers,
+    dates, and amounts are intentionally sent unmasked; docs corrected accordingly.
+
+---
+
+### ADR-019: Cyber Security Remediation — Authorization, DoS, Injection & Supply Chain (2026-09-26)
+- **Date**: 2026-09-26
+- **Status**: Accepted
+- **Context**: A white-box security assessment (`docs/6-security/CYBER_SECURITY_REPORT.md`) found 15 issues, most critically that the API had no authentication or authorization (any job UUID exposed documents), unbounded in-memory retention, formula injection into generated Office files, credential-in-URL for the Gemini REST fallback, and a prior `SECURITY.md` sign-off that overstated controls.
+- **Decision**:
+  1. **Per-job authorization**: HMAC-SHA256 session tokens issued at upload (`security.py:create_session_token`), enforced by `authorize_job_access()` on every `/jobs/*` route; denied callers get `404`. Token delivered via HttpOnly cookie and `X-Session-Token`; frontend uses authenticated blob downloads. `REQUIRE_SESSION_TOKEN` defaults true.
+  2. **DoS controls**: `SizeLimitedMiddleware` (body cap), job TTL eviction + `MAX_CONCURRENT_JOBS` cap + 15-min cleanup task, bounded rate limiter, and a template ZIP-bomb guard.
+  3. **Injection**: `neutralize_formula()` apostrophe-escapes dangerous spreadsheet values while preserving legitimate numbers; LLM output restricted to requested fields with clamped confidence; untrusted data fenced in prompts.
+  4. **Credential handling**: Gemini key sent via `x-goog-api-key` header only; upstream error bodies no longer echoed; `DEBUG` defaults false; production refuses the placeholder `SECRET_KEY`.
+  5. **Supply chain**: direct dependencies pinned; CI `pip-audit` is blocking; `python-multipart` upgraded to a CVE-fixed release.
+  6. **Governance**: `SECURITY.md` corrected to reflect implemented vs planned controls.
+- **Alternatives Considered**:
+  - Full JWT account system now — deferred to Phase 2; session tokens provide isolation without the migration cost.
+  - "Security by obscurity" (keep anonymous UUIDs) — rejected; UUIDs leak via history/referrers and provide no access control.
+- **Consequences**:
+  - Documents are isolated per upload regardless of user accounts; 214 backend tests green (34 new security tests).
+  - Residual/planned: full accounts, Supabase persistence with RLS, out-of-process parsing sandbox, optional full-redaction PII mode.
+  - Cross-site deployments must configure `TRUSTED_PROXIES`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_SAMESITE`, and exact `CORS_ORIGINS`.
 
 
