@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
+import zipfile
 
 from fastapi import APIRouter, BackgroundTasks, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from app.api.dependencies import rate_limit
 from app.core.config import get_settings
-from app.core.security import get_rate_limiter, sanitize_filename
+from app.core.security import sanitize_filename
 from app.services.jobs.manager import get_job_manager
 
 router = APIRouter()
@@ -17,6 +20,32 @@ settings = get_settings()
 ALLOWED_TEMPLATE_EXTS = {".docx", ".xlsx", ".pptx"}
 MAX_SOURCE_MB = settings.max_source_file_size_mb
 MAX_TEMPLATE_MB = settings.max_template_file_size_mb
+MAX_TEMPLATE_UNCOMPRESSED_BYTES = settings.max_template_uncompressed_mb * 1024 * 1024
+MAX_TEMPLATE_ZIP_RATIO = settings.max_template_zip_ratio
+
+
+def _zip_bomb_guard(template_bytes: bytes) -> str | None:
+    """VULN-11: reject Office (ZIP) templates that decompress too much.
+
+    Returns an error message when the archive is unsafe, else None.
+    """
+    try:
+        with zipfile.ZipFile(io.BytesIO(template_bytes)) as zf:
+            total_uncompressed = 0
+            for info in zf.infolist():
+                total_uncompressed += info.file_size
+                if total_uncompressed > MAX_TEMPLATE_UNCOMPRESSED_BYTES:
+                    return (
+                        f"template_file expands beyond the {settings.max_template_uncompressed_mb}MB "
+                        "uncompressed limit"
+                    )
+                if info.compress_size > 0 and (info.file_size / info.compress_size) > MAX_TEMPLATE_ZIP_RATIO:
+                    return (
+                        f"template_file has a suspicious compression ratio (limit {MAX_TEMPLATE_ZIP_RATIO}:1)"
+                    )
+    except zipfile.BadZipFile:
+        return "template_file is not a valid Office (ZIP) archive"
+    return None
 
 
 def _error(code: str, message: str, details: dict | None = None, status: int = 400):
@@ -33,16 +62,10 @@ async def upload_files(
     source_file: UploadFile = File(..., description="Source PDF"),
     template_file: UploadFile = File(..., description="Template .docx/.xlsx/.pptx"),
 ):
-    # Rate limit: 10 uploads/hour per IP
-    client_ip = request.client.host if request.client else "unknown"
-    limiter = get_rate_limiter()
-    if not limiter.is_allowed(client_ip, "upload"):
-        retry_after = limiter.retry_after(client_ip, "upload")
-        return JSONResponse(
-            status_code=429,
-            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Upload rate limit exceeded. Retry after {retry_after}s."}},
-            headers={"Retry-After": str(retry_after)},
-        )
+    # Rate limit: 10 uploads/hour per IP (trusted-proxy-aware)
+    rl = rate_limit(request, "upload")
+    if rl:
+        return rl
     # Validate presence (FastAPI already ensures required, but check filename)
     if not source_file.filename:
         return _error("VALIDATION_ERROR", "source_file is required", status=400)
@@ -99,6 +122,11 @@ async def upload_files(
     if not template_bytes.startswith(b"PK"):
         return _error("VALIDATION_ERROR", "template_file does not appear to be a valid Office document (missing PK header)", status=400)
 
+    # VULN-11: reject ZIP bombs / suspicious archives before any parser runs.
+    zip_error = _zip_bomb_guard(template_bytes)
+    if zip_error:
+        return _error("UNSAFE_FILE", zip_error, status=400)
+
     # Sanitize filenames to prevent path traversal, header injection, XSS
     safe_source_name = sanitize_filename(source_file.filename or "source.pdf")
     safe_template_name = sanitize_filename(template_file.filename or "template.docx")
@@ -116,7 +144,7 @@ async def upload_files(
     background_tasks.add_task(manager.process_job, job.job_id)
 
     # Return 202 per API.md
-    return JSONResponse(
+    response = JSONResponse(
         status_code=202,
         content={
             "success": True,
@@ -135,6 +163,24 @@ async def upload_files(
                 },
                 "estimated_time_seconds": job.estimated_time_seconds,
                 "created_at": job.created_at,
+                # VULN-01: session token authorizing access to THIS job. Cross-origin
+                # clients (Vercel frontend) cannot rely on the cookie, so return it
+                # here; the client sends it back via the X-Session-Token header.
+                "session_token": job.session_token,
             },
         },
     )
+
+    # VULN-01: issue the per-job session cookie. It authorizes access to this
+    # job only; subsequent /jobs/{id}/* calls are automatically authenticated.
+    if job.session_token:
+        response.set_cookie(
+            key=settings.session_cookie_name,
+            value=job.session_token,
+            max_age=settings.session_token_expire_hours * 3600,
+            httponly=True,
+            samesite=settings.session_cookie_samesite,
+            secure=settings.session_cookie_secure,
+            path="/",
+        )
+    return response

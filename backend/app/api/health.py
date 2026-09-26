@@ -1,11 +1,14 @@
 """Health check endpoint — GET /api/health."""
 
+import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
 
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 settings = get_settings()
@@ -27,12 +30,12 @@ async def health_check():
 
 
 @router.get("/debug/gemini", summary="Debug live Gemini connection")
-async def debug_gemini():
+async def debug_gemini(request: Request):
     """Directly test Gemini API connection from Render backend.
 
-    Only available when DEBUG=true (development/staging). Disabled in production.
+    Only available when DEBUG=true (development/staging). Disabled by default.
     """
-    # VULN-6: Prevent information disclosure in production
+    # VULN-09: Prevent information disclosure / quota abuse.
     if not settings.debug:
         return JSONResponse(
             status_code=404,
@@ -55,8 +58,10 @@ async def debug_gemini():
             ext.model = model_name
             resp = await ext._call_gemini("Ping! Reply with 'PONG' only.")
             results[model_name] = {"success": True, "response": resp.strip()[:100]}
-        except Exception as e:
-            results[model_name] = {"success": False, "error": str(e)}
+        except Exception as exc:  # noqa: BLE001
+            # VULN-09: never return raw upstream exception text (may embed secrets).
+            logger.warning("debug_gemini model %s failed: %s", model_name, type(exc).__name__)
+            results[model_name] = {"success": False, "error": "upstream call failed"}
 
     # Also test embedding
     from app.services.rag.embedder import get_embedder
@@ -68,7 +73,8 @@ async def debug_gemini():
             "model": emb.model,
             "dims": len(vecs[0]) if vecs else 0,
         }
-    except Exception as e:
-        results["embedding"] = {"success": False, "model": emb.model, "error": str(e)}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("debug_gemini embedding failed: %s", type(exc).__name__)
+        results["embedding"] = {"success": False, "model": emb.model, "error": "upstream call failed"}
 
     return {"success": True, "data": results}

@@ -83,6 +83,10 @@ class Job(BaseModel):
     filled_doc_bytes: Optional[bytes] = Field(default=None, exclude=True, repr=False)
     filled_doc_filename: Optional[str] = None
 
+    # Access control + eviction (VULN-01, VULN-02)
+    session_token: Optional[str] = Field(default=None, exclude=True, repr=False)
+    created_at_monotonic: float = Field(default=0.0, exclude=True, repr=False)
+
     model_config = {"arbitrary_types_allowed": True}  # type: ignore[assignment]
 
     def to_status_dict(self) -> Dict[str, Any]:

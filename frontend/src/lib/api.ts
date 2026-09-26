@@ -28,9 +28,22 @@ const BASE_URL = getApiBaseUrl();
 class ApiClient {
   private _baseUrl: string;
   private isBackendAvailable: boolean | null = null;
+  // VULN-01: per-job session token received at upload, sent on subsequent calls.
+  private sessionTokens: Record<string, string> = {};
 
   constructor(baseUrl: string) {
     this._baseUrl = baseUrl;
+  }
+
+  private setSessionToken(jobId: string, token?: string): void {
+    if (token) {
+      this.sessionTokens[jobId] = token;
+    }
+  }
+
+  private authHeaders(jobId: string): Record<string, string> {
+    const token = this.sessionTokens[jobId];
+    return token ? { 'X-Session-Token': token } : {};
   }
 
   get baseUrl(): string {
@@ -132,6 +145,8 @@ class ApiClient {
       const data = await res.json();
       const jobData = data.data || data;
       const jobId = jobData.job_id || `job-${Date.now().toString(36)}`;
+      // Store the session token issued for this job so later calls are authorized.
+      this.setSessionToken(jobId, jobData.session_token);
       return {
         sessionId: jobId,
         sourceDoc: {
@@ -160,7 +175,10 @@ class ApiClient {
 
   async getJobProgress(jobId: string, currentPercent: number = 0): Promise<JobProgress> {
     try {
-      const res = await fetch(`${this.baseUrl}/jobs/${jobId}`, { cache: 'no-store' });
+      const res = await fetch(`${this.baseUrl}/jobs/${jobId}`, {
+        cache: 'no-store',
+        headers: this.authHeaders(jobId),
+      });
       if (res.ok) {
         const json = await res.json();
         const job = json.data || json;
@@ -234,7 +252,10 @@ class ApiClient {
     if (!isMock) {
       for (let attempt = 0; attempt < 6; attempt++) {
         try {
-          const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/results`, { cache: 'no-store' });
+          const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/results`, {
+            cache: 'no-store',
+            headers: this.authHeaders(sessionId),
+          });
           if (res.ok) {
             const json = await res.json();
             const data = json.data || json;
@@ -350,7 +371,7 @@ class ApiClient {
       try {
         const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/fields/${fieldId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...this.authHeaders(sessionId) },
           body: JSON.stringify({ action: 'edit', value: extractedValue }),
         });
         if (res.ok) {
@@ -394,7 +415,7 @@ class ApiClient {
       try {
         const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/fields/${fieldId}`, {
           method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...this.authHeaders(sessionId) },
           body: JSON.stringify({ action: 're_extract', hint }),
         });
         if (res.ok) {
@@ -433,7 +454,7 @@ class ApiClient {
       try {
         const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/confirm`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...this.authHeaders(sessionId) },
           body: JSON.stringify({
             include_summary_report: true,
           }),
@@ -464,6 +485,35 @@ class ApiClient {
 
   getDownloadUrl(sessionId: string): string {
     return `${this.baseUrl}/jobs/${sessionId}/download?type=filled`;
+  }
+
+  /**
+   * VULN-01: download the filled document with an authenticated request.
+   * window.open() cannot attach the X-Session-Token header, so we fetch the
+   * blob and trigger a client-side save instead of exposing an unauthenticated URL.
+   */
+  async downloadDocument(sessionId: string, filename?: string): Promise<boolean> {
+    try {
+      const res = await fetch(`${this.baseUrl}/jobs/${sessionId}/download?type=filled`, {
+        cache: 'no-store',
+        headers: this.authHeaders(sessionId),
+      });
+      if (!res.ok) {
+        return false;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename || `filled_${sessionId.slice(0, 8)}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   // Authentication & Session Management (Task 3.8)

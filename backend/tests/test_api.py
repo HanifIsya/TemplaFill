@@ -77,6 +77,69 @@ class TestHealth:
         assert resp.json()["success"] is True
 
 
+class TestAuthorization:
+    """VULN-01: a client without the job session token must not access the job."""
+
+    def _upload(self) -> str:
+        pdf = create_pdf_bytes("Applicant: John Doe")
+        docx = create_docx_bytes(["{{full_name}}"])
+        resp = client.post(
+            "/api/upload",
+            files={
+                "source_file": ("source.pdf", pdf, "application/pdf"),
+                "template_file": ("template.docx", docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            },
+        )
+        assert resp.status_code == 202
+        return resp.json()["data"]["job_id"]
+
+    def test_upload_sets_session_cookie(self):
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        if settings.require_session_token is False:
+            pytest.skip("session enforcement disabled")
+        pdf = create_pdf_bytes("Applicant: John Doe")
+        docx = create_docx_bytes(["{{full_name}}"])
+        resp = client.post(
+            "/api/upload",
+            files={
+                "source_file": ("source.pdf", pdf, "application/pdf"),
+                "template_file": ("template.docx", docx, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            },
+        )
+        assert resp.status_code == 202
+        # httpx exposes the cookie jar on the response.
+        assert settings.session_cookie_name in resp.cookies
+
+    def test_unauthorized_job_access_returns_404(self):
+        from app.core.config import get_settings
+
+        if not get_settings().require_session_token:
+            pytest.skip("session enforcement disabled")
+        # Simulate a non-test client (no trusted test bypass) with no token.
+        from app.core.config import Settings
+
+        # Use a fresh client whose peer is not 'testclient' is not possible with
+        # TestClient, so verify the authorization helper directly.
+        from app.api.dependencies import authorize_job_access
+        from app.services.jobs.models import Job, JobStatus
+
+        job = Job(job_id="11111111-1111-1111-1111-111111111111", status=JobStatus.completed)
+        job.session_token = "real-token"
+
+        class DummyClient:
+            host = "203.0.113.9"
+
+        scope = {"type": "http", "headers": [], "client": ("203.0.113.9", 1), "method": "GET", "path": "/"}
+        from starlette.requests import Request
+
+        req = Request(scope)
+        denied = authorize_job_access(req, job)
+        assert denied is not None
+        assert denied.status_code == 404
+
+
 class TestUpload:
     def test_upload_success_pdf_docx(self):
         pdf = create_pdf_bytes("Applicant: John Doe\nInvoice: INV-001\nTotal: $5,000", title="Contract")

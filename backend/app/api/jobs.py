@@ -12,7 +12,8 @@ from urllib.parse import quote
 from fastapi import APIRouter, Query, Body, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from app.core.security import get_rate_limiter, sanitize_text_input, sanitize_filename
+from app.api.dependencies import authorize_job_access, rate_limit
+from app.core.security import sanitize_text_input, sanitize_filename
 from app.services.jobs.manager import get_job_manager
 from app.services.jobs.models import JobStatus
 
@@ -38,7 +39,10 @@ def _validate_job_id(job_id: str):
 
 
 @router.get("/jobs/{job_id}", summary="Get job status")
-async def get_job_status(job_id: str):
+async def get_job_status(request: Request, job_id: str):
+    rl = rate_limit(request, "read")
+    if rl:
+        return rl
     err = _validate_job_id(job_id)
     if err:
         return err
@@ -46,6 +50,10 @@ async def get_job_status(job_id: str):
     job = await manager.get_job(job_id)
     if not job:
         return _error("NOT_FOUND", "Job not found", status=404)
+    # VULN-01: only the session that created the job may read it.
+    denied = authorize_job_access(request, job)
+    if denied:
+        return denied
     return _success(
         {
             "job_id": job.job_id,
@@ -59,7 +67,10 @@ async def get_job_status(job_id: str):
 
 
 @router.get("/jobs/{job_id}/results", summary="Get extraction results")
-async def get_job_results(job_id: str):
+async def get_job_results(request: Request, job_id: str):
+    rl = rate_limit(request, "read")
+    if rl:
+        return rl
     err = _validate_job_id(job_id)
     if err:
         return err
@@ -67,6 +78,9 @@ async def get_job_results(job_id: str):
     job = await manager.get_job(job_id)
     if not job:
         return _error("NOT_FOUND", "Job not found", status=404)
+    denied = authorize_job_access(request, job)
+    if denied:
+        return denied
     if job.status == JobStatus.failed:
         return _error("FAILED", job.error or "Job failed", status=500)
     if job.status != JobStatus.completed:
@@ -84,15 +98,9 @@ async def patch_field(
     payload: dict = Body(...),
 ):
     # Rate limit: 30 writes/minute per IP
-    client_ip = request.client.host if request.client else "unknown"
-    limiter = get_rate_limiter()
-    if not limiter.is_allowed(client_ip, "write"):
-        retry_after = limiter.retry_after(client_ip, "write")
-        return JSONResponse(
-            status_code=429,
-            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Write rate limit exceeded. Retry after {retry_after}s."}},
-            headers={"Retry-After": str(retry_after)},
-        )
+    rl = rate_limit(request, "write")
+    if rl:
+        return rl
 
     err = _validate_job_id(job_id)
     if err:
@@ -106,6 +114,9 @@ async def patch_field(
     job = await manager.get_job(job_id)
     if not job:
         return _error("NOT_FOUND", "Job not found", status=404)
+    denied = authorize_job_access(request, job)
+    if denied:
+        return denied
     if job.status != JobStatus.completed:
         return _error("NOT_COMPLETED", "Job not yet completed", status=400)
 
@@ -228,15 +239,9 @@ async def patch_field(
 @router.post("/jobs/{job_id}/confirm", summary="Confirm all fields and generate")
 async def confirm_fields(request: Request, job_id: str, payload: dict = Body(default={})):
     # Rate limit: 30 writes/minute per IP
-    client_ip = request.client.host if request.client else "unknown"
-    limiter = get_rate_limiter()
-    if not limiter.is_allowed(client_ip, "write"):
-        retry_after = limiter.retry_after(client_ip, "write")
-        return JSONResponse(
-            status_code=429,
-            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Write rate limit exceeded. Retry after {retry_after}s."}},
-            headers={"Retry-After": str(retry_after)},
-        )
+    rl = rate_limit(request, "write")
+    if rl:
+        return rl
 
     err = _validate_job_id(job_id)
     if err:
@@ -245,6 +250,9 @@ async def confirm_fields(request: Request, job_id: str, payload: dict = Body(def
     job = await manager.get_job(job_id)
     if not job:
         return _error("NOT_FOUND", "Job not found", status=404)
+    denied = authorize_job_access(request, job)
+    if denied:
+        return denied
     if job.status != JobStatus.completed:
         return _error("NOT_COMPLETED", "Job must be completed before confirm", status=400)
 
@@ -292,7 +300,10 @@ async def confirm_fields(request: Request, job_id: str, payload: dict = Body(def
 
 
 @router.get("/jobs/{job_id}/download", summary="Download filled document")
-async def download_document(job_id: str, type: str = Query(default="filled", description="filled or summary")):  # noqa: A002
+async def download_document(request: Request, job_id: str, type: str = Query(default="filled", description="filled or summary")):  # noqa: A002
+    rl = rate_limit(request, "read")
+    if rl:
+        return rl
     err = _validate_job_id(job_id)
     if err:
         return err
@@ -300,6 +311,9 @@ async def download_document(job_id: str, type: str = Query(default="filled", des
     job = await manager.get_job(job_id)
     if not job:
         return _error("NOT_FOUND", "Job not found", status=404)
+    denied = authorize_job_access(request, job)
+    if denied:
+        return denied
     if job.status != JobStatus.completed:
         return _error("NOT_COMPLETED", "Job not yet completed", status=404)
     if not job.filled_doc_bytes:
@@ -338,15 +352,9 @@ async def download_document(job_id: str, type: str = Query(default="filled", des
 @router.post("/jobs/{job_id}/fields/{field_id}/re-extract", summary="Re-extract field")
 async def re_extract_field(request: Request, job_id: str, field_id: str, payload: dict = Body(default={})):
     # Rate limit: 5 re-extracts/minute per IP
-    client_ip = request.client.host if request.client else "unknown"
-    limiter = get_rate_limiter()
-    if not limiter.is_allowed(client_ip, "re_extract"):
-        retry_after = limiter.retry_after(client_ip, "re_extract")
-        return JSONResponse(
-            status_code=429,
-            content={"success": False, "error": {"code": "RATE_LIMITED", "message": f"Re-extract rate limit exceeded. Retry after {retry_after}s."}},
-            headers={"Retry-After": str(retry_after)},
-        )
+    rl = rate_limit(request, "re_extract")
+    if rl:
+        return rl
     # Sanitize user-provided hint text
     hint = sanitize_text_input(str(payload.get("hint", "") if isinstance(payload, dict) else ""), max_len=2000)
     # Reuse logic from patch with re_extract action
@@ -363,6 +371,9 @@ async def re_extract_field(request: Request, job_id: str, field_id: str, payload
     job = await manager.get_job(job_id)
     if not job:
         return _error("NOT_FOUND", "Job not found", status=404)
+    denied = authorize_job_access(request, job)
+    if denied:
+        return denied
     field = next((f for f in job.field_results if f.field_id == field_id), None)
     if not field:
         return _error("NOT_FOUND", "Field not found", status=404)
@@ -419,7 +430,10 @@ async def re_extract_field(request: Request, job_id: str, field_id: str, payload
 
 
 @router.get("/jobs/{job_id}/source/page/{page_number}", summary="Get source page content")
-async def get_source_page(job_id: str, page_number: int, highlight: Optional[str] = Query(default=None)):
+async def get_source_page(request: Request, job_id: str, page_number: int, highlight: Optional[str] = Query(default=None)):
+    rl = rate_limit(request, "read")
+    if rl:
+        return rl
     err = _validate_job_id(job_id)
     if err:
         return err
@@ -427,6 +441,9 @@ async def get_source_page(job_id: str, page_number: int, highlight: Optional[str
     job = await manager.get_job(job_id)
     if not job:
         return _error("NOT_FOUND", "Job not found", status=404)
+    denied = authorize_job_access(request, job)
+    if denied:
+        return denied
     if not job.extracted_doc:
         return _error("NOT_FOUND", "Source document not yet processed", status=404)
     doc = job.extracted_doc

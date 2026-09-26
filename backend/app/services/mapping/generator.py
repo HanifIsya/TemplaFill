@@ -31,17 +31,64 @@ from typing import Dict, Tuple, Union
 from app.services.mapping.parser import _find_placeholders, _normalize_field_name
 
 
-def _clean_field_value(val: Any) -> str:
+_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+
+
+def _is_plain_number(rest: str) -> bool:
+    """True if `rest` is a plain numeric/currency token (e.g. '500', '12.5', '$500')."""
+    candidate = rest.strip().replace(",", "").replace("$", "").replace(" ", "")
+    if not candidate:
+        return False
+    try:
+        float(candidate)
+        return True
+    except ValueError:
+        return False
+
+
+def neutralize_formula(value: Any) -> str:
+    """VULN-04: neutralize spreadsheet formula/DDE injection.
+
+    Excel treats a leading '=', '+', '-', '@' (and control chars) as the start
+    of a formula. We prefix dangerous values with an apostrophe so Excel stores
+    them as literal text, while preserving legitimate numeric values such as
+    '-500' or '+12.5'.
+    """
+    text = "" if value is None else str(value)
+    if not text:
+        return text
+    # Leading control characters (tab/CR) can also trigger formula evaluation.
+    if text[0] in ("\t", "\r", "\n"):
+        return "'" + text
+    stripped = text.lstrip()
+    if not stripped:
+        return text
+    first = stripped[0]
+    if first == "=" or first == "@":
+        return "'" + text
+    if first in ("+", "-"):
+        if _is_plain_number(stripped[1:]):
+            return text
+        return "'" + text
+    return text
+
+
+def _clean_field_value(val: Any, *, spreadsheet: bool = False) -> str:
     if val is None:
         return ""
     text = str(val)
     # Strip markdown bold/italic tags like **text** or *text* that LLMs might produce
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
     text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    # VULN-04: neutralize formula/DDE payloads for spreadsheet output.
+    if spreadsheet:
+        text = neutralize_formula(text)
     return text
 
 
-def _build_replacement_map(mapped: Dict[str, str]) -> Tuple[Dict[str, str], Dict[str, str]]:
+def _build_replacement_map(
+    mapped: Dict[str, str], *, spreadsheet: bool = False
+) -> Tuple[Dict[str, str], Dict[str, str]]:
     """Normalize mapped dict to handle both raw placeholder and field_name keys.
 
     The mapper returns both; generator should handle either.
@@ -52,7 +99,7 @@ def _build_replacement_map(mapped: Dict[str, str]) -> Tuple[Dict[str, str], Dict
     for k, v in mapped.items():
         if not isinstance(k, str):
             continue
-        val = _clean_field_value(v)
+        val = _clean_field_value(v, spreadsheet=spreadsheet)
         placeholders = _find_placeholders(k)
         if placeholders:
             # k is a raw placeholder like {{nomor_kontrak}}
@@ -210,7 +257,7 @@ def _generate_xlsx(template_bytes: bytes, mapped: Dict[str, str]) -> bytes:
     except ImportError as e:
         raise ImportError("openpyxl not installed") from e
 
-    direct_map, norm_map = _build_replacement_map(mapped)
+    direct_map, norm_map = _build_replacement_map(mapped, spreadsheet=True)
 
     wb = openpyxl.load_workbook(io.BytesIO(template_bytes))
     for ws in wb.worksheets:

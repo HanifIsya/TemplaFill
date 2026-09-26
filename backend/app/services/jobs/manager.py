@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import uuid
 from datetime import datetime, timezone
 from typing import Dict, Optional, List
@@ -58,6 +59,10 @@ class JobManager:
             total_fields = 0
             parsed = None
 
+        from app.core.config import get_settings
+        from app.core.security import create_session_token
+
+        settings = get_settings()
         job = Job(
             job_id=job_id,
             status=JobStatus.queued,
@@ -69,12 +74,44 @@ class JobManager:
             source_filename=source_filename,
             template_filename=template_filename,
             progress=JobProgress(phase="queued", current_field=0, total_fields=total_fields, percent=0),
+            created_at_monotonic=time.monotonic(),
+            session_token=create_session_token(job_id),
         )
         # Keep parsed for fast access? but pipeline will re-parse
         # Store
         async with _lock:
             _jobs[job_id] = job
+            self._evict_locked(settings.file_retention_hours, settings.max_concurrent_jobs)
         return job
+
+    def _evict_locked(self, retention_hours: float, max_jobs: int) -> int:
+        """Evict expired/finished jobs and enforce capacity. Caller holds _lock."""
+        now = time.monotonic()
+        ttl_seconds = max(0.0, retention_hours) * 3600
+        expired = [
+            jid
+            for jid, j in _jobs.items()
+            if ttl_seconds > 0 and (now - getattr(j, "created_at_monotonic", now)) >= ttl_seconds
+        ]
+        for jid in expired:
+            _jobs.pop(jid, None)
+        if len(_jobs) > max_jobs:
+            # Prefer evicting oldest *finished* jobs first, then oldest overall.
+            def _key(item):
+                jid, j = item
+                finished = 0 if j.status in (JobStatus.completed, JobStatus.failed) else 1
+                return (finished, getattr(j, "created_at_monotonic", 0.0))
+            for jid, _j in sorted(_jobs.items(), key=_key)[: len(_jobs) - max_jobs]:
+                _jobs.pop(jid, None)
+        return len(expired)
+
+    async def evict_expired(self) -> int:
+        """Public entry point for the periodic cleanup task."""
+        from app.core.config import get_settings
+
+        settings = get_settings()
+        async with _lock:
+            return self._evict_locked(settings.file_retention_hours, settings.max_concurrent_jobs)
 
     async def get_job(self, job_id: str) -> Optional[Job]:
         async with _lock:

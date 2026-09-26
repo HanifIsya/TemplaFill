@@ -5,9 +5,9 @@
 ---
 
 ## Last Updated
-- **Date**: 2026-09-25
-- **By**: Antigravity
-- **Summary**: **Selective PII Masking & Privacy Hardening (ADR-018)**: Implemented `SelectivePIIMasker` (`app/services/privacy/masker.py`) with zero-leakage tokenization for NPWP, NIK, Bank Account Numbers, Emails, and Phone Numbers while explicitly preserving Company names, representative names/titles, scopes, narrative text, dates, and currency amounts to guarantee 100% extraction accuracy without semantic degradation. Wired into `GeminiExtractor.extract` and `extract_batch` with automatic surrogate token restoration. Added `enable_pii_masking` config toggle. Verified 180/180 backend pytest green, 13/13 frontend tests green. Updated `DATA_PRIVACY.md` and `DECISIONS.md`.
+- **Date**: 2026-09-26
+- **By**: OpenCode
+- **Summary**: **Cyber security remediation (VULN-01→15)**: White-box assessment published in `docs/6-security/CYBER_SECURITY_REPORT.md`; all findings fixed. Highlights: per-job signed session tokens + authorization on every `/jobs/*` route (404 to prevent enumeration); job TTL eviction + capacity cap + cleanup task; request-body size middleware; formula/DDE injection neutralization for spreadsheets; trusted-proxy client IP + bounded rate limiter (read routes now limited); Gemini key moved to `x-goog-api-key` header; prompt-injection fencing + output validation; explicit CORS allow-list; `DEBUG` defaults false; template ZIP-bomb guard; dependencies pinned + blocking `pip-audit` (patched `python-multipart` CVE); production refuses placeholder `SECRET_KEY`. Frontend sends the session token and downloads via authenticated fetch. **214 backend tests green** (34 new), frontend build green, `pip-audit` clean. `SECURITY.md` corrected (prior sign-off overstated controls).
 
 ---
 
@@ -70,6 +70,9 @@ _All planned tasks in Phase 0 through Phase 5 have been completed._
 | Batch extraction: single-prompt all fields | >90% fewer calls, kills 429; small docs 0 retriever calls | 2026-09-24 | ADR-013/017 ✅ |
 | Engine provenance: extracted_by/fallback_reason badges | Transparency over silent fallback | 2026-09-24 | ADR-014 ✅ |
 | Generator: atomic `{{field}}→value` (no `{{value}}`) | Borrowed brace corruption fix | 2026-09-24 | ADR-017 ✅ |
+| Anonymous per-job session tokens (HMAC, 404-on-denied) | Prevent cross-job data access without full accounts yet | 2026-09-26 | ADR-019 ✅ |
+| Pinned deps + blocking `pip-audit` | Reproducible builds + no known-CVE releases | 2026-09-26 | ADR-019 ✅ |
+| Formula/DDE neutralization for spreadsheet output | Prevent client-side injection via filled `.xlsx` | 2026-09-26 | ADR-019 ✅ |
 
 ---
 

@@ -7,14 +7,20 @@
 
 ## Authentication
 
-**Current (MVP, 2026-09-24)**: All endpoints are **anonymous / no-auth** — consistent with `README.md` *Zero Credential Dependency* and `backend/app/api/*` (no JWT guard; `AuthModal` + `localStorage` are UI stubs for future `Phase 2`). `GET /api/health` is public and fast (no DB) and also reports `ai_configured` for banner logic. The `Authorization: Bearer <jwt_token>` placeholder below is the **planned Phase 2** contract (IDs `users.id` → `jobs.user_id` in `DATA_MODEL.md`), not yet enforced.
+**Current (MVP, 2026-09-26)**: Public endpoints are `GET /api/health` and `POST /api/upload`. Every uploaded job is protected by a **signed per-job session token** (VULN-01 fix):
+
+- `POST /api/upload` returns `data.session_token` and sets an HttpOnly session cookie.
+- `GET/PATCH/POST /api/jobs/{job_id}/...` require that token (via the cookie or `X-Session-Token` header). Callers without it receive `404` (not `403`) so job IDs cannot be enumerated.
+- `REQUIRE_SESSION_TOKEN` (default `true`) toggles enforcement; the test client is exempt so CI can run without cookie plumbing.
+
+Full user accounts are still **planned for Phase 2** (IDs `users.id` → `jobs.user_id` in `DATA_MODEL.md`):
 
 ```
 # Phase 2 (planned)
 Authorization: Bearer <jwt_token>  # HS256, 15m access / 7d refresh, double-submit CSRF
 ```
 
-For now, every upload creates an anonymous `Job` (`manager.py:38` `create_job`) with no `user_id`; `InMemoryRateLimiter` keys by `client.host` (with `testclient` exempt so CI 167 tests never 429). Rate limits are per-IP, not per-user.
+Each upload creates a `Job` bound to its session token (`manager.py:create_job`). `InMemoryRateLimiter` resolves the client IP from trusted-proxy headers (`get_client_ip`), with `testclient` exempt so CI never 429s; limits are per-IP.
 
 ---
 
@@ -121,14 +127,16 @@ Upload source PDF and template file. Starts a new processing job.
       "format": "docx"
     },
     "estimated_time_seconds": 45,
-    "created_at": "2026-09-23T14:30:00Z"
+    "created_at": "2026-09-23T14:30:00Z",
+    "session_token": "eyJ... (signed per-job access token; also set as HttpOnly cookie)"
   }
 }
 ```
 
 **Errors**:
-- `413`: File too large
+- `413`: File too large / request body over `MAX_REQUEST_BODY_MB`
 - `415`: Unsupported file type
+- `400`: Unsafe template archive (ZIP-bomb guard)
 - `400`: Missing required file
 
 ---
