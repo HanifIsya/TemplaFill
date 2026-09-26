@@ -5,6 +5,10 @@
 ---
 
 ## Last Updated
+- **Date**: 2026-09-26 (tier backend session)
+- **By**: OpenCode
+- **Summary**: **Phase 6 backend implemented (tasks 6.2–6.8, branch `feat/oc-tier-backend`)**: tier auth (`POST/GET /api/auth/login|logout|quota`, scrypt shared credential, HMAC tier tokens purpose-isolated from job tokens, `scripts/hash_password.py`), day-window quotas in the rate limiter (`free_upload` 5/day, `pro_upload` 50/day, `auth` 5/min; 429 `QUOTA_EXCEEDED` + `Retry-After`), `DeepSeekExtractor` (`deepseek-flash` Chat Completions, JSON mode, shared prompt/VULN-07 validation, `force_fake` CI path, heuristic-only fallback), `Job.tier` + provider selection, pro-tier RAG bypass (consecutive chunk batching, **zero Google calls**, proven by tests monkeypatching Gemini/embedder to raise). Shared files edited per Rule 2 (note below): `.env.example`, `render.yaml` (+ `config.py`). **254 backend tests green** (214 baseline + 40 new `test_tier_system.py`), offline eval PASS both `--provider gemini` and `--provider deepseek`. ADR-020 gained implementation notes. Work was isolated in a **git worktree** (`E:\TemplaFill-oc`) because the shared checkout was on Antigravity's `feat/ag-tier-frontend` branch with uncommitted frontend work.
+
 - **Date**: 2026-09-26 (later session)
 - **By**: OpenCode
 - **Summary**: **Tier system planning (Phase 6, PROPOSED — awaiting user approval)**: wrote `docs/1-product/TIER_PLAN.md` and `docs/2-architecture/TIER_ARCHITECTURE.md` (user-directed creation of new planning files in Antigravity-owned doc folders — noted under Cross-Agent Requests). User decisions locked: one fixed shared password (contact `hanif.isya.annafi-2024@fst.unair.ac.id`), free tier = Gemini with **5 jobs/day/IP** cap, account tier = DeepSeek `deepseek-flash` with zero Google calls (retrieval bypassed via sequential batching), history/results in browser localStorage only, pro fallback = heuristic never Gemini. `TASKS.md` Phase 6 added (6.0–6.17 split OpenCode backend / Antigravity frontend+docs / joint), `TESTING.md` + `FEEDBACK_LOOP.md` revised (real counts 214/13, corrected commands, new 18-case tier test matrix, per-provider eval), ADR-020 logged as **Pending**. **No implementation started — waiting for user's go.**
@@ -45,8 +49,8 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - [x] `eval/` — 5 synthetic datasets + `generate_eval_datasets.py` + `run_eval.py` (1.00 PASS, halluc 0.00, placeholder 1.00) ✅
 
 ### What's Being Worked On Right Now
-- **Phase 6 (Tiers) PLANNED, NOT STARTED** — plan docs in `docs/1-product/TIER_PLAN.md` + `docs/2-architecture/TIER_ARCHITECTURE.md` await user approval; tasks 6.0–6.17 in `TASKS.md`.
-- Phases 0–5 are complete; PR #1 (security remediation) merged to `main`.
+- **Phase 6 (Tiers)**: backend 6.2–6.8 DONE on `feat/oc-tier-backend` (PR pending); Antigravity owns frontend 6.9–6.13 + docs 6.14; joint 6.15–6.17 remain. Plan docs in `docs/1-product/TIER_PLAN.md` + `docs/2-architecture/TIER_ARCHITECTURE.md`.
+- Phases 0–5 are complete; PR #1 (security remediation) + PR #2 (tier plan docs) merged to `main`.
 
 ### Completed Milestones
 1. ✅ OpenCode Phase 1 done — 140/140 tests green.
@@ -83,6 +87,14 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 ---
 
 ## Cross-Agent Requests
+
+### Request: OpenCode editing shared `.env.example` + `render.yaml` for Phase 6 tiers
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: `.env.example`, `render.yaml` (both shared — Rule 2 note given BEFORE editing, also posted to the live checkout's CONTEXT.md)
+- **Description**: Task 6.6 adds backend-only tier/provider env vars: `TIER_ACCOUNT_USERNAME`, `TIER_ACCOUNT_PASSWORD_HASH`, `TIER_TOKEN_EXPIRE_DAYS`, `FREE_JOBS_PER_DAY`, `PRO_JOBS_PER_DAY`, `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_BASE_URL`, `DEEPSEEK_MAX_BATCH_CHARS`. No `NEXT_PUBLIC_*` vars added. Edits are on branch `feat/oc-tier-backend` (worktree `E:\TemplaFill-oc`). Please avoid touching these same keys.
+- **Priority**: high
+- **Status**: done
 
 ### Request: Tier planning docs written by OpenCode in Antigravity-owned folders
 - **From**: OpenCode
@@ -133,6 +145,7 @@ _No known issues._
 | 2026-09-24 | Both | **Close-Loop Live Test with `Test source/` 51-field contract (ADR-017 validation)**: OpenCode validated live `https://templa-fill.vercel.app` (`Checking backend → https://templafill-backend.onrender.com/api` via `getApiBaseUrl()` ) and ran local+direct REST checks on `source_kontrak_konsultasi.pdf` (2 pages, 3546 chars, 2 chunks) + `target_template_ringkasan_kontrak.docx` (6 tables, 51 placeholders). Direct REST `gemini-3.5-flash` succeeded for 6118-char prompt (51/51 found) while `gemini-3.6-flash` gave 503 — confirmed need for candidate reorder `3.5→3.6` and SDK→REST fallback. Enhanced `FakeExtractor` with Indonesian date (`15 September 2026`), `PT ...` company, `Jl.` address, `Optimalisasi` title, `BCA ...`, `0,5%` heuristics — fallback coverage `1→20/51` for 503/429 resilience. Added `_call_gemini` REST fallback (`httpx`+`urllib` 35s) and `PT [A-Za-z]` atomic regex fix. Verified filled docx brace-free (`{{value}}` absent) via `generate_filled_document` on 6-table docx, 167/167 pytest + 13/13 frontend + `next build` clean. |
 | 2026-09-26 | OpenCode | **Security remediation shipped**: all 15 findings from `docs/6-security/CYBER_SECURITY_REPORT.md` fixed (session-token authz, eviction, body cap, formula guard, trusted-proxy IP, Gemini header key, prompt fencing, CORS allow-list, debug gating, read rate limits, ZIP guard, pinned deps + blocking pip-audit, SECRET_KEY fail-fast, docs corrected); 214 backend tests (34 new) + 13 frontend + build green; PR #1 merged to `main` (CI fully green after fixing pre-existing `npm ci` lockfile drift and 10 lint errors). |
 | 2026-09-26 | OpenCode | **Tier system planned (Phase 6, awaiting approval)**: TIER_PLAN.md + TIER_ARCHITECTURE.md created (user-directed), TASKS.md Phase 6 added with OpenCode/Antigravity split, TESTING.md + FEEDBACK_LOOP.md revised (214/13 counts, real commands, tier test matrix, per-provider eval), ADR-020 Pending, cross-agent note added. |
+| 2026-09-26 | OpenCode | **Tier backend shipped (tasks 6.2–6.8, `feat/oc-tier-backend`, isolated in git worktree `E:\TemplaFill-oc`)**: tier auth endpoints + scrypt shared credential + purpose-isolated HMAC tier tokens (30d) + `scripts/hash_password.py`; rate-limiter day window (`free_upload` 5/day, `pro_upload` 50/day, `auth` 5/min) with 429 `QUOTA_EXCEEDED` + `Retry-After` enforced in `POST /api/upload` after validation; `DeepSeekExtractor` (JSON mode, pacing/backoff, shared prompt + VULN-07 validation, `force_fake`, heuristic-only fallback); `Job.tier` + `get_extractor_for_tier` provider selection; pro path skips embeddings/retriever entirely (consecutive chunk batching via `_split_chunks_by_chars`); re-extract endpoints tier-aware; `run_eval.py --provider gemini|deepseek --live`. 40 new tests (`tests/test_tier_system.py`) incl. zero-Gemini-on-pro (Google calls monkeypatched to raise) → **254 backend tests green**; offline eval 5/5 PASS both providers. ADR-020 implementation notes logged; shared-file note given in CONTEXT.md before editing `.env.example`/`render.yaml`. |
 
 
 

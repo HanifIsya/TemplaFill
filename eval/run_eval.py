@@ -6,6 +6,8 @@ per eval/datasets/ ground truth.
 
 Usage:
     python eval/run_eval.py --dataset eval/datasets --output eval/results
+    python eval/run_eval.py --provider deepseek          # account tier, offline fake
+    python eval/run_eval.py --provider deepseek --live   # real DeepSeek API (pre-release gate)
 
 Outputs a JSON file and a pretty table per EVAL.md.
 """
@@ -32,6 +34,10 @@ from app.services.rag.vector_store import InMemoryVectorStore, StoredChunk
 from app.services.rag.retriever import Retriever
 from app.services.mapping.parser import parse_template_bytes
 from app.services.generation.extractor import get_extractor
+
+# Char budget for the DeepSeek (account-tier) path — mirrors the pro-tier
+# sequential batching in JobManager (RAG is bypassed for this provider).
+DEEPSEEK_MAX_BATCH_CHARS = 240_000
 
 
 def _normalize_value(v: str | None) -> str | None:
@@ -78,8 +84,13 @@ def _is_hallucination(expected: str | None, extracted: str | None, source_text: 
     return False
 
 
-async def evaluate_dataset(dataset_dir: pathlib.Path) -> dict:
-    """Evaluate single dataset directory containing ground_truth_01.json, source pdf, template."""
+async def evaluate_dataset(dataset_dir: pathlib.Path, provider: str = "gemini", live: bool = False) -> dict:
+    """Evaluate single dataset directory containing ground_truth_01.json, source pdf, template.
+
+    provider: "gemini" (free tier, RAG retrieval) or "deepseek" (account tier,
+    consecutive-chunk batching — no embeddings). live=False forces offline
+    fake extractors (CI has no API keys).
+    """
     # Find ground truth
     gt_files = list(dataset_dir.glob("ground_truth*.json"))
     if not gt_files:
@@ -117,14 +128,18 @@ async def evaluate_dataset(dataset_dir: pathlib.Path) -> dict:
         chunks = chunk_document(doc)
         if not chunks:
             return {"dataset_id": dataset_id, "error": "no chunks", "status": "error"}
-        embedder = get_embedder(force_fake=True)
-        store = InMemoryVectorStore()
-        texts = [c.text for c in chunks]
-        embeddings = await embedder.embed_texts(texts)
-        stored = []
-        for c, emb in zip(chunks, embeddings):
-            stored.append(StoredChunk(chunk_id=c.chunk_id, text=c.text, embedding=emb, page_number=c.page_number, header=c.header))
-        await store.add(stored)
+        store = None
+        embedder = None
+        if provider == "gemini":
+            embedder = get_embedder(force_fake=True)
+            store = InMemoryVectorStore()
+            texts = [c.text for c in chunks]
+            embeddings = await embedder.embed_texts(texts)
+            stored = []
+            for c, emb in zip(chunks, embeddings):
+                stored.append(StoredChunk(chunk_id=c.chunk_id, text=c.text, embedding=emb, page_number=c.page_number, header=c.header))
+            await store.add(stored)
+        # DeepSeek path: no embeddings at all (ADR-020 — zero Google calls).
         parsed = parse_template_bytes(template_bytes, template_file)
     except Exception as e:  # noqa: BLE001
         return {"dataset_id": dataset_id, "error": f"chunk/embed/parse failed: {e}", "status": "error"}
@@ -133,9 +148,23 @@ async def evaluate_dataset(dataset_dir: pathlib.Path) -> dict:
     placeholder_detection_rate = len(parsed.fields) / len(fields_gt) if fields_gt else 0
     placeholders_ok = placeholder_detection_rate >= 0.95
 
-    # For each ground truth field: retrieve + extract
-    retriever = Retriever(vector_store=store, embedder=embedder)
-    extractor = get_extractor(force_fake=True)
+    # For each ground truth field: retrieve (gemini) or consecutive batch (deepseek) + extract
+    if provider == "deepseek":
+        from app.services.generation.deepseek_extractor import get_deepseek_extractor
+
+        retriever = None
+        # Consecutive chunk window within the char budget (mirrors pro tier).
+        window = []
+        size = 0
+        for c in chunks:
+            if size + len(c.text) > DEEPSEEK_MAX_BATCH_CHARS and window:
+                break
+            window.append(c)
+            size += len(c.text)
+        extractor = get_deepseek_extractor(force_fake=not live)
+    else:
+        retriever = Retriever(vector_store=store, embedder=embedder)
+        extractor = get_extractor(force_fake=not live)
 
     per_field_results = []
     correct = 0
@@ -151,14 +180,18 @@ async def evaluate_dataset(dataset_dir: pathlib.Path) -> dict:
         expected = field_gt.get("expected_value")
         is_present = field_gt.get("is_present_in_source", expected is not None)
 
-        # Retrieve relevant chunks
-        try:
-            retrieved = await retriever.retrieve_for_field(field_name, top_k=5)
-            chunk_texts = [r.chunk.text for r in retrieved] if retrieved else [c.text for c in chunks[:5]]
-            source_pages = [r.chunk.page_number for r in retrieved] if retrieved else [1]
-        except Exception:  # noqa: BLE001
-            chunk_texts = [c.text for c in chunks[:5]]
-            source_pages = [1]
+        # Retrieve relevant chunks (gemini) or use the consecutive window (deepseek)
+        if provider == "deepseek":
+            chunk_texts = [c.text for c in window]
+            source_pages = [c.page_number for c in window]
+        else:
+            try:
+                retrieved = await retriever.retrieve_for_field(field_name, top_k=5)
+                chunk_texts = [r.chunk.text for r in retrieved] if retrieved else [c.text for c in chunks[:5]]
+                source_pages = [r.chunk.page_number for r in retrieved] if retrieved else [1]
+            except Exception:  # noqa: BLE001
+                chunk_texts = [c.text for c in chunks[:5]]
+                source_pages = [1]
 
         try:
             ext_res = await extractor.extract(field_name, chunk_texts, field_description="", source_pages=source_pages)
@@ -241,12 +274,12 @@ async def evaluate_dataset(dataset_dir: pathlib.Path) -> dict:
     }
 
 
-async def evaluate_all(datasets_root: pathlib.Path):
+async def evaluate_all(datasets_root: pathlib.Path, provider: str = "gemini", live: bool = False):
     dataset_dirs = [p for p in datasets_root.iterdir() if p.is_dir()]
     results = []
     for d in sorted(dataset_dirs):
         print(f"Evaluating {d.name} ...")
-        res = await evaluate_dataset(d)
+        res = await evaluate_dataset(d, provider=provider, live=live)
         results.append(res)
         if res.get("status") == "ok":
             print(f"  {res['dataset_id']}: P={res['precision']} R={res['recall']} F1={res['f1']} Hallu={res['hallucination_rate']}")
@@ -293,10 +326,11 @@ async def evaluate_all(datasets_root: pathlib.Path):
     return results, overall, status, overall_status
 
 
-def print_report(results, overall, status, overall_status):
+def print_report(results, overall, status, overall_status, provider="gemini", live=False):
     print("\n" + "=" * 65)
     print(" TemplaFill Evaluation Report")
     print(f" Date: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f" Provider: {provider}{' (live)' if live else ' (offline fake)'}")
     print(f" Total datasets: {overall['total_datasets']}")
     print("=" * 65)
     # Table header
@@ -323,6 +357,17 @@ def main():
     parser = argparse.ArgumentParser(description="TemplaFill eval runner")
     parser.add_argument("--dataset", default="eval/datasets", help="Path to datasets root")
     parser.add_argument("--output", default="eval/results", help="Path to output dir")
+    parser.add_argument(
+        "--provider",
+        choices=["gemini", "deepseek"],
+        default="gemini",
+        help="Extraction provider: gemini (free tier + RAG) or deepseek (account tier, no embeddings)",
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Use real API keys (default: offline fake extractors — CI has no keys)",
+    )
     args = parser.parse_args()
 
     datasets_root = pathlib.Path(args.dataset)
@@ -335,14 +380,19 @@ def main():
 
     import asyncio
 
-    results, overall, status, overall_status = asyncio.run(evaluate_all(datasets_root))
-    print_report(results, overall, status, overall_status)
+    print(f"Provider: {args.provider}{' (live)' if args.live else ' (offline fake)'}")
+    results, overall, status, overall_status = asyncio.run(
+        evaluate_all(datasets_root, provider=args.provider, live=args.live)
+    )
+    print_report(results, overall, status, overall_status, provider=args.provider, live=args.live)
 
     # Save JSON
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H%M%S")
     out_path = output_dir / f"eval_run_{timestamp}.json"
     payload = {
         "timestamp": datetime.datetime.now().isoformat(),
+        "provider": args.provider,
+        "live": args.live,
         "total_datasets": overall["total_datasets"],
         "overall": overall,
         "status_per_metric": status,

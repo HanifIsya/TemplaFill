@@ -9,7 +9,7 @@ import zipfile
 from fastapi import APIRouter, BackgroundTasks, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 
-from app.api.dependencies import rate_limit
+from app.api.dependencies import quota_check, rate_limit, resolve_tier
 from app.core.config import get_settings
 from app.core.security import sanitize_filename
 from app.services.jobs.manager import get_job_manager
@@ -66,6 +66,8 @@ async def upload_files(
     rl = rate_limit(request, "upload")
     if rl:
         return rl
+    # Phase 6 (ADR-020): account tier if a valid tier token is presented.
+    tier = resolve_tier(request)
     # Validate presence (FastAPI already ensures required, but check filename)
     if not source_file.filename:
         return _error("VALIDATION_ERROR", "source_file is required", status=400)
@@ -127,6 +129,12 @@ async def upload_files(
     if zip_error:
         return _error("UNSAFE_FILE", zip_error, status=400)
 
+    # Phase 6 (ADR-020): consume one daily quota slot for this tier (429
+    # QUOTA_EXCEEDED). Checked after validation so rejected uploads are free.
+    qc = quota_check(request, tier)
+    if qc:
+        return qc
+
     # Sanitize filenames to prevent path traversal, header injection, XSS
     safe_source_name = sanitize_filename(source_file.filename or "source.pdf")
     safe_template_name = sanitize_filename(template_file.filename or "template.docx")
@@ -138,6 +146,7 @@ async def upload_files(
         source_filename=safe_source_name,
         template_bytes=template_bytes,
         template_filename=safe_template_name,
+        tier=tier,
     )
 
     # Start background processing
@@ -163,6 +172,8 @@ async def upload_files(
                 },
                 "estimated_time_seconds": job.estimated_time_seconds,
                 "created_at": job.created_at,
+                # Phase 6 (ADR-020): which provider tier will process this job.
+                "tier": job.tier,
                 # VULN-01: session token authorizing access to THIS job. Cross-origin
                 # clients (Vercel frontend) cannot rely on the cookie, so return it
                 # here; the client sends it back via the X-Session-Token header.

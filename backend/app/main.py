@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.auth import router as auth_router
 from app.api.health import router as health_router
 from app.api.jobs import router as jobs_router
 from app.api.upload import router as upload_router
@@ -91,7 +92,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Session-Token", "X-Request-ID"],
+    allow_headers=["Authorization", "Content-Type", "X-Session-Token", "X-Tier-Token", "X-Request-ID"],
     expose_headers=["Content-Disposition", "X-Request-ID"],
 )
 
@@ -102,6 +103,8 @@ app.include_router(health_router, prefix="", tags=["health"])
 # Upload & Jobs under /api
 app.include_router(upload_router, prefix="/api", tags=["upload"])
 app.include_router(jobs_router, prefix="/api", tags=["jobs"])
+# Account-tier auth (Phase 6): login/logout/quota under /api
+app.include_router(auth_router, prefix="/api", tags=["auth"])
 
 
 # ----- Sanitized error handling (VULN-07/VULN-09: no raw internal messages) -----

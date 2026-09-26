@@ -15,10 +15,12 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core.security import (
     extract_session_token,
+    extract_tier_token,
     get_client_ip,
     get_rate_limiter,
     is_test_request,
     verify_session_token,
+    verify_tier_token,
 )
 from app.services.jobs.models import Job
 
@@ -38,6 +40,44 @@ def rate_limit(request: Request, category: str):
                 "code": "RATE_LIMITED",
                 "message": f"{category} rate limit exceeded. Retry after {retry_after}s.",
                 "details": {},
+            },
+        },
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
+def resolve_tier(request: Request) -> str:
+    """Return "pro" if the caller presents a valid account-tier token, else "free".
+
+    Invalid/expired/job tokens all degrade to "free" — the safe default (free
+    tier still works, just Gemini + its quota).
+    """
+    token = extract_tier_token(request)
+    tier = verify_tier_token(token) if token else None
+    return "pro" if tier == "pro" else "free"
+
+
+def quota_check(request: Request, tier: str) -> Optional[JSONResponse]:
+    """Consume one daily-quota slot for `tier`; return 429 QUOTA_EXCEEDED when spent.
+
+    Daily caps are enforced even for logged-in users — the shared password
+    makes per-IP daily caps the primary cost/abuse control (ADR-020).
+    """
+    ip = get_client_ip(request)
+    limiter = get_rate_limiter()
+    category = "pro_upload" if tier == "pro" else "free_upload"
+    if limiter.is_allowed(ip, category):
+        return None
+    retry_after = limiter.retry_after(ip, category)
+    limit = get_settings().pro_jobs_per_day if tier == "pro" else get_settings().free_jobs_per_day
+    return JSONResponse(
+        status_code=429,
+        content={
+            "success": False,
+            "error": {
+                "code": "QUOTA_EXCEEDED",
+                "message": f"Daily {tier} upload quota reached ({limit}/day). Retry after {retry_after}s.",
+                "details": {"tier": tier, "limit": limit},
             },
         },
         headers={"Retry-After": str(retry_after)},
@@ -82,4 +122,4 @@ def not_found_response() -> JSONResponse:
     )
 
 
-__all__ = ["rate_limit", "authorize_job_access", "not_found_response"]
+__all__ = ["rate_limit", "authorize_job_access", "not_found_response", "resolve_tier", "quota_check"]

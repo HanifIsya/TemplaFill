@@ -354,5 +354,10 @@
   - New backend surface: tier auth, day-window quotas, `DeepSeekExtractor`, provider selection, ~10+ tests; new frontend surface: login modal, tier badge, disclosures, `tf_history` localStorage.
   - **Privacy advertising is gated on task 6.15** (verify DeepSeek API no-training/retention terms) — no unverified claims may ship (see FEEDBACK_LOOP.md escalation policy).
   - Cost exposure is bounded only by per-IP daily caps; shared-password leakage = budget risk, accepted with rotation as mitigation.
+- **Implementation notes (backend, 2026-09-26 — tasks 6.2–6.8)**:
+  - Tier tokens reuse the ADR-019 HMAC scheme with a 4-part payload (`tier.<tier>.<exp>.<nonce>`) vs the job token's 3-part payload, making the two families structurally mutually invalid (purpose isolation without a new dependency).
+  - Daily quota slots are consumed **after** upload validation succeeds (wrong file type/zip bomb does not burn one of the 5 free jobs).
+  - `engine_used` on a pro job whose DeepSeek response was partially missing fields is reported as `hybrid` (DeepSeek + heuristic recovery); fully-heuristic jobs (API failure / no `DEEPSEEK_API_KEY`) report `heuristic`. `extracted_by` per field is `deepseek | heuristic`, never `gemini` on this tier.
+  - Quota/login rate-limit tests patch `get_client_ip` inside `app.api.dependencies` because `TestClient` hard-codes the peer host as `testclient` (which bypasses limits by design).
 
 
