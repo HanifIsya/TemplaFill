@@ -1,23 +1,49 @@
 'use client';
 
 import React from 'react';
+import { Tier } from '../lib/types';
+import { TierDisclosure } from './TierDisclosure';
 
 interface HeroLandingProps {
   onGetStarted: () => void;
   onTryDemo: () => void;
+  tier?: Tier;
+  remaining?: number;
+  freeLimit?: number;
+  onRequestAccount?: () => void;
+  onOpenLogin?: () => void;
 }
 
-export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDemo }) => {
+export const HeroLanding: React.FC<HeroLandingProps> = ({
+  onGetStarted,
+  onTryDemo,
+  tier = 'free',
+  remaining,
+  freeLimit,
+  onRequestAccount,
+  onOpenLogin,
+}) => {
   return (
     <div className="w-full max-w-5xl mx-auto space-y-12 py-8 px-4 sm:px-6">
       {/* Primary Headline & Description */}
       <div className="space-y-4 max-w-3xl">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-400">
+          Extract. Map. Fill.
+        </p>
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
           Document Field Extraction and Template Population
         </h1>
         <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
           TemplaFill extracts structured data from multi-page source PDFs and maps values directly into Word (.docx), Excel (.xlsx), and PowerPoint (.pptx) template documents using Retrieval-Augmented Generation.
         </p>
+
+        <TierDisclosure
+          tier={tier}
+          remaining={remaining}
+          freeLimit={freeLimit}
+          onRequestAccount={onRequestAccount}
+          onOpenLogin={onOpenLogin}
+        />
 
         {/* Action Controls */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
@@ -43,7 +69,7 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDem
             System Specifications & Supported Formats
           </span>
           <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-            Engine: Google Gemini 3.6 Flash + PyMuPDF
+            Engine: {tier === 'pro' ? 'DeepSeek (Account)' : 'Google Gemini 3.6 Flash'} + PyMuPDF
           </span>
         </div>
 
@@ -71,7 +97,9 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDem
               Retrieval Pipeline
             </span>
             <span className="text-slate-600 dark:text-slate-300 md:col-span-3">
-              Semantic text chunking (800 tokens, 100 overlap) indexed with 768-dimensional embeddings. Extracts values with confidence scoring and exact page citations.
+              {tier === 'pro'
+                ? 'Semantic text chunking (800 tokens, 100 overlap) batched sequentially with no Google embedding calls. Extracts values with confidence scoring and exact page citations.'
+                : 'Semantic text chunking (800 tokens, 100 overlap) indexed with 768-dimensional embeddings. Extracts values with confidence scoring and exact page citations.'}
             </span>
           </div>
 

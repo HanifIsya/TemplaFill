@@ -12,6 +12,13 @@
 - **Date**: 2026-09-26 (tier backend session)
 - **By**: OpenCode
 - **Summary**: **Phase 6 backend implemented (tasks 6.2–6.8, branch `feat/oc-tier-backend`)**: tier auth (`POST/GET /api/auth/login|logout|quota`, scrypt shared credential, HMAC tier tokens purpose-isolated from job tokens, `scripts/hash_password.py`), day-window quotas in the rate limiter (`free_upload` 5/day, `pro_upload` 50/day, `auth` 5/min; 429 `QUOTA_EXCEEDED` + `Retry-After`), `DeepSeekExtractor` (`deepseek-flash` Chat Completions, JSON mode, shared prompt/VULN-07 validation, `force_fake` CI path, heuristic-only fallback), `Job.tier` + provider selection, pro-tier RAG bypass (consecutive chunk batching, **zero Google calls**, proven by tests monkeypatching Gemini/embedder to raise). Shared files edited per Rule 2 (note below): `.env.example`, `render.yaml` (+ `config.py`). **254 backend tests green** (214 baseline + 40 new `test_tier_system.py`), offline eval PASS both `--provider gemini` and `--provider deepseek`. ADR-020 gained implementation notes. Work was isolated in a **git worktree** (`E:\TemplaFill-oc`) because the shared checkout was on Antigravity's `feat/ag-tier-frontend` branch with uncommitted frontend work.
+- **Date**: 2026-09-26 (Antigravity frontend polish session)
+- **By**: Antigravity
+- **Summary**: **Frontend design-review follow-up (branch `feat/ag-frontend-polish`)**: added a shared accessible `Modal` primitive (portal, `role="dialog"`+`aria-modal`, Escape, focus trap, focus restore, scroll lock) and adopted it across all 6 modals; made engine copy tier-aware (`ProcessingView`/`HeroLanding`/`Footer`/`DownloadView` audit); toast a11y (`role=alert`/`aria-live`) with success/info auto-dismiss but **warning/error persist**; fixed leftover Indonesian error string + stale `text-embedding-004`; Help guide now documents **5** syntaxes; replaced `alert()` with toasts; history download is now a real JSON metadata record; added `.focus-ring` + `prefers-reduced-motion`; empty-generate guard + `key={sessionId}` reset; mobile Navbar tier chip + workflow dots; landing tagline. Tests **59/59** (new `polish.test.mjs`; was 42), lint **0 warnings**, build green. Reconciled `DESIGN.md`/`DESIGN_SYSTEM.md` with shipped code (dark-only, IBM Plex, blue accent, no gradients, shared Modal, a11y) + `USER_GUIDE`/`CHANGELOG`/`README` counts.
+
+- **Date**: 2026-09-26 (Antigravity frontend session)
+- **By**: Antigravity
+- **Summary**: **Phase 6 frontend + docs complete (tasks 6.9–6.14, all `done`)**: built `LoginModal`, `AccountRequestView`, `TierDisclosure`; added `api.login/logout/getQuota/getTier/getTierToken` with signed tier token (`tf_tier_token`) and `QuotaExceededError` on 429 `QUOTA_EXCEEDED`; Navbar tier badge (`Free · Gemini` / `Account · DeepSeek`) + sign-in/out; free-tier Google-training/quota disclosure on landing/upload; HelpModal engine + privacy tabs rewritten for both tiers (DeepSeek wording kept generic pending 6.15); browser-local history migrated to `tf_history` (`HistoryEntry` per TIER_ARCHITECTURE §6) with 5/day quota countdown; `types.ts`/`api.ts` unions gain `deepseek` + `Tier`/`QuotaInfo`/`LoginResult`; tier-aware engine badges/banners in `ReviewMappingView`. Tests **42/42** (new `tier.test.mjs` T13–T18 + `e2e.test.mjs` both-tier flows; was 13). `npm run lint` 0 errors, `npm run build` clean. Docs swept: PRD §4.7, USER_STORIES Epic 5, USER_GUIDE §4–5, API.md "Tiers & Auth", ARCHITECTURE tier diagram, TECH_STACK DeepSeek plan, DATA_MODEL `Job.tier` + browser storage, SECURITY tier auth, DATA_PRIVACY tier matrix, README, CHANGELOG v0.3.0. Branch `feat/ag-tier-frontend`. **Backend endpoints are coded against but still in progress (OpenCode 6.2–6.8); UI degrades gracefully via existing mock/fallback patterns.**
 
 - **Date**: 2026-09-26 (later session)
 - **By**: OpenCode
@@ -53,8 +60,8 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - [x] `eval/` — 5 synthetic datasets + `generate_eval_datasets.py` + `run_eval.py` (1.00 PASS, halluc 0.00, placeholder 1.00) ✅
 
 ### What's Being Worked On Right Now
-- **Phase 6 (Tiers)**: backend 6.2–6.8 DONE on `feat/oc-tier-backend` (PR pending); Antigravity owns frontend 6.9–6.13 + docs 6.14; joint 6.15–6.17 remain. Plan docs in `docs/1-product/TIER_PLAN.md` + `docs/2-architecture/TIER_ARCHITECTURE.md`.
-- Phases 0–5 are complete; PR #1 (security remediation) + PR #2 (tier plan docs) merged to `main`.
+- **Phase 6 (Tiers) COMPLETE — delivery merge ready** — backend 6.2–6.8 (PR #3) + backend review fixes (PR #4) merged; frontend 6.9–6.14 + 6.18–6.22 merged via this delivery branch; task 6.15 verified (**negative verdict** — no DeepSeek no-training claim published); 6.17 done (ADR-020 **Accepted**). Remaining: **6.16 live staging E2E with real provider keys** (user acceptance; offline eval PASS both providers already in CI).
+- Phases 0–5 complete; PRs #1–#4 merged to `main`.
 
 ### Completed Milestones
 1. ✅ OpenCode Phase 1 done — 140/140 tests green.
@@ -114,7 +121,36 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - **File(s)**: `docs/1-product/TIER_PLAN.md`, `docs/2-architecture/TIER_ARCHITECTURE.md` (both **new** files)
 - **Description**: User directly instructed OpenCode to produce the tier plan/design markdown. Both files are new (no existing Antigravity files were edited); please review for consistency with PRD/ARCHITECTURE conventions when you pick up tasks 6.9–6.14, and treat them as the approved spec once the user signs off.
 - **Priority**: medium
+- **Status**: done (Antigravity implemented 6.9–6.14 against both docs; no convention conflicts found)
+
+### Request: Backend tier endpoints must match the frontend contract (OpenCode 6.2–6.6)
+- **From**: Antigravity
+- **To**: OpenCode
+- **File(s)**: `backend/app/api/` (auth routes + upload/jobs tier additions)
+- **Description**: The frontend (`frontend/src/lib/api.ts`) is coded against these exact shapes and will show generic errors otherwise:
+  - `POST /api/auth/login` `{username,password}` → `200 {success,data:{tier:"pro",token}}`; generic `401` on failure; `429` on brute force.
+  - `POST /api/auth/logout` → `200` (frontend also clears `tf_tier_token` locally).
+  - `GET /api/auth/quota` → `{success,data:{free_used_today,free_limit,tier}}`; accepts the tier token via `X-Session-Token`.
+  - `POST /api/upload` accepts `X-Session-Token` (tier token), returns `data.tier`, and on daily-cap returns `429` with `error.code:"QUOTA_EXCEEDED"` + `Retry-After`.
+  - `GET /api/jobs/{id}/results` includes `data.tier` and per-field `extracted_by:"deepseek"`.
+  Frontend falls back to mock/optimistic tier when these 404, so nothing blocks you — but the UI only becomes truthful once they land.
+- **Priority**: high
 - **Status**: pending
+
+### Note: No shared files edited by Antigravity
+- **From**: Antigravity
+- **File(s)**: `.env.example`, `render.yaml`, `README.md`
+- **Description**: Antigravity edited **README.md** and **CHANGELOG.md** (Both-owned / allowed) but did **not** touch `.env.example` or `render.yaml` (OpenCode's 6.6). New env vars documented in README: `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_BASE_URL`, `TIER_ACCOUNT_USERNAME`, `TIER_ACCOUNT_PASSWORD_HASH`, `FREE_JOBS_PER_DAY`, `PRO_JOBS_PER_DAY` — OpenCode to add them to `.env.example`/`render.yaml` in 6.6.
+- **Priority**: low
+- **Status**: pending
+
+### Request: OpenCode editing shared `.env.example` + `render.yaml` for Phase 6 tiers
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: `.env.example`, `render.yaml` (both shared — Rule 2 note given BEFORE editing)
+- **Description**: Task 6.6 adds tier/provider env vars: `TIER_ACCOUNT_USERNAME`, `TIER_ACCOUNT_PASSWORD_HASH`, `FREE_JOBS_PER_DAY`, `PRO_JOBS_PER_DAY`, `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_BASE_URL`, `TIER_TOKEN_EXPIRE_DAYS`. These are backend-only; no frontend `NEXT_PUBLIC_*` vars are added. Edits are happening on branch `feat/oc-tier-backend` (git worktree `E:\TemplaFill-oc`, since the shared checkout is on your `feat/ag-tier-frontend` branch). Please avoid touching these same keys.
+- **Priority**: high
+- **Status**: in_progress
 
 <!-- Template for new requests:
 ### Request: [Short Title]
@@ -159,6 +195,9 @@ _No known issues._
 | 2026-09-26 | OpenCode | **Tier system planned (Phase 6, awaiting approval)**: TIER_PLAN.md + TIER_ARCHITECTURE.md created (user-directed), TASKS.md Phase 6 added with OpenCode/Antigravity split, TESTING.md + FEEDBACK_LOOP.md revised (214/13 counts, real commands, tier test matrix, per-provider eval), ADR-020 Pending, cross-agent note added. |
 | 2026-09-26 | OpenCode | **Tier backend shipped (tasks 6.2–6.8, `feat/oc-tier-backend`, isolated in git worktree `E:\TemplaFill-oc`)**: tier auth endpoints + scrypt shared credential + purpose-isolated HMAC tier tokens (30d) + `scripts/hash_password.py`; rate-limiter day window (`free_upload` 5/day, `pro_upload` 50/day, `auth` 5/min) with 429 `QUOTA_EXCEEDED` + `Retry-After` enforced in `POST /api/upload` after validation; `DeepSeekExtractor` (JSON mode, pacing/backoff, shared prompt + VULN-07 validation, `force_fake`, heuristic-only fallback); `Job.tier` + `get_extractor_for_tier` provider selection; pro path skips embeddings/retriever entirely (consecutive chunk batching via `_split_chunks_by_chars`); re-extract endpoints tier-aware; `run_eval.py --provider gemini|deepseek --live`. 40 new tests (`tests/test_tier_system.py`) incl. zero-Gemini-on-pro (Google calls monkeypatched to raise) → **254 backend tests green**; offline eval 5/5 PASS both providers. ADR-020 implementation notes logged; shared-file note given in CONTEXT.md before editing `.env.example`/`render.yaml`. |
 | 2026-09-27 | OpenCode | **Full backend review + fixes (`feat/oc-backend-review`)**: fixed 8 HIGH / 11 MEDIUM / 10 LOW findings — generator double-fill (single-pass replacement), xlsx structured-reference corruption + formula-context bypass, PII masker phone-tail leak + unmask ≥10-token corruption + backslash expansion, embedder per-text unthrottled calls + `output_dimensionality`, run-preserving docx fill (mixed formatting/hyperlinks), control-char crash, footer/nested tables, mapper date/amount cross-fill + short-name fuzzy, chunker per-chunk headers + overlap compounding, key-pool global clobbering, table-extractor None-row/password handling, dead code/imports. 28 new regression tests → **282 backend tests green**, eval PASS both providers, upload→confirm→download E2E smoke OK. Report `docs/5-quality/BACKEND_REVIEW_2026-09-26.md`. Verified frontend tier contract match (Antigravity's request). |
+| 2026-09-26 | Antigravity | **Phase 6 frontend + docs (tasks 6.9–6.14) complete** on `feat/ag-tier-frontend`: `LoginModal` (shared credential, generic error), `AccountRequestView` (contact `hanif.isya.annafi-2024@fst.unair.ac.id`), `TierDisclosure` (Google-training + 5/day quota notice); `api.login/logout/getQuota/getTier/getTierToken/getHistory/saveHistoryEntry/clearHistory` + `QuotaExceededError` (429 `QUOTA_EXCEEDED`); Navbar badge `Free · Gemini`/`Account · DeepSeek` + sign-in/out; `tf_history` browser store (`HistoryEntry`) + quota countdown; `types.ts` `Tier`/`HistoryEntry`/`QuotaInfo`/`LoginResult` + `deepseek` unions; tier-aware badges/banners. Tests **42/42** (new `tier.test.mjs` T13–T18 + `e2e.test.mjs` both tiers; was 13), lint 0 errors, build clean. Docs swept (PRD/USER_STORIES/USER_GUIDE/API/ARCHITECTURE/TECH_STACK/DATA_MODEL/SECURITY/DATA_PRIVACY/README/CHANGELOG). Cross-agent contract request logged for OpenCode 6.2–6.6. |
+| 2026-09-26 | Antigravity | **Frontend design-review follow-up** on `feat/ag-frontend-polish`: shared accessible `Modal` primitive (portal/dialog/focus-trap/Escape/restore/scroll-lock) adopted by all 6 modals; tier-aware engine copy; toast a11y + persistent warnings/errors; fixed Indonesian string + stale `text-embedding-004`; Help 5 syntaxes; `alert()`→toast; history JSON metadata export; `.focus-ring` + `prefers-reduced-motion`; empty-generate guard + `key={sessionId}`; mobile Navbar tier chip + workflow dots; landing tagline. Tests **59/59**, lint 0 warnings, build green. `DESIGN.md`/`DESIGN_SYSTEM.md` reconciled with shipped code; `USER_GUIDE`/`CHANGELOG`/`README` updated. |
+| 2026-09-27 | OpenCode | **Phase 6 delivery merge (user-directed)**: merged `feat/ag-frontend-polish` (frontend 6.9–6.14 + polish 6.18–6.22) into the delivery branch, resolving CONTEXT/TASKS conflicts (kept both agents' history, current statuses). Verified closed loop on the merged tree: **282 backend tests**, **59 frontend tests**, lint 0 warnings, `next build` green. Task 6.15 **verified — negative verdict** (DeepSeek terms contain no no-training/no-retention commitment; no claim published; `DATA_PRIVACY.md` updated; HelpModal copy corrected). ADR-020 flipped to **Accepted** (6.17); TASKS 6.0/6.15/6.17 → done, 6.16 → review (live staging E2E with real keys is the user's acceptance step); CHANGELOG v0.3.0 completed with backend + review + verdict sections. |
 
 
 

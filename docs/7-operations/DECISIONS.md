@@ -336,8 +336,8 @@
 ---
 
 ### ADR-020: Two-Tier Product — Free (Gemini) vs Account (DeepSeek) (2026-09-26)
-- **Date**: 2026-09-26
-- **Status**: **Pending** — user has answered the design questions below; implementation awaits user approval of `docs/1-product/TIER_PLAN.md` + `docs/2-architecture/TIER_ARCHITECTURE.md`
+- **Date**: 2026-09-26 (accepted 2026-09-27)
+- **Status**: **Accepted** (2026-09-27) — approved by user ("go with option 1"), backend 6.2–6.8 merged (PR #3), backend review fixes merged (PR #4), frontend 6.9–6.14 + 6.18–6.22 merged, task 6.15 verified (negative verdict — no DeepSeek no-training claim may ship), delivery merge on `main`
 - **Context**: Everything runs on the Gemini free plan (15 RPM/1,500 RPD quota → random 429/404/503 fallbacks) and Google free-tier terms allow prompt data to be used to improve products. A privacy/reliability premium tier is needed without building accounts, payments, or a user database.
 - **Decision (answers given by user 2026-09-26)**:
   1. **One fixed shared account**: a single username+password the owner hands out personally after an email request; server stores only a salted hash (`TIER_ACCOUNT_PASSWORD_HASH`); no self-registration, no per-user records. Contact email in UI: `hanif.isya.annafi-2024@fst.unair.ac.id`.

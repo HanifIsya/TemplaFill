@@ -140,6 +140,57 @@
 - [ ] History shows: date, source file name, template name, status
 - [ ] User can re-download previously generated documents (within retention period)
 - [ ] User can delete history entries
+- [ ] History is stored in the browser (`tf_history` in `localStorage`) only, never synced to a server
+
+---
+
+## Epic 5: Tiers & Access (Phase 6)
+
+### US-040: Use the Free Tier Anonymously
+**As a** visitor, **I want to** process documents without creating an account, **so that** I can try TemplaFill immediately.
+
+**Acceptance Criteria:**
+- [ ] No sign-up, email, or credentials required for the free tier
+- [ ] Free tier is capped at 5 jobs/day per network (IP)
+- [ ] A visible notice explains that the free tier uses Google's free API and that prompts may be used by Google to improve its services
+- [ ] The notice also warns that the free quota may be rate-limited
+
+### US-041: Understand and Hit the Free Quota
+**As a** free-tier user, **I want to** see how many jobs I have left and be guided when I run out, **so that** I know what to do next.
+
+**Acceptance Criteria:**
+- [ ] A quota countdown shows remaining free jobs today (e.g., "2 of 5 free jobs remaining today")
+- [ ] The 6th job in a day is blocked with a clear "daily limit reached" state
+- [ ] A request-an-account screen shows the contact email `hanif.isya.annafi-2024@fst.unair.ac.id`
+- [ ] The screen explains that there is no self-registration and that accounts are granted by request
+
+### US-042: Sign In to the Account Tier
+**As an** approved user, **I want to** sign in with the shared credentials, **so that** I can use the faster, Google-free engine.
+
+**Acceptance Criteria:**
+- [ ] A login modal accepts a shared username and password
+- [ ] Wrong credentials show a single generic error (no user enumeration)
+- [ ] On success, the Navbar badge switches from `Free · Gemini` to `Account · DeepSeek`
+- [ ] A "Sign out" control returns the user to the free tier
+- [ ] The tier token persists across reloads (HttpOnly cookie + `localStorage` fallback) for 30 days
+
+### US-043: Process on the Account Tier
+**As a** signed-in user, **I want** my documents processed on DeepSeek, **so that** they are not sent to Google.
+
+**Acceptance Criteria:**
+- [ ] Account-tier jobs run on DeepSeek with zero Google calls (no Gemini extraction or embeddings)
+- [ ] If DeepSeek fails, the job falls back to the local heuristic engine only — never to Google
+- [ ] Extracted fields show a `DeepSeek` engine badge
+- [ ] Account tier has a much higher daily cap than the free tier
+
+### US-044: Review Tier Privacy Honestly
+**As a** privacy-conscious user, **I want** the Help guide to explain both tiers, **so that** I can choose the right one.
+
+**Acceptance Criteria:**
+- [ ] The Help privacy tab explains free tier (Google Gemini free API) and account tier (DeepSeek) separately
+- [ ] DeepSeek retention/training wording stays generic until verified in writing
+- [ ] Both tiers are stated to apply Selective PII Masking
+- [ ] The guide clarifies that "browser-local history" means storage, not processing
 
 ---
 

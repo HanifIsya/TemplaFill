@@ -108,9 +108,9 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 6.0 | Write tier plan + architecture design docs | `review` | OpenCode (user-directed) | TIER_PLAN.md + TIER_ARCHITECTURE.md — **awaiting user approval** |
-| 6.15 | Verify DeepSeek API no-training / data-retention terms in writing | `todo` | OpenCode | Must pass **before** any privacy claim ships in UI copy |
-| 6.14 | Docs sync: PRD, USER_STORIES, USER_GUIDE, API.md (new Tiers & Auth section), ARCHITECTURE, TECH_STACK, DATA_MODEL, SECURITY.md + DATA_PRIVACY.md tier sections, README, CHANGELOG | `todo` | Antigravity | Full docs sweep after backend/frontend land |
+| 6.0 | Write tier plan + architecture design docs | `done` | OpenCode (user-directed) | TIER_PLAN.md + TIER_ARCHITECTURE.md — approved by user |
+| 6.15 | Verify DeepSeek API no-training / data-retention terms in writing | `done` | OpenCode | **Verdict: NEGATIVE** (2026-09-27) — Open Platform ToS + Privacy Policy contain **no** no-training/no-retention commitment for API inputs. No such claim ships; UI states only the verified zero-Google-call fact. Recorded in `DATA_PRIVACY.md`. |
+| 6.14 | Docs sync: PRD, USER_STORIES, USER_GUIDE, API.md (new Tiers & Auth section), ARCHITECTURE, TECH_STACK, DATA_MODEL, SECURITY.md + DATA_PRIVACY.md tier sections, README, CHANGELOG | `done` | Antigravity | Full docs sweep after backend/frontend land |
 
 ### 6.B Backend (OpenCode)
 
@@ -128,15 +128,26 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 6.9 | Login modal (shared username/password), `api.login/logout/quota`, tier state + Navbar badge (`Free · Gemini` / `Account · DeepSeek`) | `todo` | Antigravity | No AuthModal exists in repo despite TASK 3.8 note — build fresh |
-| 6.10 | Tier disclosures: free-tier Google-training + quota notices on landing/upload, request-an-account screen with contact email, HelpModal privacy tab rewrite | `todo` | Antigravity | Copy gated on 6.15 verdict for DeepSeek claims |
-| 6.11 | localStorage history store (`tf_history`) for results + filled-doc metadata + quota display (5/day countdown) | `todo` | Antigravity | Schema in TIER_ARCHITECTURE §6 |
-| 6.12 | Type/badge updates: `extractedBy`/`engineUsed` add `'deepseek'`, tier-aware engine badges and fallback banners | `todo` | Antigravity | `types.ts`, `api.ts` mock stubs already have `tier` |
-| 6.13 | Frontend tests + extend `e2e.test.mjs` for both tier flows; lint/build green | `todo` | Antigravity | Baseline 13 tests |
+| 6.9 | Login modal (shared username/password), `api.login/logout/quota`, tier state + Navbar badge (`Free · Gemini` / `Account · DeepSeek`) | `done` | Antigravity | No AuthModal exists in repo despite TASK 3.8 note — built fresh (LoginModal) |
+| 6.10 | Tier disclosures: free-tier Google-training + quota notices on landing/upload, request-an-account screen with contact email, HelpModal privacy tab rewrite | `done` | Antigravity | Copy gated on 6.15 verdict for DeepSeek claims (kept generic) |
+| 6.11 | localStorage history store (`tf_history`) for results + filled-doc metadata + quota display (5/day countdown) | `done` | Antigravity | Schema in TIER_ARCHITECTURE §6 |
+| 6.12 | Type/badge updates: `extractedBy`/`engineUsed` add `'deepseek'`, tier-aware engine badges and fallback banners | `done` | Antigravity | `types.ts`, `api.ts` mock stubs already have `tier` |
+| 6.13 | Frontend tests + extend `e2e.test.mjs` for both tier flows; lint/build green | `done` | Antigravity | 42 tests (was 13): tier.test.mjs T13–T18 + e2e both tiers |
+
+### 6.E Frontend Polish (Antigravity — design-review follow-up, 2026-09-26)
+
+| # | Task | Status | Assigned | Notes |
+|---|------|--------|----------|-------|
+| 6.18 | Shared accessible `Modal` primitive (portal, dialog semantics, Escape, focus trap, focus restore, scroll lock) adopted by all 6 modals | `done` | Antigravity | `frontend/src/components/Modal.tsx`; removes duplicated overlay markup |
+| 6.19 | Tier-aware engine copy + P0 copy fixes (Indonesian error, stale `text-embedding-004`, Help 4→5 syntaxes, tier-aware `ProcessingView`/`HeroLanding`/`Footer`/audit log) | `done` | Antigravity | No hardcoded Gemini on account tier |
+| 6.20 | Toast a11y (`role=alert`/`aria-live`) + persistence policy (success/info auto-dismiss, warning/error persist); `alert()`→toast | `done` | Antigravity | |
+| 6.21 | `focus-ring` (`:focus-visible`) + `prefers-reduced-motion`; empty-generate guard; `key={sessionId}` review reset; mobile Navbar tier chip + workflow dots; landing tagline; history JSON metadata export | `done` | Antigravity | |
+| 6.22 | Polish tests (`polish.test.mjs`) + reconcile `DESIGN.md`/`DESIGN_SYSTEM.md` with shipped code | `done` | Antigravity | 59 frontend tests, lint 0 warnings, build green |
 
 ### 6.D Joint
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 6.16 | Live staging E2E both tiers, live eval both providers, cost sanity check, CHANGELOG release notes | `todo` | Both | After 6.2–6.13 |
-| 6.17 | Flip ADR-020 to `Accepted`, update CONTEXT.md with results | `todo` | OpenCode | Close-out |
+| 6.16 | Live staging E2E both tiers, live eval both providers, cost sanity check, CHANGELOG release notes | `review` | Both | Offline eval PASS both providers + CHANGELOG v0.3.0 done; **live staging E2E with real keys is the user's final acceptance step** (needs `DEEPSEEK_API_KEY` + `TIER_ACCOUNT_PASSWORD_HASH` on Render) |
+| 6.17 | Flip ADR-020 to `Accepted`, update CONTEXT.md with results | `done` | OpenCode | ADR-020 Accepted 2026-09-27; CONTEXT.md close-out written |
+

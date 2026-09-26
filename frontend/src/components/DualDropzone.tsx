@@ -2,6 +2,8 @@
 
 import React, { useRef, useState } from 'react';
 import { UploadCloud, CheckCircle2, Trash2, ArrowRight } from 'lucide-react';
+import { Tier } from '../lib/types';
+import { TierDisclosure } from './TierDisclosure';
 
 interface DualDropzoneProps {
   sourceFile: File | null;
@@ -11,6 +13,12 @@ interface DualDropzoneProps {
   onStartExtraction: () => void;
   onLoadDemoFiles: () => void;
   isLoading?: boolean;
+  tier?: Tier;
+  remaining?: number;
+  freeLimit?: number;
+  onRequestAccount?: () => void;
+  onOpenLogin?: () => void;
+  onValidationError?: (message: string) => void;
 }
 
 export const DualDropzone: React.FC<DualDropzoneProps> = ({
@@ -21,6 +29,12 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
   onStartExtraction,
   onLoadDemoFiles,
   isLoading = false,
+  tier = 'free',
+  remaining,
+  freeLimit,
+  onRequestAccount,
+  onOpenLogin,
+  onValidationError,
 }) => {
   const [sourceDragActive, setSourceDragActive] = useState(false);
   const [templateDragActive, setTemplateDragActive] = useState(false);
@@ -36,6 +50,11 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
+  const reject = (message: string) => {
+    if (onValidationError) onValidationError(message);
+    else window.alert(message);
+  };
+
   const handleSourceDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setSourceDragActive(false);
@@ -44,7 +63,7 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
       if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
         onSetSourceFile(file);
       } else {
-        alert('Please upload a valid PDF document.');
+        reject('Please upload a valid PDF document.');
       }
     }
   };
@@ -58,7 +77,7 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
       if (['docx', 'xlsx', 'pptx', 'pdf'].includes(ext || '')) {
         onSetTemplateFile(file);
       } else {
-        alert('Please upload a supported template (.docx, .xlsx, .pptx, or .pdf).');
+        reject('Please upload a supported template (.docx, .xlsx, .pptx, or .pdf).');
       }
     }
   };
@@ -76,6 +95,14 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
           Select a source PDF document containing extraction data and a destination template.
         </p>
       </div>
+
+      <TierDisclosure
+        tier={tier}
+        remaining={remaining}
+        freeLimit={freeLimit}
+        onRequestAccount={onRequestAccount}
+        onOpenLogin={onOpenLogin}
+      />
 
       {/* Dual Upload Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

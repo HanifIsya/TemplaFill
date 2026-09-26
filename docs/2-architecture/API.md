@@ -7,20 +7,123 @@
 
 ## Authentication
 
-**Current (MVP, 2026-09-26)**: Public endpoints are `GET /api/health` and `POST /api/upload`. Every uploaded job is protected by a **signed per-job session token** (VULN-01 fix):
+**Current (MVP + Phase 6 tiers, 2026-09-26)**: Public endpoints are `GET /api/health` and `POST /api/upload`. Every uploaded job is protected by a **signed per-job session token** (VULN-01 fix):
 
 - `POST /api/upload` returns `data.session_token` and sets an HttpOnly session cookie.
 - `GET/PATCH/POST /api/jobs/{job_id}/...` require that token (via the cookie or `X-Session-Token` header). Callers without it receive `404` (not `403`) so job IDs cannot be enumerated.
 - `REQUIRE_SESSION_TOKEN` (default `true`) toggles enforcement; the test client is exempt so CI can run without cookie plumbing.
 
-Full user accounts are still **planned for Phase 2** (IDs `users.id` → `jobs.user_id` in `DATA_MODEL.md`):
+Phase 6 adds a lightweight **tier layer** on top of the anonymous flow (no per-user accounts):
+- A single **shared credential** (env `TIER_ACCOUNT_USERNAME` + `TIER_ACCOUNT_PASSWORD_HASH`) issues a signed **tier token** (HMAC, 30d, `purpose:"tier"`) via `POST /api/auth/login`.
+- Tier tokens and per-job tokens are **mutually invalid** (the `purpose` claim isolates them).
+- `POST /api/upload` accepts the tier token via `X-Session-Token`; a valid token makes the job `tier:"pro"` (DeepSeek), otherwise `tier:"free"` (Gemini). See the **Tiers & Auth** section below.
+
+Full user accounts (per-user IDs, JWT, refresh) remain **not planned** — the tier system deliberately reuses one shared credential:
 
 ```
-# Phase 2 (planned)
+# Legacy/planned only — superseded by shared-credential tier tokens
 Authorization: Bearer <jwt_token>  # HS256, 15m access / 7d refresh, double-submit CSRF
 ```
 
 Each upload creates a `Job` bound to its session token (`manager.py:create_job`). `InMemoryRateLimiter` resolves the client IP from trusted-proxy headers (`get_client_ip`), with `testclient` exempt so CI never 429s; limits are per-IP.
+
+---
+
+## Tiers & Auth (Phase 6)
+
+> Design reference: [TIER_ARCHITECTURE.md](./TIER_ARCHITECTURE.md) · Product: [TIER_PLAN.md](../1-product/TIER_PLAN.md)
+
+| | Free tier (anonymous) | Account tier (logged in) |
+|---|---|---|
+| Trigger | no tier token on upload | valid tier token on upload |
+| Extraction | Gemini `gemini-3.6-flash` | DeepSeek `deepseek-flash` |
+| Embeddings | Gemini `gemini-embedding-001` | **none — retrieval bypassed** |
+| Fallback | local heuristic | local heuristic **only** (never Gemini) |
+| `engine_used` / `extracted_by` | `gemini` / `hybrid` / `heuristic` | `deepseek` / `heuristic` |
+| Daily cap | **5 jobs/day per IP** | 50 jobs/day per IP (tunable cost guard) |
+
+### `POST /api/auth/login`
+
+Exchange the shared credential for a signed tier token.
+
+**Request Body**:
+```json
+{ "username": "shared-user", "password": "shared-password" }
+```
+
+**Response** `200` (also sets HttpOnly `tier_token` cookie):
+```json
+{
+  "success": true,
+  "data": { "tier": "pro", "token": "eyJ... (signed tier token, 30d)" }
+}
+```
+
+**Errors**:
+- `401 UNAUTHORIZED` — generic `"Invalid credentials"` (constant-time compare; no user enumeration)
+- `429 RATE_LIMITED` — `auth` category, **5/min/IP**, with `Retry-After`
+- `503` — tier system not configured (missing `TIER_ACCOUNT_PASSWORD_HASH`)
+
+### `POST /api/auth/logout`
+
+Clears the tier cookie and returns `200`. Best-effort client-side: the token is also removed from `localStorage`. Token expiry is the real boundary (no server-side revocation list in v1).
+
+### `GET /api/auth/quota`
+
+Powers the free-tier countdown and confirms the active tier.
+
+**Response** `200`:
+```json
+{
+  "success": true,
+  "data": { "free_used_today": 2, "free_limit": 5, "tier": "free" }
+}
+```
+
+Accepts an optional tier token so a signed-in user sees `"tier":"pro"`.
+
+### `POST /api/upload` (tier additions)
+
+- **Request header** `X-Session-Token: <tier token>` (optional) — when valid, the job is created with `tier:"pro"`.
+- **Response** now includes `"tier": "free" | "pro"` alongside `job_id`, `session_token`, etc.
+- **Errors**: `429 QUOTA_EXCEEDED` with `Retry-After` when the per-IP daily cap (5 free / 50 pro) is reached. The frontend maps `error.code === "QUOTA_EXCEEDED"` to the account-request screen showing `hanif.isya.annafi-2024@fst.unair.ac.id`.
+
+```json
+{
+  "success": false,
+  "error": {
+    "code": "QUOTA_EXCEEDED",
+    "message": "Daily extraction limit reached. Request an account for a higher limit."
+  }
+}
+```
+
+### `GET /api/jobs/{job_id}` (tier addition)
+
+The status payload adds `"tier": "free" | "pro"` so the UI can render the correct engine context.
+
+### Frontend storage contract
+
+| Key | Contents | Lifetime |
+|---|---|---|
+| `tf_tier_token` | signed tier token (cookie-blocked fallback) | 30 days |
+| `tf_history` | array of history entries (schema below) | until user clears browser data |
+
+```ts
+// tf_history entry
+{
+  sessionId: string;
+  createdAt: string;          // ISO
+  tier: 'free' | 'pro';
+  engineUsed: 'gemini' | 'deepseek' | 'heuristic' | 'hybrid' | 'mock';
+  sourceDoc: { filename: string; size: number };
+  templateDoc: { filename: string; format: string };
+  overallConfidence: number;
+  fieldCount: number;
+  filledFilename: string;
+  downloadExpired: boolean;   // server bytes expire with the job (≤24h)
+}
+```
 
 ---
 
@@ -101,6 +204,7 @@ Upload source PDF and template file. Starts a new processing job.
 |-------|------|----------|-------------|
 | `source_file` | File | Yes | Source PDF document |
 | `template_file` | File | Yes | Template document (.docx, .xlsx, .pptx) |
+| `X-Session-Token` (header) | string | No | Valid **tier token** → `tier:"pro"` (Phase 6) |
 
 **Validation** (`backend/app/api/upload.py:53`):
 
@@ -108,6 +212,7 @@ Upload source PDF and template file. Starts a new processing job.
 - `template_file`: Must be `.docx`/`.xlsx`/`.pptx` (`ALLOWED_TEMPLATE_EXTS`) + `PK` zip magic (`upload.py:99`), max `20MB`, non-empty
 - Filenames sanitized via `sanitize_filename()` (`../`/`null`/unsafe→ `_`) before `create_job`
 - Rate limit: `10/hr` per IP (`InMemoryRateLimiter: upload`), `Retry-After` header on 429; `testclient` exempt
+- Tier quotas (Phase 6): `free_upload` **5/day** per IP, `pro_upload` 50/day per IP → 429 `QUOTA_EXCEEDED`
 
 **Response** `202`:
 ```json
@@ -116,6 +221,7 @@ Upload source PDF and template file. Starts a new processing job.
   "data": {
     "job_id": "550e8400-e29b-41d4-a716-446655440000",
     "status": "queued",
+    "tier": "free",
     "source_file": {
       "filename": "court_filing.pdf",
       "size_bytes": 2048576,
@@ -138,6 +244,7 @@ Upload source PDF and template file. Starts a new processing job.
 - `415`: Unsupported file type
 - `400`: Unsafe template archive (ZIP-bomb guard)
 - `400`: Missing required file
+- `429 QUOTA_EXCEEDED`: daily per-IP cap reached (free 5 / pro 50), `Retry-After` header set
 
 ---
 
@@ -396,6 +503,9 @@ Get source PDF page content for verification.
 | Endpoint | Limit | Window | Key | Returns |
 |----------|-------|--------|-----|---------|
 | `POST /api/upload` | 10 | per hour per IP | `upload` | `429 RATE_LIMITED` + `Retry-After` header |
+| `POST /api/upload` (free tier) | **5** | **per day per IP** | `free_upload` | `429 QUOTA_EXCEEDED` + `Retry-After` (Phase 6) |
+| `POST /api/upload` (account tier) | **50** | **per day per IP** | `pro_upload` | `429 QUOTA_EXCEEDED` + `Retry-After` (cost guard, Phase 6) |
+| `POST /api/auth/login` | **5** | **per minute per IP** | `auth` | `429 RATE_LIMITED` + `Retry-After` (Phase 6) |
 | `GET /api/jobs/*` (`/jobs/{id}`, `/results`, `/source/page/{n}`) | 60 | per minute per IP | `read` | internal category (not yet enforced on GET path, but polling is cheap `/health`→ no limit) |
 | `PATCH /api/jobs/*/fields/*` & `POST /api/jobs/*/confirm` | 30 | per minute per IP | `write` | `429` after 30/min (`jobs.py:89,232`) |
 | `POST /api/jobs/*/fields/*/re-extract` & alias `PATCH action=re_extract` | 5 | per minute per IP | `re_extract` | `429` + sanitized hint limit |

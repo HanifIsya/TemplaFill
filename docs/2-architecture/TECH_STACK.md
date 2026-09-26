@@ -14,13 +14,13 @@
 | **Backend** | FastAPI | 0.110+ | Async Python, auto-generated OpenAPI docs, great for ML pipelines, `BackgroundTasks` |
 | **Backend Language** | Python | 3.11+ (`python:3.11-slim` in Dockerfile) | Best ML/AI ecosystem, rich PDF/document libs |
 | **Database** | PostgreSQL | 16+ (+ `pgvector` via `pgvector/pgvector:pg16`) | Reliable, extensible, `vector` extension for `VECTOR(768)` |
-| **Vector Store** | pgvector (PostgreSQL extension) | 0.7+ *or* `InMemoryVectorStore` default for dev | `VECTOR(768)` + `ivfflat vector_cosine_ops`; `InMemory` avoids Postgres for 167 offline tests |
+| **Vector Store** | pgvector (PostgreSQL extension) | 0.7+ *or* `InMemoryVectorStore` default for dev | `VECTOR(768)` + `ivfflat vector_cosine_ops`; `InMemory` avoids Postgres for 214 offline tests |
 | **ORM** | SQLAlchemy | 2.0+ (`sqlalchemy[asyncio]` + `asyncpg`) | Async support, mature, flexible; `alembic` migrations |
-| **LLM** | Gemini API (free plan) | `gemini-3.6-flash` (primary, candidates `3.5/3.5-lite/3.7/3.8` via `extractor.py:220`) | `GenerateContentConfig(response_mime_type="application/json")`, batch single-prompt, 404 blacklist + 1.2s pacing; free-tier 15 RPM/1M TPM/20–1500 RPD |
-| **Embeddings** | Gemini Embedding API | `gemini-embedding-001` (sanitized from legacy `text-embedding-004` at `embedder.py:107`) | 768 dims, batch 100, throttled 4s; `_fake_embedding` offline for 167 tests |
+| **LLM** | Gemini API (free plan) — free tier; **DeepSeek API** — account tier | Free: `gemini-3.6-flash` (candidates `3.5/3.5-lite/3.7/3.8` via `extractor.py:220`); Account: `deepseek-flash` | `GenerateContentConfig(response_mime_type="application/json")`, batch single-prompt, 404 blacklist + 1.2s pacing; DeepSeek via OpenAI-compatible Chat Completions (`httpx`, JSON mode); free-tier 15 RPM/1M TPM/20–1500 RPD |
+| **Embeddings** | Gemini Embedding API (**free tier only**) | `gemini-embedding-001` (sanitized from legacy `text-embedding-004` at `embedder.py:107`) | 768 dims, batch 100, throttled 4s; account tier bypasses embeddings entirely (no Google calls); `_fake_embedding` offline for tests |
 | **Job Queue** | FastAPI BackgroundTasks (current) / Celery + Redis (scale) | `celery 5.x` optional | `manager.py:116` `background_tasks.add_task(process_job)` stays within Render Hobby 750h (no separate worker); switch to Celery when traffic > free tier |
 | **File Storage** | Local FS (dev) / Supabase Storage 1 GB free (prod) | — | MVP local FS (24h auto-delete), prod Supabase Storage unified with DB per free-forever choice |
-| **Auth** | NextAuth.js (frontend) + JWT (API) | 5.x | Simple auth, multiple providers |
+| **Auth** | Shared-credential tier tokens (Phase 6) | stdlib `hashlib.scrypt` + HMAC | One fixed account credential (`TIER_ACCOUNT_USERNAME`/`TIER_ACCOUNT_PASSWORD_HASH`), signed 30-day tier token (`purpose:"tier"`); no per-user accounts. Legacy NextAuth/JWT plan superseded |
 | **Deployment (FE)** | Vercel Hobby | — | Free 100 GB/mo, auto-deploy from Git, `vercel.json` headers, global edge |
 | **Deployment (BE)** | **Render Hobby `$0` + Supabase Postgres** | — | **Free-forever choice per 2026-09-23**: Render Hobby 512 MB/0.1 CPU 750h (sleep 15m wake 60s) + Supabase 500 MB pgvector free forever (no 30-day expiry) — see `DEPLOYMENT.md` for booting banner handling via `BackendWakingBanner.tsx` |
 | **CI/CD** | GitHub Actions | — | Free for public repos, `ci.yml` + `deploy.yml` (Render deploy) |
@@ -47,7 +47,7 @@
 ### State & Data
 | Package | Purpose | Actual |
 |---------|---------|--------|
-| `@tanstack/react-query` / `zustand` / `zod` | Server/client state + schema | Planned in early MVP spec; current MVP uses `useState` + `localStorage` (`templafill_auth_user`, `templafill_recent_sessions`) + manual polling (`api.getJobProgress`) — see `frontend/src/lib/api.ts:192` |
+| `@tanstack/react-query` / `zustand` / `zod` | Server/client state + schema | Planned in early MVP spec; current MVP uses `useState` + `localStorage` (`tf_history`, `tf_tier_token`) + manual polling (`api.getJobProgress`) — see `frontend/src/lib/api.ts` and `frontend/src/lib/tier.ts` |
 
 ### File Handling
 | Package | Purpose | Actual |
@@ -127,8 +127,22 @@
 
 - Embedder: sliding-window check `_last_call_ts` + `asyncio.Lock` (`embedder.py:123`) — 4s between live calls
 - Extractor: `_throttle_call` 1.2s + per-candidate `2.5s×attempt` exponential backoff (`extractor.py:236`); 404 → immediate blacklist `*_BLACKLISTED_MODELS*` + advance (`extractor.py:325`); daily quota `20/day` → blacklist + advance without sleep (`extractor.py:332`)
-- HTTP layer: `InMemoryRateLimiter` 10/hr upload / 30/min write / 5/min re_extract (`security.py:98`); `testclient` exempt so CI 167 tests never 429
+- HTTP layer: `InMemoryRateLimiter` 10/hr upload / 30/min write / 5/min re_extract + Phase 6 `free_upload` 5/day, `pro_upload` 50/day, `auth` 5/min (`security.py:98`); `testclient` exempt so CI 214 tests never 429
 - High traffic: single `BackgroundTasks` worker keeps Hobby 750h; queue semantics via `JobStatus` (`queued→processing→extracting→mapping→completed`) + 18% progress sweep over batch fields (`manager.py:261`)
+
+---
+
+## DeepSeek API Usage Plan (Account Tier, Phase 6)
+
+| Item | Detail |
+|------|--------|
+| Model | `deepseek-flash` (config `DEEPSEEK_MODEL`, sanitization/blacklist pattern mirrors Gemini) |
+| Endpoint | OpenAI-compatible `POST {DEEPSEEK_BASE_URL}/v1/chat/completions`, JSON mode, 35s timeout |
+| Extraction | 1 batch call per document (shared prompt builder + `<document>` fencing + output validation) |
+| Embeddings | **none** — RAG retrieval bypassed via sequential chunk batching (1M-token context) |
+| Fallback | local heuristic engine **only** — never Gemini on the pro path |
+| Cost guard | `pro_upload` 50/day/IP (tunable); DeepSeek key server-side only |
+| Offline/CI | `force_fake` path mirrors `FakeExtractor`; no real key in CI |
 
 ---
 

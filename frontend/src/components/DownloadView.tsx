@@ -41,13 +41,16 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
   };
 
   const handleDownloadAuditJson = () => {
+    const engineLabel =
+      sessionInfo.tier === 'pro' ? 'DeepSeek' : 'Google Gemini 3.6 Flash RAG';
     const auditData = {
       sessionId: sessionInfo.sessionId,
       sourceDocument: sessionInfo.sourceDoc,
       templateDocument: sessionInfo.templateDoc,
       generatedFile: generationResult.filename,
       timestamp: new Date().toISOString(),
-      engine: 'Google Gemini 3.6 Flash RAG',
+      tier: sessionInfo.tier || 'free',
+      engine: engineLabel,
     };
     const blob = new Blob([JSON.stringify(auditData, null, 2)], {
       type: 'application/json',

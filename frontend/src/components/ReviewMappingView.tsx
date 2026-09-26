@@ -28,6 +28,7 @@ interface ReviewMappingViewProps {
   onUpdateField: (fieldId: string, newValue: string) => void;
   onReExtractField?: (fieldId: string, hint: string) => void;
   isGenerating?: boolean;
+  engineLabel?: string;
 }
 
 export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
@@ -36,6 +37,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
   onUpdateField,
   onReExtractField,
   isGenerating = false,
+  engineLabel = 'the AI engine',
 }) => {
   const [filter, setFilter] = useState<'all' | 'unconfirmed' | 'confirmed' | 'review' | 'skipped'>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -171,11 +173,12 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
   const confirmedCount = fields.filter((f) => f.isConfirmed && !f.isSkipped).length;
   const unconfirmedCount = fields.filter((f) => !f.isConfirmed && !f.isSkipped).length;
   const unconfirmedHighCount = fields.filter((f) => f.confidenceLevel === 'high' && !f.isConfirmed && !f.isSkipped).length;
+  const filledValueCount = fields.filter((f) => !f.isSkipped && f.extractedValue.trim().length > 0).length;
 
   const handleGenerateClick = () => {
     const overrides: Record<string, string> = {};
     fields.forEach((f) => {
-      if (!f.isSkipped) {
+      if (!f.isSkipped && f.extractedValue.trim()) {
         overrides[f.templateField] = f.extractedValue;
       }
     });
@@ -213,6 +216,17 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
           title={field.fallbackReason || 'Automatically switched to the local heuristic fallback engine'}
         >
           Fallback
+        </span>
+      );
+    }
+    if (field.extractedBy === 'deepseek') {
+      return (
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60"
+          title="Extracted directly by DeepSeek (Account tier)"
+        >
+          <Sparkles className="w-2.5 h-2.5 text-blue-500" />
+          DeepSeek
         </span>
       );
     }
@@ -325,9 +339,25 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-              {extractionResult.fallbackReason || extractionResult.aiErrorMessage || 'The AI engine switched to the local heuristic due to a Gemini API issue (404/429/Missing Key).'} Your extraction was transparently secured to prevent failure. Review, edit, or confirm the fields below before export.
+              {extractionResult.fallbackReason || extractionResult.aiErrorMessage || (extractionResult.tier === 'pro'
+                ? 'The DeepSeek engine was unavailable, so extraction was secured by the local heuristic engine (never Google on the account tier).'
+                : 'The AI engine switched to the local heuristic due to a Gemini API issue (404/429/Missing Key).')}{' '}
+              Your extraction was transparently secured to prevent failure. Review, edit, or confirm the fields below before export.
             </p>
           </div>
+        </div>
+      ) : extractionResult.engineUsed === 'deepseek' ? (
+        <div className="p-2.5 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="text-[11px]">
+              <strong>Powered by DeepSeek (Account tier)</strong>: All fields were extracted on the
+              DeepSeek engine — no data was sent to Google.
+            </span>
+          </div>
+          <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-blue-300 dark:border-blue-800 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 shrink-0">
+            DeepSeek Active
+          </span>
         </div>
       ) : extractionResult.engineUsed === 'hybrid' ? (
         <div className="p-3 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 text-xs flex items-center justify-between gap-3">
@@ -771,7 +801,7 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
             <span className="font-semibold text-slate-800 dark:text-slate-200">
               {confirmedCount} of {activeCount} active fields confirmed
             </span>
-            {confirmedCount === activeCount && (
+            {confirmedCount === activeCount && activeCount > 0 && (
               <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
                 <Check className="w-3.5 h-3.5" /> All confirmed
               </span>
@@ -779,16 +809,20 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
             {skippedCount > 0 && <span className="text-slate-400">({skippedCount} skipped)</span>}
           </div>
           <p className="text-[11px] text-slate-500">
-            {confirmedCount === activeCount
+            {filledValueCount === 0
+              ? 'No fields have a value yet — extract, edit, or add at least one value before generating.'
+              : confirmedCount === activeCount
               ? 'All data has been verified and is ready for template injection.'
-              : 'Unconfirmed fields will use their current extracted values.'}
+              : `${filledValueCount} field(s) with values will be injected. Unconfirmed fields use their current extracted values.`}
           </p>
         </div>
 
         <button
-          disabled={isGenerating}
+          type="button"
+          disabled={isGenerating || filledValueCount === 0}
           onClick={handleGenerateClick}
-          className="w-full sm:w-auto px-5 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50"
+          title={filledValueCount === 0 ? 'Add at least one field value before generating' : undefined}
+          className="w-full sm:w-auto px-5 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs sm:text-sm flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs disabled:opacity-50 disabled:cursor-not-allowed focus-ring"
         >
           <span>{isGenerating ? 'Generating Template Document...' : 'Generate Filled Document'}</span>
           <ArrowRight className="w-3.5 h-3.5" />
@@ -803,10 +837,12 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
       />
 
       <ReExtractModal
+        key={reExtractField?.id || 'reextract'}
         field={reExtractField}
         onClose={() => setReExtractField(null)}
         onSubmitReExtract={handleReExtractSubmit}
         isProcessing={isReExtracting}
+        engineLabel={engineLabel}
       />
 
       <AddFieldModal
