@@ -5,9 +5,13 @@
 ---
 
 ## Last Updated
+- **Date**: 2026-09-26 (later session)
+- **By**: OpenCode
+- **Summary**: **Tier system planning (Phase 6, PROPOSED — awaiting user approval)**: wrote `docs/1-product/TIER_PLAN.md` and `docs/2-architecture/TIER_ARCHITECTURE.md` (user-directed creation of new planning files in Antigravity-owned doc folders — noted under Cross-Agent Requests). User decisions locked: one fixed shared password (contact `hanif.isya.annafi-2024@fst.unair.ac.id`), free tier = Gemini with **5 jobs/day/IP** cap, account tier = DeepSeek `deepseek-flash` with zero Google calls (retrieval bypassed via sequential batching), history/results in browser localStorage only, pro fallback = heuristic never Gemini. `TASKS.md` Phase 6 added (6.0–6.17 split OpenCode backend / Antigravity frontend+docs / joint), `TESTING.md` + `FEEDBACK_LOOP.md` revised (real counts 214/13, corrected commands, new 18-case tier test matrix, per-provider eval), ADR-020 logged as **Pending**. **No implementation started — waiting for user's go.**
+
 - **Date**: 2026-09-26
 - **By**: OpenCode
-- **Summary**: **Cyber security remediation (VULN-01→15)**: White-box assessment published in `docs/6-security/CYBER_SECURITY_REPORT.md`; all findings fixed. Highlights: per-job signed session tokens + authorization on every `/jobs/*` route (404 to prevent enumeration); job TTL eviction + capacity cap + cleanup task; request-body size middleware; formula/DDE injection neutralization for spreadsheets; trusted-proxy client IP + bounded rate limiter (read routes now limited); Gemini key moved to `x-goog-api-key` header; prompt-injection fencing + output validation; explicit CORS allow-list; `DEBUG` defaults false; template ZIP-bomb guard; dependencies pinned + blocking `pip-audit` (patched `python-multipart` CVE); production refuses placeholder `SECRET_KEY`. Frontend sends the session token and downloads via authenticated fetch. **214 backend tests green** (34 new), frontend build green, `pip-audit` clean. `SECURITY.md` corrected (prior sign-off overstated controls).
+- **Summary**: **Cyber security remediation (VULN-01→15)**: White-box assessment published in `docs/6-security/CYBER_SECURITY_REPORT.md`; all findings fixed. Highlights: per-job signed session tokens + authorization on every `/jobs/*` route (404 to prevent enumeration); job TTL eviction + capacity cap + cleanup task; request-body size middleware; formula/DDE injection neutralization for spreadsheets; trusted-proxy client IP + bounded rate limiter (read routes now limited); Gemini key moved to `x-goog-api-key` header; prompt-injection fencing + output validation; explicit CORS allow-list; `DEBUG` defaults false; template ZIP-bomb guard; dependencies pinned + blocking `pip-audit` (patched `python-multipart` CVE); production refuses placeholder `SECRET_KEY`. Frontend sends the session token and downloads via authenticated fetch. **214 backend tests green** (34 new), frontend build green, `pip-audit` clean. `SECURITY.md` corrected (prior sign-off overstated controls). PR #1 merged to `main`.
 
 ---
 
@@ -41,7 +45,8 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - [x] `eval/` — 5 synthetic datasets + `generate_eval_datasets.py` + `run_eval.py` (1.00 PASS, halluc 0.00, placeholder 1.00) ✅
 
 ### What's Being Worked On Right Now
-_All planned tasks in Phase 0 through Phase 5 have been completed._
+- **Phase 6 (Tiers) PLANNED, NOT STARTED** — plan docs in `docs/1-product/TIER_PLAN.md` + `docs/2-architecture/TIER_ARCHITECTURE.md` await user approval; tasks 6.0–6.17 in `TASKS.md`.
+- Phases 0–5 are complete; PR #1 (security remediation) merged to `main`.
 
 ### Completed Milestones
 1. ✅ OpenCode Phase 1 done — 140/140 tests green.
@@ -73,12 +78,19 @@ _All planned tasks in Phase 0 through Phase 5 have been completed._
 | Anonymous per-job session tokens (HMAC, 404-on-denied) | Prevent cross-job data access without full accounts yet | 2026-09-26 | ADR-019 ✅ |
 | Pinned deps + blocking `pip-audit` | Reproducible builds + no known-CVE releases | 2026-09-26 | ADR-019 ✅ |
 | Formula/DDE neutralization for spreadsheet output | Prevent client-side injection via filled `.xlsx` | 2026-09-26 | ADR-019 ✅ |
+| Two tiers: free=Gemini (5/day/IP) vs account=DeepSeek `deepseek-flash`, shared password, localStorage history | Quota + training-data concerns; no accounts/payments wanted | 2026-09-26 | ADR-020 (Pending plan approval) |
 
 ---
 
 ## Cross-Agent Requests
 
-_No active requests._
+### Request: Tier planning docs written by OpenCode in Antigravity-owned folders
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: `docs/1-product/TIER_PLAN.md`, `docs/2-architecture/TIER_ARCHITECTURE.md` (both **new** files)
+- **Description**: User directly instructed OpenCode to produce the tier plan/design markdown. Both files are new (no existing Antigravity files were edited); please review for consistency with PRD/ARCHITECTURE conventions when you pick up tasks 6.9–6.14, and treat them as the approved spec once the user signs off.
+- **Priority**: medium
+- **Status**: pending
 
 <!-- Template for new requests:
 ### Request: [Short Title]
@@ -119,6 +131,8 @@ _No known issues._
 | 2026-09-23 | Antigravity | Model migration to Gemini 3.7 Flash & 3.8 Flash (ADR-011): Diagnosed 404 error spike from user AI Studio metrics showing active models are Gemini 3.7 Flash & 3.8 Flash. Root caused 404 errors to render.yaml hardcoding gemini-2.0-flash and gemini-1.5-flash fallback. Updated render.yaml, config.py, and .env.example to gemini-3.7-flash, added automatic sanitization of deprecated model names, set candidate progression [gemini-3.7-flash -> gemini-3.8-flash], and verified UI Amber banner warning. 165 backend tests, 5/5 eval datasets, and 13 frontend tests passing. |
 | 2026-09-24 | Antigravity | Single-Prompt Batch Extraction & Rate-Limit Resilience (ADR-013): Diagnosed 0 output tokens and 130+ error spike in Google AI Studio dashboard (404 NotFound, 429 TooManyRequests, 503 ServiceUnavailable). Implemented extract_batch in extractor.py and integrated into JobManager.process_document (single consolidated prompt for all template fields, reducing requests by 90%+). Added 404 model blacklisting (_BLACKLISTED_MODELS), 1.2s request pacing, and exponential backoff on 429/503. Added 2 new unit tests in test_generation_extractor.py (167 backend tests passing, 5/5 eval datasets at 1.00 PASS). |
 | 2026-09-24 | Both | **Close-Loop Live Test with `Test source/` 51-field contract (ADR-017 validation)**: OpenCode validated live `https://templa-fill.vercel.app` (`Checking backend → https://templafill-backend.onrender.com/api` via `getApiBaseUrl()` ) and ran local+direct REST checks on `source_kontrak_konsultasi.pdf` (2 pages, 3546 chars, 2 chunks) + `target_template_ringkasan_kontrak.docx` (6 tables, 51 placeholders). Direct REST `gemini-3.5-flash` succeeded for 6118-char prompt (51/51 found) while `gemini-3.6-flash` gave 503 — confirmed need for candidate reorder `3.5→3.6` and SDK→REST fallback. Enhanced `FakeExtractor` with Indonesian date (`15 September 2026`), `PT ...` company, `Jl.` address, `Optimalisasi` title, `BCA ...`, `0,5%` heuristics — fallback coverage `1→20/51` for 503/429 resilience. Added `_call_gemini` REST fallback (`httpx`+`urllib` 35s) and `PT [A-Za-z]` atomic regex fix. Verified filled docx brace-free (`{{value}}` absent) via `generate_filled_document` on 6-table docx, 167/167 pytest + 13/13 frontend + `next build` clean. |
+| 2026-09-26 | OpenCode | **Security remediation shipped**: all 15 findings from `docs/6-security/CYBER_SECURITY_REPORT.md` fixed (session-token authz, eviction, body cap, formula guard, trusted-proxy IP, Gemini header key, prompt fencing, CORS allow-list, debug gating, read rate limits, ZIP guard, pinned deps + blocking pip-audit, SECRET_KEY fail-fast, docs corrected); 214 backend tests (34 new) + 13 frontend + build green; PR #1 merged to `main` (CI fully green after fixing pre-existing `npm ci` lockfile drift and 10 lint errors). |
+| 2026-09-26 | OpenCode | **Tier system planned (Phase 6, awaiting approval)**: TIER_PLAN.md + TIER_ARCHITECTURE.md created (user-directed), TASKS.md Phase 6 added with OpenCode/Antigravity split, TESTING.md + FEEDBACK_LOOP.md revised (214/13 counts, real commands, tier test matrix, per-provider eval), ADR-020 Pending, cross-agent note added. |
 
 
 
