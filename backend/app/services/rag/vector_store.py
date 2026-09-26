@@ -17,9 +17,7 @@ Usage:
 from __future__ import annotations
 
 import math
-import uuid
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, Field
@@ -41,7 +39,7 @@ class SearchResult(BaseModel):
     """Result from vector search."""
 
     chunk: StoredChunk
-    score: float  # cosine similarity [0,1] (higher is more similar)
+    score: float  # cosine similarity in [-1, 1] (higher is more similar)
 
 
 def _cosine_similarity(a: List[float], b: List[float]) -> float:
@@ -97,6 +95,15 @@ class InMemoryVectorStore(VectorStore):
             self._store[c.chunk_id] = c
 
     async def search(self, query_embedding: List[float], top_k: int = 5) -> List[SearchResult]:
+        return self._search(query_embedding, top_k)
+
+    def _search(self, query_embedding: List[float], top_k: int) -> List[SearchResult]:
+        """Shared search body for the async and sync entry points.
+
+        Chunks whose dimensionality does not match the query are skipped
+        consistently here (rather than raising in one path and silently
+        skipping in the other).
+        """
         if not self._store:
             return []
         scored: List[Tuple[float, StoredChunk]] = []
@@ -122,14 +129,7 @@ class InMemoryVectorStore(VectorStore):
             self._store[c.chunk_id] = c
 
     def search_sync(self, query_embedding: List[float], top_k: int = 5) -> List[SearchResult]:
-        if not self._store:
-            return []
-        scored: List[Tuple[float, StoredChunk]] = []
-        for chunk in self._store.values():
-            sim = _cosine_similarity(query_embedding, chunk.embedding)
-            scored.append((sim, chunk))
-        scored.sort(key=lambda x: x[0], reverse=True)
-        return [SearchResult(chunk=chunk, score=score) for score, chunk in scored[:top_k]]
+        return self._search(query_embedding, top_k)
 
 
 class PgVectorStore(VectorStore):
@@ -174,10 +174,11 @@ _vector_store_instance: Optional[VectorStore] = None
 
 
 def get_vector_store(force_in_memory: bool = False) -> VectorStore:
-    """Factory returning vector store singleton.
+    """Factory returning the vector-store singleton (per process).
 
     Args:
-        force_in_memory: If True, always return InMemory (useful for tests)
+        force_in_memory: If True, return a NEW in-memory store (useful for tests
+            that need isolation) instead of the cached singleton.
     """
     global _vector_store_instance
     if force_in_memory:

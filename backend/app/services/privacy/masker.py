@@ -3,10 +3,15 @@
 Implements the Sanitize -> Store Map -> Call API -> Restore (Unmask) pattern.
 Only masks high-entropy, isolated sensitive PII entities:
 - NPWP (Indonesian tax identification numbers)
-- NIK (Indonesian citizen identification numbers)
+- NIK (Indonesian citizen identification numbers — when labeled)
 - Bank Account Numbers (preceded or labeled by bank/rekening keywords)
 - Email Addresses
 - Phone Numbers
+
+Known limitation (documented, by design): an unlabeled 16-digit NIK (e.g. a bare
+number in a table cell) is NOT masked, because a label-free 16-digit heuristic
+would also catch order numbers, timestamps and reference codes. Labeled NIK
+("NIK: ...", "No. KTP ...") is always masked.
 
 Explicitly preserves for 100% semantic accuracy:
 - Company names (PT/CV/Firma) to preserve client vs vendor roles
@@ -44,10 +49,11 @@ class SelectivePIIMasker:
         r"(?i)\b((?:nik|no\.?\s*ktp|ktp)(?:\s+[a-zA-Z]+){0,2}[:\s]+)([1-9]\d{15})\b"
     )
     _RE_REKENING = re.compile(
-        r"(?i)\b(rekening\s+(?:bank\s+)?[a-zA-Z]{3,12}\s+|rekening\s+|rek\.?\s*(?:bank\s+)?[a-zA-Z]{0,12}\s+|no\.?\s*rek(?:ening)?[:\s]+)(\d{3,5}[-\s]\d{2,5}[-\s]\d{3,8}(?:[-\s]\d{1,4})?|\d{9,18})\b"
+        r"(?i)\b(rekening\s+(?:bank\s+)?[a-zA-Z]{3,12}\s+|rekening\s+|rek\.?\s*(?:bank\s+)?[a-zA-Z]{0,12}\s+|no\.?\s*rek(?:ening)?[:\s]+)(\d{3,5}[-\s]\d{2,5}[-\s]\d{3,8}(?:[-\s]\d{1,4})?|\d{9,24})\b"
     )
     _RE_PHONE_PREFIXED = re.compile(
-        r"(?i)\b((?:telepon|telp|hp|wa|whatsapp|handphone|mobile)[:\s]+)(\(?\+?62\)?[\s-]?\d{2,4}[\s-]?\d{3,8}|\(?0\d{2,3}\)?[\s-]?\d{3,8})\b"
+        r"(?i)\b((?:telepon|telp|hp|wa|whatsapp|handphone|mobile)[:\s]+)"
+        r"(\(?\+?62\)?[\s-]?\d{2,4}(?:[\s-]?\d{2,4}){0,2}|\(?0\d{2,3}\)?[\s-]?\d{3,8}(?:[\s-]?\d{2,4}){0,2})\b"
     )
     _RE_PHONE_STANDALONE = re.compile(
         r"\b(?:\+62|62|0)8[1-9]\d{1,2}[\s-]?\d{3,4}[\s-]?\d{3,4}\b"
@@ -163,13 +169,19 @@ class SelectivePIIMasker:
             return text
 
         result = text
-        for token, original in mapping.items():
+        # Longest token first so TOKEN_PHONE_1 never matches inside TOKEN_PHONE_10.
+        for token, original in sorted(mapping.items(), key=lambda kv: len(kv[0]), reverse=True):
             clean_token = token.strip("[]")
             # 1. Match [TOKEN_X_Y] with potential space variations
-            pattern = re.compile(r"\[\s*" + re.escape(clean_token) + r"\s*\]", re.IGNORECASE)
-            result = pattern.sub(original, result)
-            # 2. Match token if LLM stripped outer brackets
-            if clean_token in result:
-                result = result.replace(clean_token, original)
+            bracket = re.compile(r"\[\s*" + re.escape(clean_token) + r"\s*\]", re.IGNORECASE)
+            # lambda replacement avoids backslash/group-reference expansion in the value.
+            result = bracket.sub(lambda _m, o=original: o, result)
+            # 2. Match bare token if the LLM stripped the brackets (case-insensitive),
+            #    guarded by boundaries so TOKEN_PHONE_1 cannot match TOKEN_PHONE_10.
+            bare = re.compile(
+                r"(?<![A-Za-z0-9_])" + re.escape(clean_token) + r"(?![A-Za-z0-9_])",
+                re.IGNORECASE,
+            )
+            result = bare.sub(lambda _m, o=original: o, result)
 
         return result

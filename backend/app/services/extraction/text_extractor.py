@@ -20,7 +20,6 @@ import fitz  # PyMuPDF
 
 from app.services.extraction.exceptions import (
     PdfCorruptError,
-    PdfEmptyError,
     PdfPasswordProtectedError,
     PdfTooLargeError,
 )
@@ -84,7 +83,6 @@ def extract_text_from_pdf(
         PdfPasswordProtectedError: if PDF requires a password
         PdfCorruptError: if file is invalid / not a PDF
         PdfTooLargeError: if page count exceeds max_pages
-        PdfEmptyError: if no text could be extracted (optional, caller can check has_text)
     """
     pdf_bytes, inferred_name = _load_pdf_bytes(source)
     effective_filename = filename or inferred_name

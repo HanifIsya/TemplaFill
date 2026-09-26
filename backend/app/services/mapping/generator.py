@@ -26,12 +26,17 @@ from __future__ import annotations
 import io
 import re
 from pathlib import Path
-from typing import Dict, Tuple, Union
+from typing import Any, Dict, Tuple
 
-from app.services.mapping.parser import _find_placeholders, _normalize_field_name
+from app.services.mapping.parser import (
+    _PLACEHOLDER_PATTERNS,
+    _find_placeholders,
+    _normalize_field_name,
+)
 
-
-_FORMULA_TRIGGERS = ("=", "+", "-", "@")
+# XML-illegal control characters that make python-docx/openpyxl raise on write.
+# \t (0x09), \n (0x0A) and \r (0x0D) are XML-legal and are kept.
+_XML_ILLEGAL = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
 
 
 def _is_plain_number(rest: str) -> bool:
@@ -57,10 +62,11 @@ def neutralize_formula(value: Any) -> str:
     text = "" if value is None else str(value)
     if not text:
         return text
-    # Leading control characters (tab/CR) can also trigger formula evaluation.
+    # Leading control characters (tab/CR/LF) can also trigger formula evaluation.
     if text[0] in ("\t", "\r", "\n"):
         return "'" + text
-    stripped = text.lstrip()
+    # A leading BOM is a known Excel formula-trigger bypass.
+    stripped = text.lstrip("\ufeff").lstrip()
     if not stripped:
         return text
     first = stripped[0]
@@ -77,9 +83,12 @@ def _clean_field_value(val: Any, *, spreadsheet: bool = False) -> str:
     if val is None:
         return ""
     text = str(val)
-    # Strip markdown bold/italic tags like **text** or *text* that LLMs might produce
+    # Strip markdown bold (**text**) that LLMs may produce. We deliberately do
+    # NOT strip single asterisks: `*` is a common arithmetic/invoice character
+    # (e.g. "5 * 3 * 2"), and stripping it silently corrupts extracted values.
     text = re.sub(r"\*\*([^*]+)\*\*", r"\1", text)
-    text = re.sub(r"(?<!\*)\*([^*]+)\*(?!\*)", r"\1", text)
+    # Remove XML-illegal control characters so docx/xlsx generation cannot crash.
+    text = _XML_ILLEGAL.sub("", text)
     # VULN-04: neutralize formula/DDE payloads for spreadsheet output.
     if spreadsheet:
         text = neutralize_formula(text)
@@ -115,34 +124,60 @@ def _build_replacement_map(
     return direct, normalized_to_value
 
 
+def _combined_placeholder_regex() -> "re.Pattern[str]":
+    """One alternation of all placeholder patterns.
+
+    Alternatives are ordered longest-regex-first so a nested delimiter like
+    `<<<a>>>` matches `<<a>>` (angle) before the single-brace fallback can
+    consume a shorter inner span.
+    """
+    alternatives = sorted(
+        (pat.pattern for _name, pat in _PLACEHOLDER_PATTERNS),
+        key=len,
+        reverse=True,
+    )
+    return re.compile("|".join(f"(?:{alt})" for alt in alternatives))
+
+
+_COMBINED_RE = _combined_placeholder_regex()
+
+
 def _replace_in_text(text: str, direct_map: Dict[str, str], norm_map: Dict[str, str]) -> str:
     """Replace placeholders in a single text string.
 
-    Strategy:
-     1. Find all bracketed/enclosed placeholders via regex first. Replace using direct_map or norm_map.
-        This ensures full placeholders (e.g. {{nomor_kontrak}}) are replaced atomically without
-        leaving behind wrapper braces.
-     2. Replace any remaining direct_map keys.
+    A single left-to-right pass over the ORIGINAL text: matched placeholders are
+    substituted once and the replacement text is never re-scanned. This prevents
+    the historical double-fill corruption where a value that itself contains
+    `{{...}}` (or a shorter placeholder nested in a longer one) was rewritten.
+
+    Exact caller-supplied raw keys are added as alternatives (longest first) so
+    a longer enclosing key such as `<<<a>>>` is preferred over the shorter
+    standard match `<<a>>`.
     """
     if not text:
         return text
 
-    # Step 1: Replace enclosed placeholders found via regex
-    placeholders = _find_placeholders(text)
-    for raw, norm, _ in sorted(placeholders, key=lambda x: len(x[0]), reverse=True):
+    alternatives = [re.escape(raw) for raw in sorted(direct_map.keys(), key=len, reverse=True) if raw]
+    alternatives.extend(pat.pattern for _name, pat in _PLACEHOLDER_PATTERNS)
+    pattern = re.compile("|".join(f"(?:{alt})" for alt in alternatives))
+
+    def _sub(match: "re.Match[str]") -> str:
+        raw = match.group(0)
         if raw in direct_map:
-            text = text.replace(raw, direct_map[raw])
-        elif norm in norm_map:
-            text = text.replace(raw, norm_map[norm])
-        elif norm in direct_map:
-            text = text.replace(raw, direct_map[norm])
+            return direct_map[raw]
+        # Resolve via the normalized name of the inner placeholder.
+        inner = None
+        for _raw, norm, _pat in _find_placeholders(raw):
+            inner = norm
+            break
+        if inner is not None:
+            if inner in norm_map:
+                return norm_map[inner]
+            if inner in direct_map:
+                return direct_map[inner]
+        return raw
 
-    # Step 2: Direct raw replacement for any remaining non-standard placeholder keys
-    for raw in sorted(direct_map.keys(), key=len, reverse=True):
-        if raw in text:
-            text = text.replace(raw, direct_map[raw])
-
-    return text
+    return pattern.sub(_sub, text)
 
 
 # ---------------------------------------------------------------------------
@@ -159,88 +194,95 @@ def _generate_docx(template_bytes: bytes, mapped: Dict[str, str]) -> bytes:
 
     doc = Document(io.BytesIO(template_bytes))
 
-    # Helper to replace in paragraph while preserving runs where possible
-    def replace_in_paragraph(paragraph):
-        # paragraph.text is concatenated runs; replacing via text assignment will reset formatting
-        # To preserve formatting, we need to handle runs: replace in each run's text
-        # Simpler for MVP: if placeholder spans multiple runs, paragraph.text replacement will merge runs but preserve paragraph style
-        # We do run-level replacement for better formatting preservation
+    def _resolve_placeholder(raw: str) -> str:
+        if raw in direct_map:
+            return direct_map[raw]
+        for _raw, norm, _pat in _find_placeholders(raw):
+            if norm in norm_map:
+                return norm_map[norm]
+            if norm in direct_map:
+                return direct_map[norm]
+            break
+        return raw
 
+    def replace_in_paragraph(paragraph):
+        """Replace placeholders while preserving run-level formatting.
+
+        Matches fully inside a single run are replaced in place (keeping the
+        run's formatting and any hyperlink element). Only placeholders that span
+        multiple runs fall back to rewriting the paragraph text.
+        """
         full_text = paragraph.text
         if not full_text:
             return
-        found = _find_placeholders(full_text)
-        has_direct = any(raw in full_text for raw in direct_map)
-        has_norm = any(norm in norm_map for _, norm, _ in found)
-        if not has_direct and not has_norm:
+        if not _COMBINED_RE.search(full_text):
             return
 
-        new_text = _replace_in_text(full_text, direct_map, norm_map)
-        if new_text == full_text:
+        runs = paragraph.runs
+        if not runs:
+            paragraph.text = _replace_in_text(full_text, direct_map, norm_map)
             return
 
-        # If paragraph has runs, try to preserve first run's formatting and clear others
-        # Approach: save style of first run, clear paragraph, add new run with new_text and style
-        if len(paragraph.runs) == 0:
-            paragraph.text = new_text
-            return
+        # Map each run to its [start, end) span within the concatenated text.
+        spans = []
+        pos = 0
+        for run in runs:
+            spans.append((pos, pos + len(run.text)))
+            pos += len(run.text)
 
-        # Preserve formatting from first run
-        first_run = paragraph.runs[0]
-        # Save formatting attributes
-        # Clear all runs
-        # We need to keep paragraph element but remove runs
-        # Use paragraph.clear() which keeps style?
-        p = paragraph._p  # type: ignore[attr-defined]
-        # Remove all r elements
-        # Alternative simpler: set paragraph.text = new_text and reapply bold/italic from first_run
-        # But this loses per-run formatting for mixed formatting paragraphs (acceptable for MVP)
+        matches = list(_COMBINED_RE.finditer(full_text))
+        # Process right-to-left so earlier offsets stay valid as we mutate runs.
+        for match in reversed(matches):
+            start, end = match.span()
+            replacement = _resolve_placeholder(match.group(0))
+            if replacement == match.group(0):
+                continue
+            first_run_idx = next((i for i, (s, e) in enumerate(spans) if s <= start < e), None)
+            last_run_idx = next((i for i, (s, e) in enumerate(spans) if s < end <= e), None)
+            if first_run_idx is None or last_run_idx is None:
+                continue
+            if first_run_idx == last_run_idx:
+                run = runs[first_run_idx]
+                rs, _re = spans[first_run_idx]
+                run.text = run.text[: start - rs] + replacement + run.text[end - rs :]
+            else:
+                # Placeholder spans runs: keep the first run's formatting, drop
+                # the remainder of the first run and the whole spanned tail.
+                first_run = runs[first_run_idx]
+                first_start = spans[first_run_idx][0]
+                first_run.text = first_run.text[: start - first_start] + replacement
+                for idx in range(first_run_idx + 1, last_run_idx + 1):
+                    rs, _re = spans[idx]
+                    if idx == last_run_idx:
+                        runs[idx].text = runs[idx].text[end - rs :]
+                    else:
+                        runs[idx].text = ""
 
-        # Save
-        bold = first_run.bold
-        italic = first_run.italic
-        underline = first_run.underline
-        color = first_run.font.color.rgb if first_run.font.color else None
-        name = first_run.font.name
-        size = first_run.font.size
+    def scan_paragraphs(paragraphs):
+        for para in paragraphs:
+            replace_in_paragraph(para)
 
-        paragraph.text = new_text
-        # Reapply formatting uniformly to all runs created by docx
-        for run in paragraph.runs:
-            run.bold = bold
-            run.italic = italic
-            run.underline = underline
-            if color:
-                run.font.color.rgb = color
-            if name:
-                run.font.name = name
-            if size:
-                run.font.size = size
+    def scan_tables(tables):
+        for table in tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    scan_paragraphs(cell.paragraphs)
+                    # M7: recurse into nested tables
+                    if cell.tables:
+                        scan_tables(cell.tables)
 
-    # Paragraphs
-    for para in doc.paragraphs:
-        replace_in_paragraph(para)
+    # Body paragraphs & tables
+    scan_paragraphs(doc.paragraphs)
+    scan_tables(doc.tables)
 
-    # Tables
-    for table in doc.tables:
-        for row in table.rows:
-            for cell in row.cells:
-                for para in cell.paragraphs:
-                    replace_in_paragraph(para)
-
-    # Headers & Footers
+    # Headers & Footers (paragraphs + tables, M6)
     for section in doc.sections:
         if section.header:
-            for para in section.header.paragraphs:
-                replace_in_paragraph(para)
-            for table in section.header.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        for para in cell.paragraphs:
-                            replace_in_paragraph(para)
+            scan_paragraphs(section.header.paragraphs)
+            scan_tables(section.header.tables)
         if section.footer:
-            for para in section.footer.paragraphs:
-                replace_in_paragraph(para)
+            scan_paragraphs(section.footer.paragraphs)
+            scan_tables(section.footer.tables)
 
     out = io.BytesIO()
     doc.save(out)
@@ -266,9 +308,22 @@ def _generate_xlsx(template_bytes: bytes, mapped: Dict[str, str]) -> bytes:
                 if cell.value is None or not isinstance(cell.value, str):
                     continue
                 orig = cell.value
+                is_formula = cell.data_type == "f" or orig.startswith("=")
+                # H2: never rewrite an existing formula's structured references
+                # (`Table1[Amount]` looks like a [placeholder] and would be
+                # corrupted). Only touch a formula cell when it contains an
+                # unambiguous multi-char template placeholder ({{ }}, << >>, __).
+                if is_formula and not any(d in orig for d in ("{{", "}}", "<<", ">>", "__")):
+                    continue
                 new_val = _replace_in_text(orig, direct_map, norm_map)
                 if new_val != orig:
-                    cell.value = new_val
+                    # H3: if the result would be evaluated as a formula, store it
+                    # as literal text so an injected value can never execute.
+                    if new_val.startswith("="):
+                        cell.value = "'" + new_val
+                        cell.data_type = "s"
+                    else:
+                        cell.value = new_val
                     # Preserve cell style automatically (openpyxl keeps style on value change)
     out = io.BytesIO()
     wb.save(out)

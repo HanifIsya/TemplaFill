@@ -58,7 +58,7 @@ def _table_to_extracted(
 
     Returns None if table is empty or trivial (e.g., single cell with no data).
     """
-    if not raw_table or not any(any(c for c in row) for row in raw_table):
+    if not raw_table or not any(any(c for c in (row or [])) for row in raw_table):
         return None
 
     # Clean all cells
@@ -167,9 +167,12 @@ def extract_tables_from_pdf(
 
                 if raw_tables:
                     for t_idx, raw in enumerate(raw_tables):
-                        extracted = _table_to_extracted(
-                            raw, page_number=page_number, table_index=t_idx, bbox=None
-                        )
+                        try:
+                            extracted = _table_to_extracted(
+                                raw, page_number=page_number, table_index=t_idx, bbox=None
+                            )
+                        except Exception:  # noqa: BLE001
+                            continue
                         if extracted:
                             tables.append(extracted)
 
@@ -214,6 +217,9 @@ def extract_tables_with_fallback(
             if tables:
                 return tables
         except PdfCorruptError:
+            raise
+        except PdfPasswordProtectedError:
+            # Password-protection is not a strategy failure — surface it.
             raise
         except Exception:  # noqa: BLE001
             continue

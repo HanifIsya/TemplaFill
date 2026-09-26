@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import difflib
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 from pydantic import BaseModel, Field
 
@@ -40,12 +40,15 @@ _SYNONYMS: Dict[str, List[str]] = {
     "phone_number": ["phone", "tel", "telepon"],
     "address": ["alamat", "address", "street"],
     "city": ["kota", "city", "kabupaten"],
-    "date": ["tanggal", "date", "invoice_date", "signing_date", "due_date"],
-    "invoice_date": ["tanggal_faktur", "invoice_date", "date"],
-    "signing_date": ["tanggal_tanda_tangan", "signing_date", "date"],
-    "total": ["total_amount", "total", "jumlah", "grand_total", "amount"],
+    # Date/amount families are kept separate on purpose: collapsing e.g.
+    # invoice_date into a generic `date` caused unrelated fields to cross-fill.
+    "date": ["tanggal", "date"],
+    "invoice_date": ["tanggal_faktur", "invoice_date"],
+    "signing_date": ["tanggal_tanda_tangan", "signing_date"],
+    "due_date": ["tanggal_jatuh_tempo", "due_date"],
+    "total": ["total_amount", "total", "jumlah", "grand_total"],
     "total_amount": ["total", "jumlah_total", "grand_total"],
-    "amount": ["jumlah", "amount", "total", "nominal"],
+    "amount": ["jumlah", "amount", "nominal"],
     "company": ["perusahaan", "company", "organization", "org"],
     "company_name": ["perusahaan", "company_name", "company"],
     "invoice_number": ["no_faktur", "invoice_number", "invoice_no", "inv_no"],
@@ -71,11 +74,17 @@ def _canonicalize(name: str) -> str:
 
 
 def _fuzzy_match(target: str, candidates: List[str], cutoff: float = 0.7) -> Optional[str]:
-    """Find best fuzzy match for target in candidates using difflib."""
+    """Find best fuzzy match for target in candidates using difflib.
+
+    Short names are matched with a stricter cutoff: at 0.7 a 4-letter target
+    like `date` is within ratio of many unrelated keys (e.g. `rate`), which
+    injected wrong values.
+    """
     if not candidates:
         return None
+    effective_cutoff = max(cutoff, 0.85) if len(target) < 8 else cutoff
     # difflib's get_close_matches uses SequenceMatcher
-    matches = difflib.get_close_matches(target, candidates, n=1, cutoff=cutoff)
+    matches = difflib.get_close_matches(target, candidates, n=1, cutoff=effective_cutoff)
     return matches[0] if matches else None
 
 

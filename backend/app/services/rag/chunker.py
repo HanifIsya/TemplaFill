@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import re
 import uuid
-from dataclasses import dataclass, field
 from typing import List, Optional
 
 from pydantic import BaseModel, Field
@@ -115,31 +114,18 @@ def _is_header_line(line: str) -> bool:
     # Markdown header
     if stripped.startswith("#"):
         return True
-    # Ends with colon
-    if stripped.endswith(":"):
-        return True
+    # Reject "key: value" data lines (e.g. "Name: John") — only a bare
+    # trailing colon ("Section:") is header-like, not a filled label.
+    if ":" in stripped:
+        return stripped.endswith(":")
     # All upper case (with allowance for numbers/spaces)
     if stripped.isupper() and len(stripped.split()) <= 8:
         return True
     # Title Case short line with 1-6 words and no period
     words = stripped.split()
     if 1 <= len(words) <= 6 and "." not in stripped and stripped.istitle():
-        # Check that next char after title check? Simplify
         return True
     return False
-
-
-def _detect_header(text: str) -> Optional[str]:
-    """Return most recent header-like line in text, or None."""
-    lines = text.strip().split("\n")
-    for line in reversed(lines):
-        if _is_header_line(line):
-            return line.strip().lstrip("#").strip()
-    # Also try regex find
-    matches = list(_RE_HEADER.finditer(text))
-    if matches:
-        return matches[-1].group(0).strip().lstrip("#").strip()
-    return None
 
 
 def _split_recursive(text: str, chunk_size: int, chunk_overlap: int) -> List[str]:
@@ -253,9 +239,6 @@ def _split_by_chars(text: str, chunk_size: int, chunk_overlap: int) -> List[str]
         if end >= len(text):
             break
         start += step
-        # Avoid infinite loop when step is 0
-        if step <= 0:
-            break
     return result
 
 
@@ -271,7 +254,9 @@ def _apply_overlap(chunks: List[str], chunk_size: int, chunk_overlap: int) -> Li
 
     overlapped: List[str] = [chunks[0]]
     for i in range(1, len(chunks)):
-        prev = overlapped[-1]
+        # Take overlap from the ORIGINAL chunk, not the already-overlapped text,
+        # so overlap does not compound across successive chunks.
+        prev = chunks[i - 1]
         curr = chunks[i]
         # Get overlap suffix from prev (chunk_overlap tokens)
         overlap_text = _tail_tokens(prev, chunk_overlap)
@@ -408,11 +393,24 @@ def chunk_document(
         if not page_text.strip():
             continue
 
-        # Detect header for this page (last header before page text)
-        page_header = _detect_header(page_text)
-
         texts = chunk_text(page_text, chunk_size=chunk_size, chunk_overlap=chunk_overlap)
 
+        # Walk the page once, tracking the last header seen up to each chunk's
+        # position, so a chunk is labelled with the section it belongs to.
+        header_positions = []
+        for m in _RE_HEADER.finditer(page_text):
+            header_positions.append((m.start(), m.group(0).strip().lstrip("#").strip()))
+        # Also include header-like lines the regex missed.
+        cursor = 0
+        for line in page_text.split("\n"):
+            if _is_header_line(line):
+                header_positions.append((cursor, line.strip().lstrip("#").strip()))
+            cursor += len(line) + 1
+        header_positions.sort(key=lambda hp: hp[0])
+
+        # Approximate each chunk's end offset within page_text (chunks are
+        # produced in order; find each one sequentially from the last position).
+        search_from = 0
         for i, txt in enumerate(texts):
             token_count = count_tokens(txt)
             # Determine overlap with previous chunk (if same page continuity)
@@ -431,6 +429,24 @@ def chunk_document(
                 # First chunk of new page: no overlap across pages (clean boundary)
                 overlap = 0
 
+            probe = txt[:40] if txt else ""
+            idx = page_text.find(probe, search_from) if probe else -1
+            if idx < 0 and probe:
+                idx = page_text.find(probe)
+            if idx >= 0:
+                search_from = idx
+                chunk_start = idx
+            else:
+                chunk_start = 0
+            # Label the chunk by the section header that precedes its START, so
+            # overlap pulling in later text does not mislabel the chunk.
+            chunk_header = None
+            for pos, htext in header_positions:
+                if pos <= chunk_start:
+                    chunk_header = htext
+                else:
+                    break
+
             chunk = Chunk(
                 chunk_id=str(uuid.uuid4()),
                 text=txt,
@@ -439,7 +455,7 @@ def chunk_document(
                 start_char=global_char_offset,
                 end_char=global_char_offset + len(txt),
                 token_count=token_count,
-                header=page_header,
+                header=chunk_header,
                 char_count=len(txt),
                 overlap_with_previous=overlap,
             )
