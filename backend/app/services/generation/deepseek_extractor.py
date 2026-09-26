@@ -42,6 +42,7 @@ class DeepSeekExtractor:
         self.api_key = settings.deepseek_api_key if api_key is None else api_key
         self.model = model if model is not None else settings.deepseek_model
         self.base_url = settings.deepseek_base_url.rstrip("/")
+        self.disable_thinking = bool(getattr(settings, "deepseek_disable_thinking", True))
         self.use_fake = (not bool(self.api_key)) if use_fake is None else use_fake
         self.enable_pii_masking: bool = getattr(settings, "enable_pii_masking", True)
         self._fake = FakeExtractor()
@@ -49,6 +50,26 @@ class DeepSeekExtractor:
         self.last_fallback_reason: Optional[str] = (
             "DEEPSEEK_API_KEY is not configured in backend environment" if self.use_fake else None
         )
+
+    def _build_payload(self, prompt: str, include_reasoning_control: bool) -> dict:
+        payload: dict = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are a precise document extraction system. Respond ONLY with valid JSON.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0,
+        }
+        if include_reasoning_control and self.disable_thinking:
+            # OpenAI/OpenRouter-style reasoning toggle; kenari.id maps it to the
+            # provider-native switch. Extraction must not burn output tokens on
+            # hidden thinking (cost, latency, 35s-timeout risk on big contracts).
+            payload["reasoning"] = {"enabled": False}
+        return payload
 
     async def _throttle(self) -> None:
         now = time.monotonic()
@@ -62,44 +83,40 @@ class DeepSeekExtractor:
         import httpx
 
         url = f"{self.base_url}/v1/chat/completions"
-        payload = {
-            "model": self.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": "You are a precise document extraction system. Respond ONLY with valid JSON.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            "response_format": {"type": "json_object"},
-            "temperature": 0,
-        }
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
         last_error: Optional[Exception] = None
-        for attempt in range(self._MAX_ATTEMPTS):
-            await self._throttle()
-            try:
-                async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
-                    res = await client.post(url, json=payload, headers=headers)
-                if res.status_code == 200:
-                    data = res.json()
-                    content = data["choices"][0]["message"]["content"]
-                    if content and str(content).strip():
-                        return str(content)
-                    raise RuntimeError("Empty response from DeepSeek API")
-                # Do not echo upstream body (may contain request/credential echoes).
-                last_error = RuntimeError(f"HTTP {res.status_code}")
-                if res.status_code in (429,) or res.status_code >= 500:
-                    # Retry with backoff on rate limit / server errors.
+        # First try with the reasoning toggle; if the provider rejects the
+        # unknown field (400), retry once without it so any OpenAI-compatible
+        # endpoint keeps working.
+        for include_reasoning_control in (True, False):
+            payload = self._build_payload(prompt, include_reasoning_control)
+            for attempt in range(self._MAX_ATTEMPTS):
+                await self._throttle()
+                try:
+                    async with httpx.AsyncClient(timeout=self._TIMEOUT) as client:
+                        res = await client.post(url, json=payload, headers=headers)
+                    if res.status_code == 200:
+                        data = res.json()
+                        content = data["choices"][0]["message"]["content"]
+                        if content and str(content).strip():
+                            return str(content)
+                        raise RuntimeError("Empty response from DeepSeek API")
+                    # Do not echo upstream body (may contain request/credential echoes).
+                    last_error = RuntimeError(f"HTTP {res.status_code}")
+                    if res.status_code == 400 and include_reasoning_control:
+                        # Provider may not accept the reasoning field — retry without it.
+                        break
+                    if res.status_code in (429,) or res.status_code >= 500:
+                        # Retry with backoff on rate limit / server errors.
+                        await asyncio.sleep(min(2.0 * (attempt + 1), 6.0))
+                        continue
+                    break  # 4xx (auth, bad request) — no point retrying
+                except Exception as e:  # noqa: BLE001
+                    last_error = e
                     await asyncio.sleep(min(2.0 * (attempt + 1), 6.0))
-                    continue
-                break  # 4xx (auth, bad request) — no point retrying
-            except Exception as e:  # noqa: BLE001
-                last_error = e
-                await asyncio.sleep(min(2.0 * (attempt + 1), 6.0))
         raise last_error if last_error else RuntimeError("DeepSeek API request failed")
 
     def _mask(self, chunks: List[str]) -> tuple[List[str], Dict[str, str]]:

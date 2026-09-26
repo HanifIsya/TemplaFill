@@ -142,6 +142,14 @@ class Settings(BaseSettings):
     deepseek_api_key: str = Field(default="", description="DeepSeek API key (account tier extraction)")
     deepseek_model: str = Field(default="deepseek-flash")
     deepseek_base_url: str = Field(default="https://api.deepseek.com", description="OpenAI-compatible base URL")
+    deepseek_disable_thinking: bool = Field(
+        default=True,
+        description=(
+            "Send reasoning={enabled:false} to the provider so extraction does not spend output "
+            "tokens/latency on reasoning (kenari.id/OpenRouter-style gateways honor this; set false "
+            "if the provider rejects unknown fields)"
+        ),
+    )
     deepseek_max_batch_chars: int = Field(
         default=240_000,
         description="Max characters of document text per sequential batch on the pro tier (no RAG)",

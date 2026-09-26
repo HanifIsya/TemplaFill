@@ -609,3 +609,91 @@ class TestProPipelineZeroGoogle:
         job = Job(tier="pro")
         assert job.to_status_dict()["tier"] == "pro"
         assert job.to_results_dict()["tier"] == "pro"
+
+
+# ---------------------------------------------------------------------------
+# Provider gateway support (kenari.id / OpenAI-compatible) — thinking toggle
+# ---------------------------------------------------------------------------
+
+class TestDeepSeekThinkingToggle:
+    def test_payload_includes_reasoning_off_by_default(self, monkeypatch):
+        from app.core.config import get_settings
+        from app.services.generation.deepseek_extractor import DeepSeekExtractor
+
+        monkeypatch.setattr(get_settings(), "deepseek_disable_thinking", True)
+        ext = DeepSeekExtractor(api_key="kn-test", use_fake=False)
+        payload = ext._build_payload("hello", include_reasoning_control=True)
+        assert payload["reasoning"] == {"enabled": False}
+        assert payload["response_format"] == {"type": "json_object"}
+
+    def test_payload_omits_reasoning_when_disabled(self, monkeypatch):
+        from app.core.config import get_settings
+        from app.services.generation.deepseek_extractor import DeepSeekExtractor
+
+        monkeypatch.setattr(get_settings(), "deepseek_disable_thinking", False)
+        ext = DeepSeekExtractor(api_key="kn-test", use_fake=False)
+        payload = ext._build_payload("hello", include_reasoning_control=True)
+        assert "reasoning" not in payload
+
+    def test_payload_omits_reasoning_on_retry(self, monkeypatch):
+        from app.core.config import get_settings
+        from app.services.generation.deepseek_extractor import DeepSeekExtractor
+
+        monkeypatch.setattr(get_settings(), "deepseek_disable_thinking", True)
+        ext = DeepSeekExtractor(api_key="kn-test", use_fake=False)
+        payload = ext._build_payload("hello", include_reasoning_control=False)
+        assert "reasoning" not in payload
+
+    async def test_http_400_with_reasoning_retries_without_it(self, monkeypatch):
+        """A provider that rejects the reasoning field must still succeed."""
+        from app.services.generation.deepseek_extractor import DeepSeekExtractor
+
+        calls = []
+
+        class FakeResponse:
+            def __init__(self, status_code, body=None):
+                self.status_code = status_code
+                self._body = body or {}
+
+            def json(self):
+                return self._body
+
+        class FakeClient:
+            def __init__(self, *args, **kwargs):
+                pass
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *exc):
+                return False
+
+            async def post(self, url, json=None, headers=None):
+                calls.append(json)
+                if "reasoning" in (json or {}):
+                    return FakeResponse(400, {"error": "unknown field reasoning"})
+                return FakeResponse(
+                    200,
+                    {
+                        "choices": [
+                            {"message": {"content": '{"extractions": [{"field_name": "full_name", "value": "John", "confidence": 1.0, "source_page": 1, "source_text": "John"}]}'}}
+                        ]
+                    },
+                )
+
+        monkeypatch.setattr("httpx.AsyncClient", FakeClient)
+        monkeypatch.setattr(DeepSeekExtractor, "_throttle", lambda self: _noop())
+
+        ext = DeepSeekExtractor(api_key="kn-test", use_fake=False)
+        res = await ext.extract_batch(
+            [{"field_name": "full_name", "description": "Name"}],
+            ["Applicant: John"],
+        )
+        assert res["full_name"].extracted_by == "deepseek"
+        assert len(calls) >= 2, "expected retry without the reasoning field"
+        assert "reasoning" in calls[0]
+        assert "reasoning" not in calls[-1]
+
+
+async def _noop():
+    return None
