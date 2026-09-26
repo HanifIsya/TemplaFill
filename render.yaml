@@ -58,9 +58,18 @@ services:
       - key: PRO_JOBS_PER_DAY
         value: "50"
       # ----- DeepSeek (account tier — zero Google calls) -----
+      # DEEPSEEK_API_KEY is a kenari.id gateway key (kn-...) in this deployment;
+      # any OpenAI-compatible endpoint works. Base URL must NOT include /v1
+      # (the code appends /v1/chat/completions). Model id must match the
+      # gateway's catalog: kenari's id for DeepSeek-V4.1-Flash is
+      # deepseek-v4-1-flash (DeepSeek's own API calls it deepseek-flash).
       - key: DEEPSEEK_API_KEY
         sync: false
       - key: DEEPSEEK_MODEL
-        value: deepseek-flash
+        value: deepseek-v4-1-flash
       - key: DEEPSEEK_BASE_URL
-        value: https://api.deepseek.com
+        value: https://kenari.id
+      # Disable hidden reasoning tokens during extraction (fast, cheaper, avoids
+      # the 35s timeout on large contracts). Set false if the provider rejects it.
+      - key: DEEPSEEK_DISABLE_THINKING
+        value: "true"

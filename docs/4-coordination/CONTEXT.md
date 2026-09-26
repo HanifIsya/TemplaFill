@@ -99,6 +99,14 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 
 ## Cross-Agent Requests
 
+### Request: OpenCode re-pointing shared `DEEPSEEK_*` vars at kenari.id gateway (user-directed)
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: `.env.example`, `render.yaml` (both shared — Rule 2 note given BEFORE editing)
+- **Description**: The user's DeepSeek key is a **kenari.id** gateway key (`kn-...`), which only works against `https://kenari.id/v1`. Changing `DEEPSEEK_BASE_URL` → `https://kenari.id` and `DEEPSEEK_MODEL` → `deepseek-v4-1-flash` (kenari's id for the same DeepSeek-V4.1-Flash model) on branch `feat/oc-kenari-provider`. Backend adds `reasoning: {enabled: false}` (kenari-documented thinking-off switch) + `DEEPSEEK_DISABLE_THINKING` setting. No frontend changes; no new `NEXT_PUBLIC_*` vars.
+- **Priority**: high
+- **Status**: done
+
 ### Request: OpenCode added a review report in the Antigravity-owned docs zone
 - **From**: OpenCode
 - **To**: Antigravity
@@ -198,6 +206,7 @@ _No known issues._
 | 2026-09-26 | Antigravity | **Phase 6 frontend + docs (tasks 6.9–6.14) complete** on `feat/ag-tier-frontend`: `LoginModal` (shared credential, generic error), `AccountRequestView` (contact `hanif.isya.annafi-2024@fst.unair.ac.id`), `TierDisclosure` (Google-training + 5/day quota notice); `api.login/logout/getQuota/getTier/getTierToken/getHistory/saveHistoryEntry/clearHistory` + `QuotaExceededError` (429 `QUOTA_EXCEEDED`); Navbar badge `Free · Gemini`/`Account · DeepSeek` + sign-in/out; `tf_history` browser store (`HistoryEntry`) + quota countdown; `types.ts` `Tier`/`HistoryEntry`/`QuotaInfo`/`LoginResult` + `deepseek` unions; tier-aware badges/banners. Tests **42/42** (new `tier.test.mjs` T13–T18 + `e2e.test.mjs` both tiers; was 13), lint 0 errors, build clean. Docs swept (PRD/USER_STORIES/USER_GUIDE/API/ARCHITECTURE/TECH_STACK/DATA_MODEL/SECURITY/DATA_PRIVACY/README/CHANGELOG). Cross-agent contract request logged for OpenCode 6.2–6.6. |
 | 2026-09-26 | Antigravity | **Frontend design-review follow-up** on `feat/ag-frontend-polish`: shared accessible `Modal` primitive (portal/dialog/focus-trap/Escape/restore/scroll-lock) adopted by all 6 modals; tier-aware engine copy; toast a11y + persistent warnings/errors; fixed Indonesian string + stale `text-embedding-004`; Help 5 syntaxes; `alert()`→toast; history JSON metadata export; `.focus-ring` + `prefers-reduced-motion`; empty-generate guard + `key={sessionId}`; mobile Navbar tier chip + workflow dots; landing tagline. Tests **59/59**, lint 0 warnings, build green. `DESIGN.md`/`DESIGN_SYSTEM.md` reconciled with shipped code; `USER_GUIDE`/`CHANGELOG`/`README` updated. |
 | 2026-09-27 | OpenCode | **Phase 6 delivery merge (user-directed)**: merged `feat/ag-frontend-polish` (frontend 6.9–6.14 + polish 6.18–6.22) into the delivery branch, resolving CONTEXT/TASKS conflicts (kept both agents' history, current statuses). Verified closed loop on the merged tree: **282 backend tests**, **59 frontend tests**, lint 0 warnings, `next build` green. Task 6.15 **verified — negative verdict** (DeepSeek terms contain no no-training/no-retention commitment; no claim published; `DATA_PRIVACY.md` updated; HelpModal copy corrected). ADR-020 flipped to **Accepted** (6.17); TASKS 6.0/6.15/6.17 → done, 6.16 → review (live staging E2E with real keys is the user's acceptance step); CHANGELOG v0.3.0 completed with backend + review + verdict sections. |
+| 2026-09-27 | OpenCode | **Account-tier provider re-pointed at kenari.id gateway (user-directed)**: the user's DeepSeek key is a kenari.id gateway key (`kn-...`) that only works against `https://kenari.id/v1`. `render.yaml`/`.env.example` updated: `DEEPSEEK_BASE_URL=https://kenari.id`, `DEEPSEEK_MODEL=deepseek-v4-1-flash` (kenari's id for DeepSeek-V4.1-Flash). Backend adds `DEEPSEEK_DISABLE_THINKING` (default true) — sends `reasoning:{enabled:false}` so extraction does not burn output tokens on hidden thinking, with a graceful 400-retry without the field for providers that reject it. 4 new tests → **286 backend tests green**; eval PASS both providers. Rule 2 note added before shared-file edits. Live Render check still pending user's `kn-...` key. |
 
 
 
