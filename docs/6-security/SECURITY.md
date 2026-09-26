@@ -103,6 +103,35 @@ for the anonymous flow so one visitor cannot read or modify another's documents:
 Planned Phase 2 (not yet implemented): full JWT accounts, 15-minute access /
 7-day refresh tokens, CSRF double-submit cookie.
 
+### Tier Authentication (Phase 6, implemented 2026-09-26)
+
+A lightweight tier layer sits on top of the anonymous flow — **one shared
+credential**, no per-user accounts:
+
+- `POST /api/auth/login` compares the username in constant time and the password
+  against a **salted `hashlib.scrypt` hash** (`TIER_ACCOUNT_PASSWORD_HASH`); the
+  plaintext password is never stored in code or git.
+- Success issues a **signed tier token** (HMAC-SHA256, 30-day expiry) with a
+  `purpose:"tier"` claim. Per-job tokens carry `purpose:"job"`, so **tier and job
+  tokens are mutually invalid** (a stolen job token cannot become a tier token and
+  vice versa). This is asserted by backend tests (T4).
+- The token is set as an HttpOnly cookie and returned for the `localStorage`
+  fallback (`tf_tier_token`).
+- `POST /api/upload` accepts the tier token via `X-Session-Token`; a valid token
+  marks the job `tier:"pro"` (DeepSeek), otherwise `tier:"free"` (Gemini).
+- Failures return a **generic `401 "Invalid credentials"`** — no user enumeration.
+- Login is rate-limited `auth` **5/min/IP** (T3).
+- `POST /api/auth/logout` clears the cookie; token expiry is the real boundary
+  (no server-side revocation list in v1).
+- **Per-IP daily quotas** remain enforced even for signed-in users (the shared
+  password means the IP cap is the main abuse/cost control): `free_upload` 5/day,
+  `pro_upload` 50/day → `429 QUOTA_EXCEEDED`.
+- **Zero-Google-on-pro** is a security/privacy property enforced by tests: the
+  `pro` path must never call a Google endpoint (extraction or embeddings); on
+  DeepSeek failure it falls back to the local heuristic engine only.
+- Rollback: unset `DEEPSEEK_API_KEY` / `TIER_ACCOUNT_PASSWORD_HASH` → login
+  returns configured-off and every job runs free-tier as before.
+
 ### Input Validation (VULN-1→10, ADR-012)
 
 - Backend Pydantic: `Job`/`FieldResult`/`FileInfo` + strict extension/magic checks (`upload.py:53` `%PDF`/`PK`) + `sanitize_filename()` (strip `../`/null chars, whitelist `a-zA-Z0-9._-`, `__+→_` collapse, 128-char cap) + `sanitize_text_input(5000/2000)` (null byte + `[\x01-\x08\x0B\x0C\x0E-\x1F]` strip) + download `Content-Disposition: filename*=UTF-8''...` RFC5987 (`jobs.py:325`) + no `str(e)` leak (generic `msg`) + `DEBUG` gates `/api/debug/gemini` + `/docs` disabled when `DEBUG=False` + CORS whitelist (`GET POST PATCH PUT DELETE OPTIONS` + explicit headers) (`main.py:37`).
@@ -115,6 +144,9 @@ Planned Phase 2 (not yet implemented): full JWT accounts, 15-minute access /
 | Endpoint Category | Limit | Window | Key | Behavior |
 |-------------------|-------|--------|-----|----------|
 | File upload (`POST /api/upload`) | 10 | per hour per IP | `upload` | `429` + `Retry-After` header; `testclient` exempt for CI |
+| Free tier upload (`POST /api/upload`, no tier token) | **5** | **per day per IP** | `free_upload` | `429 QUOTA_EXCEEDED` + `Retry-After` (Phase 6) |
+| Account tier upload (`POST /api/upload`, valid tier token) | **50** | **per day per IP** | `pro_upload` | `429 QUOTA_EXCEEDED` (DeepSeek cost guard, Phase 6) |
+| Login (`POST /api/auth/login`) | **5** | **per minute per IP** | `auth` | `429` + `Retry-After` (Phase 6) |
 | API read (`GET /api/jobs/*`, `/results`, `/download`, `/source/page/*`) | 60 | per minute per IP | `read` | Sliding `deque` per `ip:category`; now wired on **all** read routes |
 | API write (`PATCH /fields/*`, `POST /confirm`) | 30 | per minute per IP | `write` | Same bucket, `PATCH` gated 30/min |
 | Re-extraction (`POST /re-extract` + alias `PATCH re_extract`) | 5 | per minute per IP | `re_extract` | `5/min`, hint `max_len=2000` sanitized |

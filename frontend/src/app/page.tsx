@@ -11,6 +11,8 @@ import { DownloadView } from '../components/DownloadView';
 import { ToastContainer } from '../components/Toast';
 import { HistoryModal } from '../components/HistoryModal';
 import { HelpModal } from '../components/HelpModal';
+import { LoginModal } from '../components/LoginModal';
+import { AccountRequestView } from '../components/AccountRequestView';
 import { BackendWakingBanner } from '../components/BackendWakingBanner';
 import {
   WorkflowStep,
@@ -19,18 +21,25 @@ import {
   ExtractionResult,
   GenerationResult,
   ToastMessage,
-  RecentSession,
+  HistoryEntry,
+  Tier,
+  QuotaInfo,
 } from '../lib/types';
-import { api } from '../lib/api';
+import { api, QuotaExceededError } from '../lib/api';
+import { FREE_DAILY_LIMIT, remainingFreeJobs } from '../lib/tier';
 import { MOCK_DEMO_SESSION } from '../lib/mockData';
-
-const STORAGE_KEY_SESSIONS = 'templafill_recent_sessions';
 
 export default function Home() {
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('landing');
   const [isBackendLive, setIsBackendLive] = useState<boolean>(false);
   const [backendStatus, setBackendStatus] = useState<'checking' | 'waking' | 'live' | 'offline' | 'mock'>('checking');
   const [wakeRetries, setWakeRetries] = useState<number>(0);
+
+  // Tier / auth state (Phase 6)
+  const [tier, setTier] = useState<Tier>('free');
+  const [quota, setQuota] = useState<QuotaInfo>({ free_used_today: 0, free_limit: FREE_DAILY_LIMIT, tier: 'free' });
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [quotaRetryAfter, setQuotaRetryAfter] = useState<number | undefined>(undefined);
 
   // User Guide Modal state
   const [isHelpOpen, setIsHelpOpen] = useState(false);
@@ -58,27 +67,20 @@ export default function Home() {
   // Toast notifications state
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
-  // History sessions state with lazy initializer
+  // History sessions state (browser-local `tf_history`)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [recentSessions, setRecentSessions] = useState<RecentSession[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const saved = localStorage.getItem(STORAGE_KEY_SESSIONS);
-        if (saved) return JSON.parse(saved);
-      } catch {
-        // ignore
-      }
-    }
-    return [];
-  });
+  const [recentSessions, setRecentSessions] = useState<HistoryEntry[]>([]);
 
-  // Toast dispatcher helper
+  // Toast dispatcher helper. Success/info auto-dismiss; warnings/errors persist
+  // until dismissed so users can actually read failure guidance.
   const addToast = useCallback((type: ToastMessage['type'], title: string, message: string) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     setToasts((prev) => [...prev, { id, type, title, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3800);
+    if (type === 'success' || type === 'info') {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4200);
+    }
   }, []);
 
   const dismissToast = (id: string) => {
@@ -129,6 +131,48 @@ export default function Home() {
     }, 0);
     return () => clearTimeout(id);
   }, [checkBackend]);
+
+  // Hydrate tier + quota + history from browser storage on mount.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setTier(api.getTier());
+      setRecentSessions(api.getHistory());
+      api.getQuota().then((q) => {
+        setQuota(q);
+        setTier(q.tier);
+      });
+    }, 0);
+    return () => clearTimeout(id);
+  }, []);
+
+  const refreshQuota = useCallback(async () => {
+    const q = await api.getQuota();
+    setQuota(q);
+    return q;
+  }, []);
+
+  const handleLoginSuccess = useCallback(async () => {
+    setIsLoginOpen(false);
+    const loggedInTier = api.getTier();
+    setTier(loggedInTier);
+    const q = await api.getQuota();
+    setQuota(q);
+    setTier(q.tier);
+    addToast('success', 'Account Tier Active', 'Signed in — processing now runs on DeepSeek.');
+    if (currentStep === 'account-request') setCurrentStep('upload');
+  }, [addToast, currentStep]);
+
+  const handleLogout = useCallback(async () => {
+    await api.logout();
+    setTier('free');
+    const q = await api.getQuota();
+    setQuota(q);
+    addToast('info', 'Signed Out', 'Back to the free tier (Google Gemini, 5 jobs/day).');
+  }, [addToast]);
+
+  const openAccountRequest = useCallback(() => {
+    setCurrentStep('account-request');
+  }, []);
 
   // Load demo preset files
   const handleLoadDemoFiles = async () => {
@@ -202,6 +246,9 @@ export default function Home() {
       // 1. Upload files
       const session = await api.uploadFiles(sourceFile, templateFile);
       setSessionInfo(session);
+      if (session.tier) setTier(session.tier);
+      // Refresh the free-tier countdown after a successful upload.
+      refreshQuota();
 
       // 2. Start extraction job
       const { jobId } = await api.startExtraction(session.sessionId);
@@ -242,13 +289,21 @@ export default function Home() {
               addToast(
                 'warning',
                 'Heuristic Fallback Active',
-                result.fallbackReason || 'Gemini AI hit a quota or connectivity limit. Data was extracted using the local heuristic engine.'
+                result.fallbackReason || (result.tier === 'pro'
+                  ? 'DeepSeek was unavailable. Data was extracted using the local heuristic engine.'
+                  : 'Gemini AI hit a quota or connectivity limit. Data was extracted using the local heuristic engine.')
+              );
+            } else if (result.engineUsed === 'deepseek') {
+              addToast(
+                'success',
+                'DeepSeek — Extraction Complete',
+                `Successfully extracted ${result.totalFields} fields on the DeepSeek account engine.`
               );
             } else if (result.engineUsed === 'hybrid') {
               addToast(
                 'info',
                 'Hybrid Extraction (AI + Fallback)',
-                'Some fields were extracted by Gemini AI and others were recovered by the heuristic engine.'
+                'Some fields were extracted by the AI engine and others were recovered by the heuristic engine.'
               );
             } else {
               addToast(
@@ -259,7 +314,7 @@ export default function Home() {
             }
           } else if (isTimeout) {
             clearInterval(interval);
-            throw new Error('Proses ekstraksi membutuhkan waktu lebih lama dari biasanya di server cloud. Silakan periksa koneksi atau coba sesaat lagi.');
+            throw new Error('Extraction is taking longer than usual on the cloud server. Please check your connection and try again shortly.');
           } else if (updated.status === 'failed') {
             clearInterval(interval);
             throw new Error(updated.errorMessage || 'Job failed during backend processing');
@@ -278,12 +333,24 @@ export default function Home() {
       }, 1000);
     } catch (err: unknown) {
       console.error('Upload / Extraction error:', err);
+      setIsProcessing(false);
+      if (err instanceof QuotaExceededError) {
+        setQuotaRetryAfter(err.retryAfterSeconds);
+        addToast(
+          'warning',
+          'Daily Limit Reached',
+          err.tier === 'free'
+            ? 'You have used all 5 free jobs today. Request an account for a higher limit.'
+            : 'Your account daily cap has been reached. Please try again tomorrow.'
+        );
+        setCurrentStep('account-request');
+        return;
+      }
       addToast(
         'error',
         'Upload / Extraction Failed',
         err instanceof Error ? err.message : 'Could not process via live backend.'
       );
-      setIsProcessing(false);
       setCurrentStep('upload');
     }
   };
@@ -307,25 +374,27 @@ export default function Home() {
       setIsGenerating(false);
       setCurrentStep('download');
 
-      // Save to recent sessions in localStorage
-      const newSession: RecentSession = {
+      // Save to browser-local history (`tf_history`, TIER_ARCHITECTURE §6)
+      const newSession: HistoryEntry = {
         sessionId: sessionInfo.sessionId,
-        sourceFilename: sessionInfo.sourceDoc.filename,
-        templateFilename: sessionInfo.templateDoc.filename,
-        date: new Date().toISOString(),
+        createdAt: new Date().toISOString(),
+        tier: sessionInfo.tier || tier,
+        engineUsed: extractionResult?.engineUsed || 'mock',
+        sourceDoc: {
+          filename: sessionInfo.sourceDoc.filename,
+          size: sessionInfo.sourceDoc.sizeBytes,
+        },
+        templateDoc: {
+          filename: sessionInfo.templateDoc.filename,
+          format: sessionInfo.templateDoc.format,
+        },
+        overallConfidence: extractionResult?.averageConfidence ?? 0,
         fieldCount: Object.keys(confirmedFields).length,
-        downloadFilename: res.filename,
+        filledFilename: res.filename,
+        downloadExpired: true,
       };
 
-      setRecentSessions((prev) => {
-        const updated = [newSession, ...prev.filter((s) => s.sessionId !== newSession.sessionId)];
-        try {
-          localStorage.setItem(STORAGE_KEY_SESSIONS, JSON.stringify(updated));
-        } catch {
-          // ignore
-        }
-        return updated;
-      });
+      setRecentSessions(api.saveHistoryEntry(newSession));
 
       addToast(
         'success',
@@ -341,23 +410,27 @@ export default function Home() {
 
   // Clear history
   const handleClearHistory = () => {
+    api.clearHistory();
     setRecentSessions([]);
-    localStorage.removeItem(STORAGE_KEY_SESSIONS);
     addToast('info', 'History Cleared', 'All local session records removed.');
   };
 
-  // Download past session file
-  const handleDownloadSessionFile = (session: RecentSession) => {
-    const blob = new Blob([
-      `TemplaFill Restored Output\nSession: ${session.sessionId}\nDate: ${session.date}`
-    ], { type: 'text/plain' });
+  // Download the metadata record for a past session. The filled document bytes
+  // expire server-side with the job (≤24h), so history exposes metadata + a
+  // clear re-upload path rather than a dead download link.
+  const handleDownloadSessionFile = (session: HistoryEntry) => {
+    const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = session.downloadFilename;
+    a.download = `session_${session.sessionId.slice(0, 8)}_metadata.json`;
     a.click();
     URL.revokeObjectURL(url);
-    addToast('success', 'Downloaded', `Saved ${session.downloadFilename}`);
+    addToast(
+      'info',
+      'Metadata Saved',
+      `Saved metadata for ${session.filledFilename}. The filled file itself expires with the server job (≤24h).`
+    );
   };
 
   // Reset to initial state
@@ -378,6 +451,9 @@ export default function Home() {
         isBackendLive={isBackendLive}
         onOpenHistory={() => setIsHistoryOpen(true)}
         onOpenHelp={() => setIsHelpOpen(true)}
+        tier={tier}
+        onOpenLogin={() => setIsLoginOpen(true)}
+        onLogout={handleLogout}
       />
       <BackendWakingBanner status={backendStatus} retryCount={wakeRetries} onRetry={checkBackend} />
 
@@ -389,6 +465,11 @@ export default function Home() {
               handleLoadDemoFiles();
               setCurrentStep('upload');
             }}
+            tier={tier}
+            remaining={remainingFreeJobs(quota)}
+            freeLimit={quota.free_limit}
+            onRequestAccount={openAccountRequest}
+            onOpenLogin={() => setIsLoginOpen(true)}
           />
         )}
 
@@ -407,6 +488,20 @@ export default function Home() {
             onStartExtraction={handleStartExtraction}
             onLoadDemoFiles={handleLoadDemoFiles}
             isLoading={isProcessing}
+            tier={tier}
+            remaining={remainingFreeJobs(quota)}
+            freeLimit={quota.free_limit}
+            onRequestAccount={openAccountRequest}
+            onOpenLogin={() => setIsLoginOpen(true)}
+            onValidationError={(message) => addToast('warning', 'Unsupported File', message)}
+          />
+        )}
+
+        {currentStep === 'account-request' && (
+          <AccountRequestView
+            onBack={() => setCurrentStep('upload')}
+            onOpenLogin={() => setIsLoginOpen(true)}
+            retryAfterSeconds={quotaRetryAfter}
           />
         )}
 
@@ -415,19 +510,22 @@ export default function Home() {
             progress={progress}
             sourceFilename={sourceFile?.name || 'Source.pdf'}
             templateFilename={templateFile?.name || 'Template.docx'}
+            tier={tier}
           />
         )}
 
         {currentStep === 'review' && extractionResult && (
           <ReviewMappingView
+            key={sessionInfo?.sessionId || 'review'}
             extractionResult={extractionResult}
             onConfirmAndGenerate={handleConfirmAndGenerate}
             onUpdateField={handleUpdateField}
             onReExtractField={async (fieldId, hint) => {
+              const engineName = tier === 'pro' ? 'DeepSeek' : 'Gemini';
               addToast(
                 'info',
                 'AI Re-extraction',
-                `Prompting Gemini with hint: "${hint || 'Context refinement'}"`
+                `Prompting ${engineName} with hint: "${hint || 'Context refinement'}"`
               );
               if (sessionInfo) {
                 const updated = await api.reExtractField(sessionInfo.sessionId, fieldId, hint);
@@ -441,6 +539,7 @@ export default function Home() {
               }
             }}
             isGenerating={isGenerating}
+            engineLabel={tier === 'pro' ? 'DeepSeek' : 'Google Gemini 3.6 Flash'}
           />
         )}
 
@@ -453,7 +552,7 @@ export default function Home() {
         )}
       </main>
 
-      <Footer onOpenHelp={() => setIsHelpOpen(true)} />
+      <Footer onOpenHelp={() => setIsHelpOpen(true)} tier={tier} />
 
       {/* Global Toast Notifications Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -471,6 +570,13 @@ export default function Home() {
       <HelpModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
+      />
+
+      {/* Tier Login Modal */}
+      <LoginModal
+        isOpen={isLoginOpen}
+        onClose={() => setIsLoginOpen(false)}
+        onSuccess={handleLoginSuccess}
       />
     </div>
   );

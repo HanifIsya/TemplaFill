@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Modal } from './Modal';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -12,16 +13,16 @@ type TabKey = 'workflow' | 'syntax' | 'engine' | 'review' | 'privacy';
 export function HelpModal({ isOpen, onClose }: HelpModalProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('workflow');
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="help-modal-title"
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      labelledBy="help-modal-title"
+      maxWidthClass="max-w-3xl"
+      scrollPanel={false}
+      panelClassName="font-sans"
     >
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-lg shadow-2xl overflow-hidden font-sans flex flex-col max-h-[92vh] sm:max-h-[90vh]">
+      <div className="flex flex-1 flex-col min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-slate-950 shrink-0">
           <div>
@@ -32,12 +33,13 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               </h2>
             </div>
             <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5 sm:mt-1">
-              Complete guide to workflows, template syntax, the Gemini extraction engine, and data security
+              Complete guide to workflows, template syntax, the free &amp; account engines, and data security
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-100 text-xs font-mono px-2 py-1 rounded border border-slate-800 hover:bg-slate-800 transition-colors shrink-0 ml-2 cursor-pointer"
+            className="text-slate-400 hover:text-slate-100 text-xs font-mono px-2 py-1 rounded border border-slate-800 hover:bg-slate-800 transition-colors shrink-0 ml-2 cursor-pointer focus-ring"
             aria-label="Close dialog"
           >
             ESC / [✕]
@@ -49,7 +51,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
           {[
             { id: 'workflow', label: '1. Workflow', fullLabel: '1. Workflow' },
             { id: 'syntax', label: '2. Syntax', fullLabel: '2. Template Syntax' },
-            { id: 'engine', label: '3. Dual Engine', fullLabel: '3. Dual Engine' },
+            { id: 'engine', label: '3. Engines', fullLabel: '3. Extraction Engines' },
             { id: 'review', label: '4. Review & Edit', fullLabel: '4. Review & Edit' },
             { id: 'privacy', label: '5. Privacy & Security', fullLabel: '5. Privacy & Security' },
           ].map((t, idx) => (
@@ -127,9 +129,9 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
               </div>
 
               <div className="p-3 bg-blue-950/20 border border-blue-800/40 rounded text-xs space-y-1">
-                <span className="font-mono text-blue-400 font-semibold uppercase">Guest Mode — No Account Required:</span>
+                <span className="font-mono text-blue-400 font-semibold uppercase">Free Tier — No Account Required:</span>
                 <p className="text-slate-400">
-                  TemplaFill works instantly without sign-up or credentials. Your processing session is stored locally in your browser for quick access.
+                  TemplaFill works instantly on the free tier with no sign-up, limited to 5 jobs/day per network and powered by the Google Gemini free API. Your session history is stored locally in your browser. Need more and a Google-free engine? Request an account tier.
                 </p>
               </div>
             </div>
@@ -163,7 +165,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
               <div>
                 <h3 className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold mb-1">
-                  4 Placeholder Syntax Options
+                  5 Placeholder Syntax Options
                 </h3>
                 <p className="text-xs text-slate-400 mb-2">
                   Use any of the following placeholder styles in your template — all are supported interchangeably:
@@ -179,6 +181,14 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
+                      <span className="text-indigo-300 font-bold">{'<<field_name>>'}</span>
+                      <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. &lt;&lt;contract_title&gt;&gt;</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Double Angle Brackets</span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div>
                       <span className="text-indigo-300 font-bold">{'[field_name]'}</span>
                       <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. [effective_date], [vendor_name]</span>
                     </div>
@@ -187,10 +197,10 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
-                      <span className="text-indigo-300 font-bold">{'<<field_name>>'}</span>
-                      <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. &lt;&lt;contract_title&gt;&gt;</span>
+                      <span className="text-indigo-300 font-bold">{'{field_name}'}</span>
+                      <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. {'{effective_date}'}</span>
                     </div>
-                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Double Angle Brackets</span>
+                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Single Braces</span>
                   </div>
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
@@ -219,39 +229,53 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
             <div className="space-y-4">
               <div>
                 <h3 className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold mb-1">
-                  Dual Extraction Engine Architecture
+                  Extraction Engines by Tier
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  TemplaFill uses a resilient dual-pipeline architecture that guarantees your document is always processed — even when the external AI service hits rate limits.
+                  TemplaFill runs two engines depending on your tier, and every engine has a local heuristic safety net so your document is always processed — even when an external AI service hits rate limits.
                 </p>
               </div>
 
               <div className="space-y-3">
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded">
                   <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-mono text-xs font-bold text-blue-400 uppercase">
-                      1. Primary Engine: Google Gemini 3.6 Flash + RAG
+                    <span className="font-mono text-xs font-bold text-slate-400 uppercase">
+                      Free Tier: Google Gemini 3.6 Flash + RAG
                     </span>
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
-                      Primary AI
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700">
+                      Anonymous
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    Powered by Google&apos;s latest Gemini Flash model with semantic vector retrieval via <code>gemini-embedding-001</code> (768 dimensions). It understands complex legal clauses, financial tables, and nuanced semantic context with high accuracy.
+                    Powered by Google&apos;s Gemini Flash model with semantic vector retrieval via <code>gemini-embedding-001</code> (768 dimensions). Subject to the Google free quota (15 RPM / 1,500 RPD), so it may fall back to the local heuristic engine.
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-slate-950 border border-slate-800 rounded">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-mono text-xs font-bold text-blue-400 uppercase">
+                      Account Tier: DeepSeek
+                    </span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-950 text-blue-300 border border-blue-800">
+                      Signed in
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    Runs on DeepSeek with no Google calls at all — retrieval is bypassed, so neither the document text nor its chunks reach Google. On a DeepSeek failure it falls back to the local heuristic engine only, never to Google.
                   </p>
                 </div>
 
                 <div className="p-3.5 bg-slate-950 border border-slate-800 rounded">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="font-mono text-xs font-bold text-emerald-400 uppercase">
-                      2. Fallback Engine: Local Heuristic (Zero-Downtime)
+                      Safety Net: Local Heuristic (Zero-Downtime)
                     </span>
                     <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800">
                       Auto Fallback
                     </span>
                   </div>
                   <p className="text-xs text-slate-400 leading-relaxed">
-                    If your Google AI Studio quota is exceeded (429 Too Many Requests) or the service is temporarily overloaded (503 Service Unavailable), TemplaFill automatically switches to its local deterministic engine (pattern matching, regex, and structural parsing). Your extraction still completes successfully with no error screen.
+                    If the active AI service is rate-limited (429) or overloaded (503), TemplaFill automatically switches to its local deterministic engine (pattern matching, regex, and structural parsing). Your extraction still completes successfully with no error screen.
                   </p>
                 </div>
               </div>
@@ -336,11 +360,32 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
             <div className="space-y-4">
               <div>
                 <h3 className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold mb-1">
-                  Privacy & Data Protection Architecture
+                  Privacy by Tier
                 </h3>
                 <p className="text-xs text-slate-400 leading-relaxed">
-                  TemplaFill is built to strict privacy-by-design standards aligned with GDPR and Indonesian UU PDP principles. Because public AI free-tiers may use prompt data for model training, TemplaFill enforces automated client/server <strong>Selective PII Masking</strong> to protect confidential identifiers.
+                  TemplaFill is built to privacy-by-design standards aligned with GDPR and Indonesian UU PDP principles. What reaches the AI provider depends on your tier, so both are explained honestly below.
                 </p>
+              </div>
+
+              {/* Tier comparison */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="p-3 bg-amber-950/20 border border-amber-800/60 rounded space-y-1.5">
+                  <span className="font-mono text-amber-300 font-semibold uppercase text-[11px]">
+                    Free Tier — Google Gemini
+                  </span>
+                  <p className="text-slate-300 leading-relaxed">
+                    Document text and chunks are sent to Google&apos;s free Gemini API for extraction and embeddings. Google&apos;s free-tier terms allow prompt data to be used to improve its products, so only upload documents you are comfortable processing on those terms.
+                  </p>
+                </div>
+
+                <div className="p-3 bg-blue-950/20 border border-blue-800/60 rounded space-y-1.5">
+                  <span className="font-mono text-blue-300 font-semibold uppercase text-[11px]">
+                    Account Tier — DeepSeek
+                  </span>
+                  <p className="text-slate-300 leading-relaxed">
+                    Documents are processed on DeepSeek instead of Google. No document text or chunk is sent to Google on this tier. DeepSeek&apos;s published API terms do not currently commit to excluding API inputs from model training or to a specific retention period, so no such claim is made here — only upload documents you are comfortable processing on those terms.
+                  </p>
+                </div>
               </div>
 
               {/* Selective PII Masking Feature Card */}
@@ -348,14 +393,14 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                 <div className="flex items-center justify-between">
                   <span className="font-mono text-blue-400 font-semibold text-xs uppercase flex items-center gap-1.5">
                     <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
-                    Selective PII Masking (Active by Default)
+                    Selective PII Masking (Active on Both Tiers)
                   </span>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-900/60 text-blue-300 border border-blue-700/50">
                     Sanitize → Store Map → Call AI → Restore
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Before any document text is transmitted to Google Gemini, sensitive personal and financial identifiers are replaced with anonymous surrogate tokens (e.g. <code>[TOKEN_NPWP_1]</code>, <code>[TOKEN_REK_1]</code>). Google only sees surrogate tokens and never receives your real confidential data. Once Gemini extracts the values, TemplaFill automatically restores the original data on the local server.
+                  Before any document text is transmitted to an AI provider, sensitive personal and financial identifiers are replaced with anonymous surrogate tokens (e.g. <code>[TOKEN_NPWP_1]</code>, <code>[TOKEN_REK_1]</code>). The provider only sees surrogate tokens and never receives your real confidential data. Once values are extracted, TemplaFill automatically restores the original data on the local server.
                 </p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-2 pt-2 border-t border-slate-800/80 text-[11px]">
@@ -389,23 +434,23 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
               <div className="space-y-2 text-xs">
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
-                  <span className="font-mono text-blue-400 font-semibold uppercase">1. Zero Credential Requirement:</span>
+                  <span className="font-mono text-blue-400 font-semibold uppercase">1. Account Tier Is by Request Only:</span>
                   <p className="text-slate-400 mt-1">
-                    No email, phone, password, or credit card are required. Process your documents anonymously with complete peace of mind.
+                    The free tier requires no email, phone, password, or credit card. The account tier is granted by personal request and uses a single shared credential — there is no self-registration and no per-user profile is stored.
                   </p>
                 </div>
 
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
                   <span className="font-mono text-blue-400 font-semibold uppercase">2. 24-Hour Ephemeral Auto-Purge:</span>
                   <p className="text-slate-400 mt-1">
-                    Uploaded source PDFs, templates, and vector embeddings reside only in volatile server memory and are permanently purged within 24 hours.
+                    Uploaded source PDFs, templates, and vector embeddings reside only in volatile server memory and are permanently purged within 24 hours. Session history and results are stored in your browser (localStorage) only, never synced to a server database.
                   </p>
                 </div>
 
                 <div className="p-3 bg-slate-950 border border-slate-800 rounded">
-                  <span className="font-mono text-blue-400 font-semibold uppercase">3. Free Tier vs. Paid Commercial Tier:</span>
+                  <span className="font-mono text-blue-400 font-semibold uppercase">3. Processing Still Happens on the Server:</span>
                   <p className="text-slate-400 mt-1">
-                    On the Gemini Free Tier, our Selective PII Masking keeps confidential credentials off Google servers. For enterprise zero-data-logging guarantees across the entire document text, supply an API key with billing enabled (under Google&apos;s commercial Data Processing Addendum).
+                    &quot;Browser-local history&quot; means storage, not processing. Files must cross the network to be processed; they are held in RAM only for the job and purged within 24 hours.
                   </p>
                 </div>
 
@@ -422,15 +467,16 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
         {/* Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 px-4 py-3 sm:px-6 sm:py-3 border-t border-slate-800 bg-slate-950 text-xs font-mono text-slate-400 shrink-0">
-          <span className="text-[11px] sm:text-xs text-center sm:text-left">TemplaFill v0.1.0 • Google Gemini 3.6 Flash</span>
+          <span className="text-[11px] sm:text-xs text-center sm:text-left">TemplaFill v0.1.0 • Free: Google Gemini 3.6 Flash / Account: DeepSeek</span>
           <button
+            type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded font-medium uppercase tracking-wider text-[11px] sm:text-xs transition-colors cursor-pointer text-center"
+            className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded font-medium uppercase tracking-wider text-[11px] sm:text-xs transition-colors cursor-pointer text-center focus-ring"
           >
             Close Guide
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

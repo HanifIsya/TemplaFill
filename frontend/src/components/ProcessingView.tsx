@@ -2,19 +2,24 @@
 
 import React from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
-import { JobProgress } from '../lib/types';
+import { JobProgress, Tier } from '../lib/types';
 
 interface ProcessingViewProps {
   progress: JobProgress;
   sourceFilename: string;
   templateFilename: string;
+  tier?: Tier;
 }
 
 export const ProcessingView: React.FC<ProcessingViewProps> = ({
   progress,
   sourceFilename,
   templateFilename,
+  tier = 'free',
 }) => {
+  const engineLabel = tier === 'pro' ? 'DeepSeek' : 'Google Gemini 3.6 Flash';
+  const embeddingLabel = tier === 'pro' ? 'sequential chunk batching (no embeddings)' : '768-dimensional embeddings';
+
   const steps = [
     {
       num: 1,
@@ -24,8 +29,10 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({
     },
     {
       num: 2,
-      title: 'Semantic Chunking and Embedding',
-      description: 'Partitioning text into 800-token chunks and computing 768-dimensional embeddings.',
+      title: 'Semantic Chunking and Indexing',
+      description: tier === 'pro'
+        ? 'Partitioning text into 800-token chunks and batching them sequentially (account tier makes no Google embedding calls).'
+        : 'Partitioning text into 800-token chunks and computing 768-dimensional embeddings.',
       threshold: 50,
     },
     {
@@ -36,8 +43,10 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({
     },
     {
       num: 4,
-      title: 'Structured Extraction via Google Gemini 3.6 Flash',
-      description: 'Retrieving relevant candidate chunks via vector cosine similarity and scoring confidence.',
+      title: `Structured Extraction via ${engineLabel}`,
+      description: tier === 'pro'
+        ? 'Sending fenced document batches to DeepSeek and scoring confidence (never falls back to Google).'
+        : 'Retrieving relevant candidate chunks via vector cosine similarity and scoring confidence.',
       threshold: 100,
     },
   ];
@@ -136,11 +145,11 @@ export const ProcessingView: React.FC<ProcessingViewProps> = ({
       <div className="p-3.5 rounded bg-slate-900 text-slate-300 font-mono text-[11px] border border-slate-800 space-y-1">
         <div className="text-slate-500 pb-1 border-b border-slate-800 flex items-center justify-between">
           <span>Worker Process Execution Logs</span>
-          <span>Chunk Size: 800 tokens</span>
+          <span>Engine: {engineLabel}</span>
         </div>
         <p className="text-slate-400">[INFO] Initializing PyMuPDF text reader and pdfplumber table parser.</p>
-        <p className="text-slate-400">[INFO] Generating semantic chunk embeddings via text-embedding-004.</p>
-        <p className="text-blue-400">[INFO] Top-K retrieval executing vector cosine search.</p>
+        <p className="text-slate-400">[INFO] Preparing {embeddingLabel} for retrieval.</p>
+        <p className="text-blue-400">[INFO] Executing structured extraction via {engineLabel}.</p>
       </div>
     </div>
   );

@@ -1,6 +1,9 @@
 # Design System
 
 > Visual identity, tokens, and component library for TemplaFill's frontend.
+> **Last updated**: 2026-09-26 (frontend polish pass). This document now reflects
+> the **shipped implementation** in `frontend/src` — it was previously aspirational
+> and diverged from the code (indigo palette, Inter/JetBrains fonts, gradients).
 
 ---
 
@@ -13,225 +16,218 @@
 | **Personality** | Professional, trustworthy, modern, efficient |
 | **Tone** | Confident but approachable, technical but not intimidating |
 
+The tagline is rendered as a mono, letter-spaced eyebrow above the landing H1
+(`HeroLanding.tsx`) and in the Footer.
+
+---
+
+## Theme: Dark-Only
+
+The app applies `dark` on `<html>` (`app/layout.tsx`) and ships **one theme**.
+There is no toggle. Component-level light-mode classes (`bg-white`,
+`text-slate-900`) are inert and retained only because components were written
+with both variants; new work should target the dark surface directly and avoid
+adding more `dark:` duplication.
+
+Page background is owned by `body` via `--bg-page` (`globals.css`). Components
+sit on `bg-slate-900` surfaces with `border-slate-800` borders.
+
 ---
 
 ## Color Palette
 
-### Primary Colors
-| Token | Hex | HSL | Usage |
-|-------|-----|-----|-------|
-| `--color-primary-50` | `#EEF2FF` | 226 100% 97% | Lightest background |
-| `--color-primary-100` | `#E0E7FF` | 226 100% 94% | Hover backgrounds |
-| `--color-primary-200` | `#C7D2FE` | 226 100% 89% | Active states |
-| `--color-primary-300` | `#A5B4FC` | 226 100% 82% | Borders, outlines |
-| `--color-primary-400` | `#818CF8` | 226 94% 74% | Icons, secondary actions |
-| `--color-primary-500` | `#6366F1` | 239 84% 67% | **Primary brand color** |
-| `--color-primary-600` | `#4F46E5` | 243 75% 59% | Primary buttons, links |
-| `--color-primary-700` | `#4338CA` | 245 58% 51% | Hover on primary |
-| `--color-primary-800` | `#3730A3` | 244 47% 42% | Active on primary |
-| `--color-primary-900` | `#312E81` | 244 47% 35% | Dark text accent |
+TemplaFill uses the **Tailwind slate scale** for neutrals and **Tailwind blue**
+for the accent. It does **not** use indigo (the earlier spec was stale).
 
-### Neutral Colors
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `--color-neutral-50` | `#FAFAFA` | Page background |
-| `--color-neutral-100` | `#F5F5F5` | Card backgrounds |
-| `--color-neutral-200` | `#E5E5E5` | Borders |
-| `--color-neutral-300` | `#D4D4D4` | Disabled states |
-| `--color-neutral-400` | `#A3A3A3` | Placeholder text |
-| `--color-neutral-500` | `#737373` | Secondary text |
-| `--color-neutral-600` | `#525252` | Body text |
-| `--color-neutral-700` | `#404040` | Headings |
-| `--color-neutral-800` | `#262626` | Strong text |
-| `--color-neutral-900` | `#171717` | Darkest text |
+### Accent (Blue)
+| Usage | Class / token | Value |
+|-------|---------------|-------|
+| Primary button bg | `bg-blue-700` / `--accent-base` | `#1D4ED8` |
+| Primary button hover | `bg-blue-800` | `#1E40AF` |
+| Dark-mode accent | `bg-blue-600` / `--accent-base` (dark) | `#2563EB` |
+| Accent text on dark | `text-blue-400` | `#60A5FA` |
+| Accent subtle bg | `bg-blue-950` / `--accent-subtle` | `#172554` |
+| Accent border | `border-blue-800` / `--accent-border` | `#1E3A8A` |
 
-### Semantic Colors
-| Token | Hex | Usage |
-|-------|-----|-------|
-| `--color-success-500` | `#22C55E` | High confidence, success states |
-| `--color-success-50` | `#F0FDF4` | Success background |
-| `--color-warning-500` | `#F59E0B` | Medium confidence, warnings |
-| `--color-warning-50` | `#FFFBEB` | Warning background |
-| `--color-error-500` | `#EF4444` | Low confidence, errors, not found |
-| `--color-error-50` | `#FEF2F2` | Error background |
-| `--color-info-500` | `#3B82F6` | Informational, tips |
-| `--color-info-50` | `#EFF6FF` | Info background |
+### Neutral (Slate, dark surfaces)
+| Usage | Class | Value |
+|-------|-------|-------|
+| Page background | `--bg-page` | `#0B0F17` |
+| Surface / cards | `bg-slate-900` / `--bg-surface` | `#111827` |
+| Elevated / inputs | `bg-slate-800` / `--bg-elevated` | `#1A2234` |
+| Base border | `border-slate-800` / `--border-base` | `#263245` |
+| Strong border | `border-slate-700` / `--border-strong` | `#374761` |
+| Primary text | `text-slate-100` / `--text-primary` | `#F8FAFC` |
+| Secondary text | `text-slate-300` / `--text-secondary` | `#CBD5E1` |
+| Muted text | `text-slate-400` / `--text-muted` | `#8493A8` |
 
-### Dark Mode
-| Light Token | Dark Value |
-|-------------|-----------|
-| `--color-neutral-50` | `#0A0A0A` |
-| `--color-neutral-100` | `#171717` |
-| `--color-neutral-200` | `#262626` |
-| `--color-neutral-700` | `#D4D4D4` |
-| `--color-neutral-800` | `#E5E5E5` |
-| `--color-neutral-900` | `#FAFAFA` |
-| `--color-primary-500` | `#818CF8` (lighter for dark bg) |
+### Semantic
+| Meaning | Text (dark) | Background | Border |
+|---------|-------------|------------|--------|
+| Success / high confidence | `text-emerald-400` | `bg-emerald-950` | `border-emerald-800` |
+| Warning / medium confidence | `text-amber-300` | `bg-amber-950` | `border-amber-800` |
+| Error / low confidence / not found | `text-red-400` | `bg-red-950` | `border-red-800` |
+| Info / account tier | `text-blue-300` | `bg-blue-950` | `border-blue-800` |
+
+> The `--success-*`, `--warning-*`, `--error-*` custom properties in
+> `globals.css` mirror these values.
 
 ---
 
 ## Typography
 
-### Font Stack
+### Font Stack (actual)
+TemplaFill uses **IBM Plex** loaded via `next/font/google` (`app/layout.tsx`):
+
 ```css
---font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
---font-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+--font-sans: 'IBM Plex Sans', system-ui, sans-serif;   /* body + headings */
+--font-mono: 'IBM Plex Mono', ui-monospace, monospace; /* labels, badges, keys */
 ```
 
-### Scale
-| Token | Size | Weight | Line Height | Usage |
-|-------|------|--------|-------------|-------|
-| `--text-display` | 48px / 3rem | 700 | 1.1 | Landing page hero |
-| `--text-h1` | 36px / 2.25rem | 700 | 1.2 | Page titles |
-| `--text-h2` | 24px / 1.5rem | 600 | 1.3 | Section headings |
-| `--text-h3` | 20px / 1.25rem | 600 | 1.4 | Card titles |
-| `--text-body` | 16px / 1rem | 400 | 1.5 | Body text |
-| `--text-body-sm` | 14px / 0.875rem | 400 | 1.5 | Secondary text, captions |
-| `--text-caption` | 12px / 0.75rem | 500 | 1.4 | Labels, badges, timestamps |
-| `--text-mono` | 14px / 0.875rem | 400 | 1.5 | Code, field names |
+The earlier `Inter` + `JetBrains Mono` spec was never adopted.
+
+### Scale (as used)
+| Role | Classes | Notes |
+|------|---------|-------|
+| Landing hero | `text-3xl sm:text-4xl font-bold tracking-tight` | H1 |
+| Page title | `text-xl sm:text-2xl font-bold tracking-tight` | Section H2 |
+| Card title | `text-sm font-bold` / `text-xs font-semibold uppercase` | mono for eyebrows |
+| Body | `text-sm` / `text-xs` | dense technical UI |
+| Caption / labels / badges | `text-[11px]` / `text-[10px] font-mono uppercase` | heavily used |
+
+> **Accessibility note**: the UI leans on 10–11px text. Ensure contrast at these
+> sizes meets WCAG AA against `slate-900/950` (avoid `slate-500` for critical text).
 
 ---
 
 ## Spacing
 
-Based on 4px grid (`--space-unit: 4px`):
-
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--space-1` | 4px | Tight gaps (icon-text) |
-| `--space-2` | 8px | Small gaps (between badges) |
-| `--space-3` | 12px | Default inner padding |
-| `--space-4` | 16px | Standard padding |
-| `--space-5` | 20px | Comfortable padding |
-| `--space-6` | 24px | Section separation |
-| `--space-8` | 32px | Large section gap |
-| `--space-10` | 40px | Page-level spacing |
-| `--space-12` | 48px | Hero sections |
-| `--space-16` | 64px | Major layout gaps |
+Based on a 4px grid via Tailwind's default scale (`p-2`=8px, `p-3`=12px,
+`p-4`=16px, `p-5`=20px, `space-y-4`/`gap-3` common). Custom `--space-*` tokens
+are not used in components.
 
 ---
 
 ## Border Radius
 
-| Token | Value | Usage |
+| Usage | Class | Value |
 |-------|-------|-------|
-| `--radius-sm` | 4px | Small elements (badges, tags) |
-| `--radius-md` | 8px | Buttons, inputs |
-| `--radius-lg` | 12px | Cards, panels |
-| `--radius-xl` | 16px | Modals, large cards |
-| `--radius-full` | 9999px | Pills, circular elements |
+| Badges, tags | `rounded` | 4px |
+| Buttons, inputs | `rounded` | 4px |
+| Cards, panels | `rounded` / `rounded-lg` | 4–8px |
+| Modals | `rounded-lg` | 8px |
+| Pills | `rounded-full` | 9999px |
+
+The shipped UI favors a tight 4px radius for the "technical" feel.
 
 ---
 
 ## Shadows
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--shadow-sm` | `0 1px 2px rgba(0,0,0,0.05)` | Subtle lift (inputs) |
-| `--shadow-md` | `0 4px 6px rgba(0,0,0,0.07)` | Cards |
-| `--shadow-lg` | `0 10px 15px rgba(0,0,0,0.1)` | Dropdowns, popovers |
-| `--shadow-xl` | `0 20px 25px rgba(0,0,0,0.1)` | Modals |
+| Usage | Class |
+|-------|-------|
+| Inputs, subtle lift | `shadow-xs` |
+| Toasts, cards | `shadow-md` |
+| Modals | `shadow-2xl` |
 
 ---
 
 ## Component Library
 
 ### Button
+| Variant | Classes | Usage |
+|---------|---------|-------|
+| Primary | `bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white` | Main actions |
+| Secondary | `border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800` | Secondary actions |
+| Ghost | `text-slate-600 hover:text-slate-900` | Tertiary actions |
+| Danger | `bg-red-600` / `text-red-400` | Destructive |
+| Disabled | `disabled:opacity-50 disabled:cursor-not-allowed` | Inactive |
 
-| Variant | Background | Text | Border | Usage |
-|---------|-----------|------|--------|-------|
-| Primary | `primary-600` | white | none | Main actions (Generate, Download) |
-| Secondary | white | `neutral-700` | `neutral-200` | Secondary actions (Preview, Back) |
-| Ghost | transparent | `primary-600` | none | Tertiary actions (Re-extract, Skip) |
-| Danger | `error-500` | white | none | Destructive actions (Delete) |
-| Disabled | `neutral-100` | `neutral-400` | none | Inactive states |
-
-**Sizes**: `sm` (32px height), `md` (40px height), `lg` (48px height)
+All interactive controls should include the `.focus-ring` utility for a visible
+keyboard focus indicator.
 
 ### Input Field
-- Height: 40px (md)
-- Border: 1px solid `neutral-200`
-- Border radius: `radius-md`
-- Focus: 2px ring `primary-300`
-- Error: border `error-500`, helper text `error-500`
-- Disabled: background `neutral-50`, text `neutral-400`
+- Padding: `px-3 py-1.5` (compact) / `px-3 py-2` (modal forms)
+- Border: `border-slate-300 dark:border-slate-700`
+- Background: `bg-white dark:bg-slate-800`
+- Focus: `focus:outline-none focus:border-blue-600` + `.focus-ring`
 
-### Card
-- Background: white (light) / `neutral-100` (dark)
-- Border: 1px solid `neutral-200`
-- Border radius: `radius-lg`
-- Padding: `space-5`
-- Shadow: `shadow-md`
-- Hover (if interactive): `shadow-lg` + slight translateY(-1px)
+### Card / Panel
+- `rounded border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900`
+- Padding: `p-4` / `p-5`
+- Optional shadow: `shadow-xs`
 
 ### Drop Zone (File Upload)
-- Border: 2px dashed `neutral-300`
-- Border radius: `radius-lg`
-- Background: `neutral-50`
-- **Drag over**: border `primary-400`, background `primary-50`, scale(1.01)
-- **File accepted**: border `success-500`, background `success-50`
-- **File rejected**: border `error-500`, background `error-50`
+- `rounded border border-dashed border-slate-300 dark:border-slate-700`
+- **Drag over**: `border-blue-600 bg-blue-50/50 dark:bg-blue-950/30`
+- **File accepted**: `border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60`
+- **File rejected**: in-app warning toast (no native `alert`)
 
 ### Confidence Badge
-| Level | Color | Icon | Label |
-|-------|-------|------|-------|
-| High (≥0.8) | `success-500` bg `success-50` | 🟢 | "High confidence" |
-| Medium (0.5-0.8) | `warning-500` bg `warning-50` | 🟡 | "Review suggested" |
-| Low (<0.5) | `error-500` bg `error-50` | 🔴 | "Not found" |
+| Level | Classes | Label |
+|-------|---------|-------|
+| High (≥0.8) | `bg-emerald-50 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800` | `High (NN%)` |
+| Medium (0.5–0.8) | `bg-amber-50 dark:bg-amber-950 …` | `Review (NN%)` |
+| Low (<0.5) | `bg-red-50 dark:bg-red-950 …` | `Missing (NN%)` |
+
+### Engine Badge
+| Engine | Classes | Label |
+|--------|---------|-------|
+| `gemini` | indigo tones | `Gemini 3.6 Flash` |
+| `deepseek` | blue tones | `DeepSeek` |
+| `heuristic` | amber tones | `Fallback` |
 
 ### Progress Bar
-- Track: `neutral-200`
-- Fill: gradient from `primary-500` to `primary-400`
-- Height: 8px
-- Border radius: `radius-full`
-- Animation: smooth width transition (300ms ease-out)
-- Indeterminate: shimmer animation (pulse left-to-right)
+- Track: `bg-slate-100 dark:bg-slate-800`
+- Fill: **solid** `bg-blue-700 dark:bg-blue-500` (no gradient)
+- Height: `h-2`, radius `rounded`, `transition-all duration-200`
+
+### Modal (shared primitive — `components/Modal.tsx`)
+- Portal to `document.body`; overlay `bg-black/80 backdrop-blur-sm`
+- Panel: `rounded-lg border border-slate-800 bg-slate-900 shadow-2xl`
+- `role="dialog"` + `aria-modal` + `aria-labelledby`
+- Escape closes, backdrop click closes, focus trapped, focus restored on close, body scroll locked
 
 ### Toast Notification
-- Position: top-right
-- Width: 360px max
-- Border radius: `radius-lg`
-- Shadow: `shadow-lg`
-- Left accent bar: 4px wide, colored by type
-- Auto-dismiss: 3s (success), manual (warning/error)
+- Position: `fixed top-4 right-4 z-[60]`, `max-w-sm`
+- Panel: `rounded border bg-white dark:bg-slate-900 shadow-md`
+- Leading uppercase mono badge (INFO / SUCCESS / WARNING / ERROR)
+- **Auto-dismiss**: success/info ~4.2s; **warning/error persist** until dismissed
+- `role="alert"`/`aria-live` for errors
 
 ---
 
 ## Animation Tokens
 
-| Token | Value | Usage |
-|-------|-------|-------|
-| `--ease-default` | `cubic-bezier(0.4, 0, 0.2, 1)` | General transitions |
-| `--ease-in` | `cubic-bezier(0.4, 0, 1, 1)` | Elements entering |
-| `--ease-out` | `cubic-bezier(0, 0, 0.2, 1)` | Elements leaving |
-| `--ease-spring` | `cubic-bezier(0.34, 1.56, 0.64, 1)` | Bouncy interactions |
-| `--duration-fast` | `150ms` | Micro-interactions (hover) |
-| `--duration-normal` | `250ms` | Standard transitions |
-| `--duration-slow` | `400ms` | Page transitions, modals |
+Motion uses Tailwind's default timing utilities
+(`transition-colors`, `transition-all`, `duration-200`, `animate-spin`,
+`animate-pulse`). There is no custom easing token set.
+
+**Reduced motion**: `globals.css` collapses animation/transition durations to
+`0.001ms` under `@media (prefers-reduced-motion: reduce)`.
 
 ---
 
 ## Iconography
 
-Using **Lucide React** icon set:
-- Size: 16px (inline), 20px (buttons), 24px (navigation)
-- Stroke width: 1.5px (default), 2px (emphasis)
-- Color: inherit from text color
+Using **Lucide React** (`lucide-react`):
+- Size: `w-3` / `w-3.5` (inline), `w-4` (controls), `w-5` (section headers)
+- Color: inherits text color; accent icons use `text-blue-400`
 
 Key icons:
 | Icon | Usage |
 |------|-------|
-| `Upload` | File upload |
-| `FileText` | PDF document |
-| `FileSpreadsheet` | Excel document |
-| `Presentation` | PowerPoint document |
+| `UploadCloud` | File upload |
+| `FileText` | PDF / audit log |
 | `Search` | Field search |
-| `Check` | Success, confirmed |
+| `Check` / `CheckCircle2` | Success, confirmed |
 | `X` | Error, close |
-| `Edit` | Edit field |
-| `RefreshCw` | Re-extract |
-| `SkipForward` | Skip field |
+| `Edit3` | Edit field |
+| `RefreshCw` / `RotateCcw` | Re-extract / reset |
+| `Ban` | Skip field |
 | `Download` | Download file |
-| `Eye` | Preview source |
-| `ChevronRight` | Next step |
-| `ArrowLeft` | Back |
+| `Sparkles` | AI engine badge |
+| `ShieldCheck` / `Gauge` | Tier / quota |
+| `LogIn` / `LogOut` | Tier auth |
+| `ArrowRight` | Next / generate |
+

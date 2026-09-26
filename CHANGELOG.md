@@ -5,6 +5,63 @@ All notable changes to TemplaFill will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — v0.3.0 Tier System (2026-09-26 → present)
+
+### Added
+- **Frontend polish & accessibility pass (design-review follow-up, 2026-09-26)**:
+  - **Shared `Modal` primitive** (`frontend/src/components/Modal.tsx`): portal rendering, `role="dialog"` + `aria-modal` + `aria-labelledby`, **Escape-to-close**, backdrop click-to-close, **focus trap**, focus restoration to the trigger, and body scroll lock. Adopted by `LoginModal`, `HistoryModal`, `CitationModal`, `ReExtractModal`, `AddFieldModal`, and `HelpModal` (removes ~150 lines of duplicated overlay markup).
+  - **Tier-aware engine copy**: `ProcessingView`, `HeroLanding`, `Footer`, and the `DownloadView` audit log now name the active engine (`Free → Google Gemini 3.6 Flash`, `Account → DeepSeek`) instead of hardcoding Gemini.
+  - **Toast accessibility & policy** (`Toast.tsx`, `page.tsx`): `role="region"` wrapper, `role="alert"`/`aria-live` for errors, success/info auto-dismiss (~4.2s) while **warning/error persist until dismissed**.
+  - **Landing tagline** "Extract. Map. Fill." surfaced as a mono eyebrow (also in the Footer).
+  - **Mobile Navbar**: compact tier chip (`Free`/`Account`) and a dot-based workflow indicator replace the desktop-only stepper; brand/Guide/GitHub controls adapt at small widths.
+  - **Empty-generate guard**: `ReviewMappingView` disables *Generate Filled Document* until at least one non-skipped field has a value, with inline guidance.
+  - **`ReviewMappingView` state reset** via `key={sessionId}` so a new extraction never inherits stale fields/selection.
+  - **History export** now downloads a real JSON metadata record (`session_<id>_metadata.json`) instead of a `.txt` file mislabeled with the document's `.docx` name.
+
+### Fixed
+- **Frontend copy & stale references**: removed the leftover Indonesian timeout error in `page.tsx`; removed the stale `text-embedding-004` log line; corrected the Help guide to document **all 5** placeholder syntaxes (added single braces `{field}`).
+- **Validation UX**: invalid drag-and-drop files now raise an in-app warning toast (`onValidationError`) instead of a blocking native `alert()`.
+- **Accessibility**: added a `.focus-ring` (`:focus-visible`) utility to interactive controls, `prefers-reduced-motion` handling in `globals.css`, and `aria-label`s for icon-only controls. Removed dead `.solid-card`/`.btn-primary`/`.btn-secondary` utilities.
+
+### Tests & Docs
+- **Frontend**: added `src/tests/polish.test.mjs` (tier-aware engine labels, toast dismissal policy, history metadata export, empty-generate guard, 5-syntax doc coverage) → **59 tests green** (was 42). `npm run lint` now reports **0 warnings** (eslint `argsIgnorePattern: "^_"`).
+- **Docs**: `docs/3-design/DESIGN.md` and `DESIGN_SYSTEM.md` reconciled with the shipped implementation (dark-only theme, IBM Plex, blue accent, no gradients, shared Modal, a11y/reduced-motion); `USER_GUIDE.md` §4/§5 updated (interface & accessibility notes, generate guard).
+
+### Added (Tiers)
+- **Two-Tier Access (ADR-020, Free Gemini vs Account DeepSeek)** — *frontend + docs landed; backend in progress*:
+  - **Frontend**: `LoginModal` (shared username/password), `api.login()/logout()/getQuota()` with signed tier token persisted as `tf_tier_token`, Navbar tier badge (`Free · Gemini` / `Account · DeepSeek`) with sign-in/sign-out; `TierDisclosure` free-tier Google-training + quota notice on landing/upload; `AccountRequestView` with contact `hanif.isya.annafi-2024@fst.unair.ac.id`; HelpModal privacy tab rewritten for both tiers (DeepSeek wording generic pending task 6.15); browser-local history store `tf_history` (`HistoryEntry` schema per TIER_ARCHITECTURE §6) with quota countdown (5/day); `types.ts`/`api.ts` unions gain `deepseek` + `Tier`/`QuotaInfo`/`LoginResult`; tier-aware engine badges/banners in `ReviewMappingView`.
+  - **Tests**: new `frontend/src/tests/tier.test.mjs` covering T13–T18 (login, quota, disclosure, `tf_history`, deepseek badge, both-tier flow) + `e2e.test.mjs` extended with both-tier flows → **42 frontend tests green** (was 13).
+  - **Docs**: PRD §4.7 (FR-060→067), USER_STORIES Epic 5 (US-040→044), USER_GUIDE §4 tier table + request flow, API.md "Tiers & Auth" section (login/logout/quota + upload tier/429 + `tf_history` schema), ARCHITECTURE tier diagram, TECH_STACK DeepSeek usage plan, DATA_MODEL `Job.tier` + browser-local storage, SECURITY tier auth, DATA_PRIVACY tier data-handling matrix, README, CHANGELOG.
+- **`QuotaExceededError`** in `frontend/src/lib/api.ts` — surfaces backend `429 QUOTA_EXCEEDED` and routes the UI to the account-request screen.
+
+### Changed
+- `api.uploadFiles()` sends the tier token via `X-Session-Token`, returns `tier`, and maps quota 429s; `getFieldMappings()` propagates `tier` and recognizes `deepseek` provenance.
+- History storage migrated from `templafill_recent_sessions` (`RecentSession`) to `tf_history` (`HistoryEntry`); `HistoryModal` now shows tier + engine per entry.
+- Free-tier daily limit surfaced in the UI as **5 jobs/day** (replaces the earlier mock `3 fills/day` copy).
+
+### Added (Tiers — Backend, tasks 6.2–6.8)
+- **Tier auth (ADR-020)**: `POST /api/auth/login` (shared credential, salted scrypt hash in `TIER_ACCOUNT_PASSWORD_HASH`, generic 401, 5/min/IP), `POST /api/auth/logout`, `GET /api/auth/quota`; signed HMAC **tier tokens** (4-part payload, purpose-isolated from 3-part per-job tokens, 30-day TTL, HttpOnly cookie + `X-Session-Token` header); `scripts/hash_password.py`; login stays disabled (503) until the hash env var is set.
+- **Daily quotas**: rate-limiter `day` window — `free_upload` **5/day/IP**, `pro_upload` 50/day/IP, `auth` 5/min/IP; `POST /api/upload` returns **429 `QUOTA_EXCEEDED`** + `Retry-After` (slot consumed only after validation passes).
+- **`DeepSeekExtractor`**: `deepseek-flash` Chat Completions (JSON mode, 35s timeout, 1.2s pacing, backoff on 429/5xx), shared batch prompt + VULN-07 output validation + PII masking; `force_fake` offline path; failure falls back to the **heuristic engine only — never Gemini**.
+- **Provider selection by `Job.tier`**: account-tier jobs bypass RAG entirely (consecutive chunk batching, **zero Google calls** — no Gemini extraction and no Gemini embeddings); re-extract endpoints are tier-aware; `engine_used`/`extracted_by` gain `deepseek`.
+- **Eval**: `run_eval.py --provider gemini|deepseek [--live]` — offline PASS for both providers.
+
+### Fixed (Backend review, 2026-09-27)
+- **Generator**: single-pass placeholder replacement ends the double-fill corruption class; substituted values are never re-scanned; `<<<a>>>`-style nesting resolves cleanly.
+- **Spreadsheets**: structured references (`=SUM(Table1[Amount])`) are no longer parsed as fields or rewritten; formula-context template cells store results as literal text (injection-safe).
+- **Privacy masker**: prefixed phone numbers are fully masked (no tail leak); unmasking is longest-token-first with boundaries (no `TOKEN_PHONE_1`-inside-`TOKEN_PHONE_10` corruption) and backslash-safe.
+- **RAG**: embedder sends one batched request per batch (was 1 HTTP call per text with a single rate-limit slot) and requests `output_dimensionality`; vector-store search paths are consistent; chunk headers reflect their own section; overlap no longer compounds.
+- **Mapping**: docx fill preserves mixed run formatting and hyperlinks; control characters no longer crash generation; single-`*` arithmetic is preserved; footer/nested tables are scanned and filled; date/amount synonym families no longer cross-fill; short-name fuzzy matches are stricter.
+- **Misc**: explicit API keys no longer clobber the shared key pool; table extraction handles `None` rows and re-raises password errors; dead code/imports removed. 28 regression tests added.
+
+### Verified (task 6.15)
+- **DeepSeek API terms (2026-09-27)**: the Open Platform ToS and Privacy Policy contain **no** no-training / no-retention commitment for API inputs. Verdict: **no such claim is published**; account-tier UI copy states only the verified fact that no Google calls occur. Recorded in `DATA_PRIVACY.md`.
+
+### Pending
+- **Live staging E2E with real provider keys** (`DEEPSEEK_API_KEY` + `TIER_ACCOUNT_PASSWORD_HASH` on Render) is the user's final acceptance step (task 6.16); offline eval PASS for both providers already in CI.
+
+---
+
 ## [Unreleased] — v0.2.0 Hardening (2026-09-24 → present)
 
 ### Added
