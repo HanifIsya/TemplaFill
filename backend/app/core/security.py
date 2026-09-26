@@ -126,11 +126,18 @@ class InMemoryRateLimiter:
 
     def _window_seconds(self, category: str) -> tuple[int, int]:
         # returns (limit, window_seconds)
+        from app.core.config import get_settings
+
+        settings = get_settings()
         mapping = {
             "upload": (10, 3600),
             "read": (60, 60),
             "write": (30, 60),
             "re_extract": (5, 60),
+            # Phase 6 tiers (ADR-020): login attempts + per-tier daily quotas
+            "auth": (5, 60),
+            "free_upload": (settings.free_jobs_per_day, 86_400),
+            "pro_upload": (settings.pro_jobs_per_day, 86_400),
         }
         return mapping.get(category, (60, 60))
 
@@ -170,6 +177,18 @@ class InMemoryRateLimiter:
             return 0
         oldest = dq[0]
         return max(0, int(oldest + window - time.monotonic()))
+
+    def usage(self, ip: str, category: str) -> int:
+        """Number of events recorded for `ip` in the current window (peek only)."""
+        limit, window = self._window_seconds(category)
+        now = time.monotonic()
+        key = f"{ip}:{category}"
+        dq = self._buckets.get(key)
+        if not dq:
+            return 0
+        while dq and dq[0] <= now - window:
+            dq.popleft()
+        return len(dq)
 
     def clear(self):
         self._buckets.clear()
@@ -341,6 +360,75 @@ def is_test_request(request: Request) -> bool:
     """Detect test clients so CI can exercise endpoints without cookies."""
     client = request.client.host if request.client else ""
     return client in ("testclient", "test")
+
+
+# ---------------------------------------------------------------------------
+# Account-tier tokens (Phase 6, ADR-020) — purpose-isolated from job tokens
+# ---------------------------------------------------------------------------
+
+# Job token payload: "<job_id>.<expires_at>.<nonce>" (3 dot-separated parts)
+# Tier token payload: "tier.<tier>.<expires_at>.<nonce>" (4 parts)
+# The differing structure makes the two token families mutually invalid.
+
+
+def create_tier_token(tier: str = "pro") -> str:
+    """Create a signed, expiring token asserting an account-tier identity."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    expires_at = int(time.time()) + settings.tier_token_expire_days * 86_400
+    nonce = _secrets.token_urlsafe(8)
+    payload = f"tier.{tier}.{expires_at}.{nonce}".encode("utf-8")
+    encoded = _b64url_encode(payload)
+    sig = hmac.new(_signing_key(), encoded.encode("ascii"), hashlib.sha256).digest()
+    return f"{encoded}.{_b64url_encode(sig)}"
+
+
+def verify_tier_token(token: str) -> Optional[str]:
+    """Return the tier asserted by a valid, fresh tier token, else None.
+
+    Job session tokens (3-part payloads) never verify here, so a per-job
+    token cannot be replayed to obtain account-tier treatment.
+    """
+    if not token:
+        return None
+    token = token.strip()
+    if token.lower().startswith("bearer "):
+        token = token[7:].strip()
+    try:
+        encoded, sig_b64 = token.rsplit(".", 1)
+        expected = hmac.new(_signing_key(), encoded.encode("ascii"), hashlib.sha256).digest()
+        provided = _b64url_decode(sig_b64)
+        if not hmac.compare_digest(expected, provided):
+            return None
+        payload = _b64url_decode(encoded).decode("utf-8")
+        marker, tier, expires_at_str, _nonce = payload.split(".", 3)
+        if marker != "tier":
+            return None
+        if int(expires_at_str) < int(time.time()):
+            return None
+        return tier
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def extract_tier_token(request: Request) -> Optional[str]:
+    """Read the account-tier token from header, cookie, or (last resort) X-Session-Token.
+
+    X-Session-Token is checked last because after upload it carries the per-job
+    token, which fails verify_tier_token anyway — harmless but noisy.
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    for header_name in ("x-tier-token", "authorization"):
+        value = request.headers.get(header_name)
+        if value:
+            return value.strip()
+    cookie_value = request.cookies.get(settings.tier_cookie_name)
+    if cookie_value:
+        return cookie_value.strip()
+    return request.headers.get("x-session-token")
 
 
 # ---------------------------------------------------------------------------

@@ -116,13 +116,13 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 6.2 | Tier auth: shared-credential login (`POST /api/auth/login`), scrypt password hash, signed tier token with `purpose:"tier"` (30d), logout, `auth` rate limit 5/min/IP, `scripts/hash_password.py` | `todo` | OpenCode | Reuses ADR-019 HMAC primitives; token purpose isolation from job tokens |
-| 6.3 | Quotas: add `day` window to rate limiter; `free_upload` 5/day/IP, `pro_upload` 50/day/IP; 429 `QUOTA_EXCEEDED` + `Retry-After`; `GET /api/auth/quota` | `todo` | OpenCode | Enforced even for logged-in users (shared-password cost guard) |
-| 6.4 | `DeepSeekExtractor` (`deepseek-flash`, httpx Chat Completions, JSON mode, pacing/backoff, shared prompt + VULN-07 output validation, `force_fake` for CI) + provider selection by `Job.tier` | `todo` | OpenCode | Fallback = heuristic only, **never Gemini** on pro path |
-| 6.5 | Pro-tier retrieval bypass: sequential chunk batching, zero embedding calls; `engine_used/extracted_by = deepseek` | `todo` | OpenCode | Chosen over local embeddings — see TIER_ARCHITECTURE §3 |
-| 6.6 | Config/env: `DEEPSEEK_*`, `TIER_*`, quota caps in `config.py` + `.env.example` + `render.yaml` | `todo` | OpenCode | Shared files — note in CONTEXT.md before editing |
-| 6.7 | Backend tests: auth/token purpose/quota/provider-selection/DeepSeek-fake/zero-Gemini-on-pro; keep full suite green | `todo` | OpenCode | Baseline is **214 tests** |
-| 6.8 | Eval: `run_eval.py --provider deepseek` (fake offline in CI) meeting EVAL.md thresholds | `todo` | OpenCode | Live DeepSeek run before release |
+| 6.2 | Tier auth: shared-credential login (`POST /api/auth/login`), scrypt password hash, signed tier token with `purpose:"tier"` (30d), logout, `auth` rate limit 5/min/IP, `scripts/hash_password.py` | `done` | OpenCode | Reuses ADR-019 HMAC primitives; token purpose isolation from job tokens |
+| 6.3 | Quotas: add `day` window to rate limiter; `free_upload` 5/day/IP, `pro_upload` 50/day/IP; 429 `QUOTA_EXCEEDED` + `Retry-After`; `GET /api/auth/quota` | `done` | OpenCode | Enforced even for logged-in users (shared-password cost guard) |
+| 6.4 | `DeepSeekExtractor` (`deepseek-flash`, httpx Chat Completions, JSON mode, pacing/backoff, shared prompt + VULN-07 output validation, `force_fake` for CI) + provider selection by `Job.tier` | `done` | OpenCode | Fallback = heuristic only, **never Gemini** on pro path |
+| 6.5 | Pro-tier retrieval bypass: sequential chunk batching, zero embedding calls; `engine_used/extracted_by = deepseek` | `done` | OpenCode | Chosen over local embeddings — see TIER_ARCHITECTURE §3 |
+| 6.6 | Config/env: `DEEPSEEK_*`, `TIER_*`, quota caps in `config.py` + `.env.example` + `render.yaml` | `done` | OpenCode | Shared files — noted in CONTEXT.md |
+| 6.7 | Backend tests: auth/token purpose/quota/provider-selection/DeepSeek-fake/zero-Gemini-on-pro; keep full suite green | `done` | OpenCode | **254 tests green** (214 baseline + 40 new in `test_tier_system.py`) |
+| 6.8 | Eval: `run_eval.py --provider deepseek` (fake offline in CI) meeting EVAL.md thresholds | `done` | OpenCode | Offline 5/5 PASS both providers; live DeepSeek run still due pre-release (6.16) |
 
 ### 6.C Frontend (Antigravity)
 

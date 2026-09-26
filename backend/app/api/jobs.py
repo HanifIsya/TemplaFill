@@ -180,17 +180,18 @@ async def patch_field(
         # Re-run extraction for this field with hint
         # Retrieve chunks again and extract with hint appended to description
         try:
-            from app.services.generation.extractor import get_extractor
+            from app.services.generation.extractor import get_extractor_for_tier
 
             # Need to retrieve chunks for field
             # Use job's stored vector store if available
             store = getattr(job, "_vector_store", None)
             chunks = getattr(job, "_chunks", None)
-            from app.services.rag.retriever import Retriever
-            from app.services.rag.embedder import get_embedder
 
-            embedder = get_embedder(force_fake=False)
             if store is not None:
+                from app.services.rag.retriever import Retriever
+                from app.services.rag.embedder import get_embedder
+
+                embedder = get_embedder(force_fake=False)
                 retriever = Retriever(vector_store=store, embedder=embedder)
                 retrieved = await retriever.retrieve_for_field(field.field_name, field_description=hint or "", top_k=5)
                 chunk_texts = [r.chunk.text for r in retrieved]
@@ -202,13 +203,14 @@ async def patch_field(
                 chunk_texts = [job.extracted_doc.full_text[:2000]] if job.extracted_doc else []
                 source_pages = [1]
 
-            extractor = get_extractor(force_fake=False)
+            extractor = get_extractor_for_tier(job.tier, force_fake=False)
             ext_res = await extractor.extract(field.field_name, chunk_texts, field_description=hint or "", source_pages=source_pages)
             prev = field.extracted_value
             new_val = ext_res.extracted_value
             # Update field
             field.extracted_value = new_val
             field.confidence = ext_res.confidence
+            field.extracted_by = ext_res.extracted_by
             field.source_reference = (
                 {"page": ext_res.source_page, "snippet": ext_res.source_text[:200]} if ext_res.source_text else None
             )  # type: ignore[assignment]
@@ -380,14 +382,15 @@ async def re_extract_field(request: Request, job_id: str, field_id: str, payload
 
     # Perform re-extract with hint
     try:
-        from app.services.rag.retriever import Retriever
-        from app.services.rag.embedder import get_embedder
-        from app.services.generation.extractor import get_extractor
+        from app.services.generation.extractor import get_extractor_for_tier
 
         store = getattr(job, "_vector_store", None)
         chunks = getattr(job, "_chunks", None)
-        embedder = get_embedder(force_fake=False)
         if store is not None:
+            from app.services.rag.retriever import Retriever
+            from app.services.rag.embedder import get_embedder
+
+            embedder = get_embedder(force_fake=False)
             retriever = Retriever(vector_store=store, embedder=embedder)
             retrieved = await retriever.retrieve_for_field(field.field_name, field_description=hint or "", top_k=5)
             chunk_texts = [r.chunk.text for r in retrieved]
@@ -399,12 +402,13 @@ async def re_extract_field(request: Request, job_id: str, field_id: str, payload
             chunk_texts = [job.extracted_doc.full_text[:2000]] if job.extracted_doc else []
             source_pages = [1]
 
-        extractor = get_extractor(force_fake=False)
+        extractor = get_extractor_for_tier(job.tier, force_fake=False)
         ext_res = await extractor.extract(field.field_name, chunk_texts, field_description=hint or "", source_pages=source_pages)
         prev = field.extracted_value
         new_val = ext_res.extracted_value
         field.extracted_value = new_val
         field.confidence = ext_res.confidence
+        field.extracted_by = ext_res.extracted_by
         from app.services.jobs.models import SourceReference
 
         if ext_res.source_text or ext_res.source_page:

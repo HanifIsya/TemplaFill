@@ -50,7 +50,7 @@ class FieldResult(BaseModel):
     status: str = Field(default="not_found")  # extracted|not_found|edited|skipped|confirmed
     is_manually_edited: bool = False
     user_edited_value: Optional[str] = None
-    extracted_by: str = Field(default="gemini")  # gemini | heuristic | manual
+    extracted_by: str = Field(default="gemini")  # gemini | deepseek | heuristic | manual
     fallback_reason: Optional[str] = None
 
 
@@ -65,6 +65,8 @@ class Job(BaseModel):
     started_at: Optional[str] = None
     completed_at: Optional[str] = None
     error: Optional[str] = None
+    # Phase 6 (ADR-020): provider tier — "free" (Gemini + RAG) or "pro" (DeepSeek, no Google calls)
+    tier: str = "free"
 
     # Internal pipeline data (not exposed directly, but used for results)
     source_bytes: Optional[bytes] = Field(default=None, exclude=True, repr=False)
@@ -76,7 +78,7 @@ class Job(BaseModel):
     parsed_template: Optional[Any] = Field(default=None, exclude=True, repr=False)
     field_results: List[FieldResult] = Field(default_factory=list)
     overall_confidence: float = 0.0
-    engine_used: str = "gemini"  # gemini | heuristic | hybrid
+    engine_used: str = "gemini"  # gemini | deepseek | heuristic | hybrid
     has_fallback: bool = False
     fallback_reason: Optional[str] = None
     # Generation
@@ -97,6 +99,7 @@ class Job(BaseModel):
             "created_at": self.created_at,
             "started_at": self.started_at,
             "completed_at": self.completed_at,
+            "tier": self.tier,
         }
 
     def to_upload_response(self) -> Dict[str, Any]:
@@ -114,13 +117,17 @@ class Job(BaseModel):
         fields_not_found = len(self.field_results) - fields_found
         heuristic_count = sum(1 for f in self.field_results if f.extracted_by == "heuristic")
         gemini_count = sum(1 for f in self.field_results if f.extracted_by == "gemini")
+        deepseek_count = sum(1 for f in self.field_results if f.extracted_by == "deepseek")
 
         has_fallback = (
             self.has_fallback
             or heuristic_count > 0
             or any("AI_ERROR" in (f.source_reference.snippet or "") for f in self.field_results if f.source_reference)
         )
-        if gemini_count > 0 and heuristic_count > 0:
+        if deepseek_count > 0:
+            # Account tier: DeepSeek-only provenance (never a Gemini mix).
+            engine = "deepseek" if heuristic_count == 0 else "hybrid"
+        elif gemini_count > 0 and heuristic_count > 0:
             engine = "hybrid"
         elif heuristic_count > 0 or has_fallback:
             engine = "heuristic"
@@ -129,6 +136,7 @@ class Job(BaseModel):
 
         return {
             "job_id": self.job_id,
+            "tier": self.tier,
             "overall_confidence": round(self.overall_confidence, 2),
             "fields_found": fields_found,
             "fields_not_found": fields_not_found,

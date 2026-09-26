@@ -27,6 +27,28 @@ def _label_from_field_name(name: str) -> str:
     return name.replace("_", " ").replace("-", " ").title()
 
 
+def _split_chunks_by_chars(chunks, max_chars: int):
+    """Split chunks into consecutive batches bounded by total character count.
+
+    Phase 6 (ADR-020 §3): the account tier replaces semantic retrieval with
+    consecutive batching — DeepSeek's 1M-token context accepts whole sections,
+    so no embeddings (and therefore no Google calls) are needed.
+    """
+    batches = []
+    current = []
+    size = 0
+    for c in chunks:
+        if current and size + len(c.text) > max_chars:
+            batches.append(current)
+            current = []
+            size = 0
+        current.append(c)
+        size += len(c.text)
+    if current:
+        batches.append(current)
+    return batches
+
+
 class JobManager:
     """Manages jobs in-memory (MVP). Swap to DB/Redis for production."""
 
@@ -36,6 +58,7 @@ class JobManager:
         source_filename: str,
         template_bytes: bytes,
         template_filename: str,
+        tier: str = "free",
     ) -> Job:
         job_id = str(uuid.uuid4())
         # Build file infos
@@ -76,6 +99,7 @@ class JobManager:
             progress=JobProgress(phase="queued", current_field=0, total_fields=total_fields, percent=0),
             created_at_monotonic=time.monotonic(),
             session_token=create_session_token(job_id),
+            tier=tier if tier == "pro" else "free",
         )
         # Keep parsed for fast access? but pipeline will re-parse
         # Store
@@ -190,34 +214,43 @@ class JobManager:
             job.progress.phase = "embedding"
             job.progress.percent = 35
 
-            # --- Embed & store ---
-            from app.services.rag.embedder import get_embedder
-            from app.services.rag.vector_store import InMemoryVectorStore, StoredChunk
+            # --- Embed & store (free tier only) ---
+            store = None
+            embedder = None
+            if job.tier == "pro":
+                # Phase 6 (ADR-020 §3): account tier bypasses RAG entirely —
+                # no embeddings means zero Google calls on this path.
+                job._vector_store = None  # type: ignore[attr-defined]
+                job._chunks = chunks  # type: ignore[attr-defined]
+                job.progress.percent = 55
+            else:
+                from app.services.rag.embedder import get_embedder
+                from app.services.rag.vector_store import InMemoryVectorStore, StoredChunk
 
-            embedder = get_embedder(force_fake=False)  # will fallback to fake if no key
-            # Create per-job vector store
-            store = InMemoryVectorStore()
-            stored_chunks: List[StoredChunk] = []
-            # Batch embed
-            texts = [c.text for c in chunks]
-            embeddings = await embedder.embed_texts(texts)
-            for c, emb in zip(chunks, embeddings):
-                stored_chunks.append(
-                    StoredChunk(
-                        chunk_id=c.chunk_id,
-                        text=c.text,
-                        embedding=emb,
-                        page_number=c.page_number,
-                        header=c.header,
-                        token_count=c.token_count,
-                        metadata={"chunk_index": c.chunk_index},
+                embedder = get_embedder(force_fake=False)  # will fallback to fake if no key
+                # Create per-job vector store
+                store = InMemoryVectorStore()
+                stored_chunks: List[StoredChunk] = []
+                # Batch embed
+                texts = [c.text for c in chunks]
+                embeddings = await embedder.embed_texts(texts)
+                for c, emb in zip(chunks, embeddings):
+                    stored_chunks.append(
+                        StoredChunk(
+                            chunk_id=c.chunk_id,
+                            text=c.text,
+                            embedding=emb,
+                            page_number=c.page_number,
+                            header=c.header,
+                            token_count=c.token_count,
+                            metadata={"chunk_index": c.chunk_index},
+                        )
                     )
-                )
-            await store.add(stored_chunks)
-            # Save store on job for later retrieval
-            job._vector_store = store  # type: ignore[attr-defined]
-            job._chunks = chunks  # type: ignore[attr-defined]
-            job.progress.percent = 55
+                await store.add(stored_chunks)
+                # Save store on job for later retrieval
+                job._vector_store = store  # type: ignore[attr-defined]
+                job._chunks = chunks  # type: ignore[attr-defined]
+                job.progress.percent = 55
 
             # --- Parse template (Phase 3: 55% - 74%) ---
             await self.update_status(job_id, JobStatus.mapping)
@@ -249,31 +282,43 @@ class JobManager:
             job.progress.percent = 80
             job.progress.current_field = 0
 
-            from app.services.rag.retriever import Retriever
-            from app.services.generation.extractor import get_extractor
+            from app.services.generation.extractor import get_extractor_for_tier
+            from app.core.config import get_settings
 
-            retriever = Retriever(vector_store=store, embedder=embedder)
-            extractor = get_extractor(force_fake=False)
+            settings = get_settings()
+
+            # Provider selection (ADR-020): free -> Gemini + RAG, pro -> DeepSeek (no Google).
+            extractor = get_extractor_for_tier(job.tier, force_fake=False)
 
             # Step 1: Collect relevant chunks across fields and deduplicate
-            # For documents with <= 15 chunks (~15,000 words), pass all document chunks directly.
-            # This avoids 50+ separate embedding API calls that trigger Google's 15 RPM free-tier rate limit!
-            if len(chunks) <= 15:
-                batch_chunks = chunks
+            # Free tier: for documents with <= 15 chunks (~15,000 words), pass all document
+            # chunks directly — avoids Google's 15 RPM free-tier rate limit.
+            # Pro tier (ADR-020 §3): retrieval is bypassed; consecutive batches of chunks
+            # are extracted one after another and merged (DeepSeek 1M-token context).
+            batch_chunk_texts: List[str] = []
+            batch_source_pages: List[int] = []
+            pro_batches: List = []
+            if job.tier == "pro":
+                pro_batches = _split_chunks_by_chars(chunks, settings.deepseek_max_batch_chars)
             else:
-                unique_chunks_dict = {}
-                for field in parsed.fields[:8]:
-                    try:
-                        retrieved = await retriever.retrieve_for_field(field.field_name, top_k=3)
-                        for r in retrieved:
-                            if r.chunk.chunk_id not in unique_chunks_dict:
-                                unique_chunks_dict[r.chunk.chunk_id] = r.chunk
-                    except Exception:
-                        pass
-                batch_chunks = list(unique_chunks_dict.values())[:12] if unique_chunks_dict else chunks[:12]
+                from app.services.rag.retriever import Retriever
 
-            batch_chunk_texts = [c.text for c in batch_chunks]
-            batch_source_pages = [c.page_number for c in batch_chunks]
+                retriever = Retriever(vector_store=store, embedder=embedder)
+                if len(chunks) <= 15:
+                    batch_chunks = chunks
+                else:
+                    unique_chunks_dict = {}
+                    for field in parsed.fields[:8]:
+                        try:
+                            retrieved = await retriever.retrieve_for_field(field.field_name, top_k=3)
+                            for r in retrieved:
+                                if r.chunk.chunk_id not in unique_chunks_dict:
+                                    unique_chunks_dict[r.chunk.chunk_id] = r.chunk
+                        except Exception:
+                            pass
+                    batch_chunks = list(unique_chunks_dict.values())[:12] if unique_chunks_dict else chunks[:12]
+                batch_chunk_texts = [c.text for c in batch_chunks]
+                batch_source_pages = [c.page_number for c in batch_chunks]
 
             # Step 2: Build fields list for batch extraction
             fields_payload = [
@@ -288,12 +333,29 @@ class JobManager:
                 for field in parsed.fields
             ]
 
-            # Step 3: Single-Prompt Batch Extraction (1 single Gemini call for entire document)
-            batch_results = await extractor.extract_batch(
-                fields=fields_payload,
-                chunks=batch_chunk_texts,
-                source_pages=batch_source_pages,
-            )
+            # Step 3: Single-Prompt Batch Extraction
+            if job.tier == "pro":
+                batch_results: Dict = {}
+                for b_idx, batch in enumerate(pro_batches):
+                    results = await extractor.extract_batch(
+                        fields=fields_payload,
+                        chunks=[c.text for c in batch],
+                        source_pages=[c.page_number for c in batch],
+                    )
+                    # Merge: first non-null value wins (earlier chunk = earlier in doc),
+                    # later batches fill fields the earlier ones missed.
+                    for fname, res in results.items():
+                        prev = batch_results.get(fname)
+                        if prev is None or prev.extracted_value is None:
+                            batch_results[fname] = res
+                    job.progress.percent = 80 + int(18 * (b_idx + 1) / max(1, len(pro_batches)))
+            else:
+                # 1 single Gemini call for the entire document
+                batch_results = await extractor.extract_batch(
+                    fields=fields_payload,
+                    chunks=batch_chunk_texts,
+                    source_pages=batch_source_pages,
+                )
 
             # Step 4: Build FieldResult models
             field_results: List[FieldResult] = []
@@ -338,7 +400,9 @@ class JobManager:
 
             job.field_results = field_results
             job.overall_confidence = round(total_conf / len(field_results), 2) if field_results else 0.0
-            job.has_fallback = any(fr.extracted_by == "heuristic" for fr in field_results) or extractor.last_engine_used != "gemini"
+            job.has_fallback = any(
+                fr.extracted_by == "heuristic" for fr in field_results
+            ) or extractor.last_engine_used not in ("gemini", "deepseek")
             job.fallback_reason = extractor.last_fallback_reason
             job.engine_used = extractor.last_engine_used
             job.progress.percent = 100

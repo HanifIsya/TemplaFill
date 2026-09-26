@@ -45,3 +45,22 @@ services:
         value: "90"
       - key: MAX_CONCURRENT_JOBS
         value: "100"
+      # ----- Tier system — account tier (Phase 6, ADR-020) -----
+      # Login stays disabled (503) until the scrypt hash is set — see scripts/hash_password.py
+      - key: TIER_ACCOUNT_USERNAME
+        value: account
+      - key: TIER_ACCOUNT_PASSWORD_HASH
+        sync: false
+      - key: TIER_TOKEN_EXPIRE_DAYS
+        value: "30"
+      - key: FREE_JOBS_PER_DAY
+        value: "5"
+      - key: PRO_JOBS_PER_DAY
+        value: "50"
+      # ----- DeepSeek (account tier — zero Google calls) -----
+      - key: DEEPSEEK_API_KEY
+        sync: false
+      - key: DEEPSEEK_MODEL
+        value: deepseek-flash
+      - key: DEEPSEEK_BASE_URL
+        value: https://api.deepseek.com
