@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import { FieldMapping } from '../lib/types';
+import { Modal } from './Modal';
 
 interface AddFieldModalProps {
   isOpen: boolean;
@@ -20,8 +21,7 @@ export const AddFieldModal: React.FC<AddFieldModalProps> = ({
   const [targetLocation, setTargetLocation] = useState('');
   const [extractedValue, setExtractedValue] = useState('');
   const [fieldType, setFieldType] = useState<FieldMapping['fieldType']>('text');
-
-  if (!isOpen) return null;
+  const labelRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,12 +52,18 @@ export const AddFieldModal: React.FC<AddFieldModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs">
-      <div className="w-full max-w-lg rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl p-4 sm:p-5 space-y-4 text-xs max-h-[92vh] sm:max-h-[90vh] overflow-y-auto">
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      labelledBy="addfield-modal-title"
+      maxWidthClass="max-w-lg"
+      initialFocusRef={labelRef}
+    >
+      <div className="space-y-4 p-4 text-xs sm:p-5">
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-slate-200 dark:border-slate-800">
           <div>
-            <h3 className="font-bold text-sm text-slate-900 dark:text-slate-100">
+            <h3 id="addfield-modal-title" className="font-bold text-sm text-slate-900 dark:text-slate-100">
               Add Template Field Mapping
             </h3>
             <p className="font-mono text-[11px] text-slate-500 mt-0.5">
@@ -66,8 +72,9 @@ export const AddFieldModal: React.FC<AddFieldModalProps> = ({
           </div>
 
           <button
+            type="button"
             onClick={onClose}
-            className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+            className="p-1 rounded text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer focus-ring"
             aria-label="Close dialog"
           >
             <X className="w-4 h-4" />
@@ -77,41 +84,45 @@ export const AddFieldModal: React.FC<AddFieldModalProps> = ({
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1">
-            <label className="font-semibold text-slate-700 dark:text-slate-300">
+            <label htmlFor="addfield-label" className="font-semibold text-slate-700 dark:text-slate-300">
               Field Label *
             </label>
             <input
+              id="addfield-label"
+              ref={labelRef}
               type="text"
               required
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               placeholder="e.g., Governing Law, Penalty Interest Rate, DPO Email"
-              className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600"
+              className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600 focus-ring"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300">
+              <label htmlFor="addfield-key" className="font-semibold text-slate-700 dark:text-slate-300">
                 Placeholder Key (Optional)
               </label>
               <input
+                id="addfield-key"
                 type="text"
                 value={templateField}
                 onChange={(e) => setTemplateField(e.target.value)}
                 placeholder="e.g., governing_law"
-                className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-[11px] focus:outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-mono text-[11px] focus:outline-none focus:border-blue-600 focus-ring"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="font-semibold text-slate-700 dark:text-slate-300">
+              <label htmlFor="addfield-type" className="font-semibold text-slate-700 dark:text-slate-300">
                 Field Data Type
               </label>
               <select
+                id="addfield-type"
                 value={fieldType}
                 onChange={(e) => setFieldType(e.target.value as FieldMapping['fieldType'])}
-                className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600"
+                className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600 focus-ring"
               >
                 <option value="text">Text / String</option>
                 <option value="date">Date</option>
@@ -122,28 +133,30 @@ export const AddFieldModal: React.FC<AddFieldModalProps> = ({
           </div>
 
           <div className="space-y-1">
-            <label className="font-semibold text-slate-700 dark:text-slate-300">
+            <label htmlFor="addfield-location" className="font-semibold text-slate-700 dark:text-slate-300">
               Template Target Location
             </label>
             <input
+              id="addfield-location"
               type="text"
               value={targetLocation}
               onChange={(e) => setTargetLocation(e.target.value)}
               placeholder="e.g., Header, Section 14.1, or Sheet 1 Cell C10"
-              className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600"
+              className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600 focus-ring"
             />
           </div>
 
           <div className="space-y-1">
-            <label className="font-semibold text-slate-700 dark:text-slate-300">
+            <label htmlFor="addfield-value" className="font-semibold text-slate-700 dark:text-slate-300">
               Initial Value (Optional)
             </label>
             <input
+              id="addfield-value"
               type="text"
               value={extractedValue}
               onChange={(e) => setExtractedValue(e.target.value)}
               placeholder="Enter value if known"
-              className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600"
+              className="w-full px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs focus:outline-none focus:border-blue-600 focus-ring"
             />
           </div>
 
@@ -151,13 +164,13 @@ export const AddFieldModal: React.FC<AddFieldModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="w-full sm:w-auto px-3.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer text-center"
+              className="w-full sm:w-auto px-3.5 py-1.5 rounded border border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium cursor-pointer text-center focus-ring"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="w-full sm:w-auto justify-center px-4 py-1.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium flex items-center gap-1.5 cursor-pointer shadow-xs"
+              className="w-full sm:w-auto justify-center px-4 py-1.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium flex items-center gap-1.5 cursor-pointer shadow-xs focus-ring"
             >
               <Plus className="w-3.5 h-3.5" />
               <span>Add Field</span>
@@ -165,6 +178,6 @@ export const AddFieldModal: React.FC<AddFieldModalProps> = ({
           </div>
         </form>
       </div>
-    </div>
+    </Modal>
   );
 };

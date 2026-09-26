@@ -538,7 +538,7 @@ class ApiClient {
 
   async generateDocument(
     sessionId: string,
-    confirmedFields: Record<string, string>
+    _confirmedFields: Record<string, string>
   ): Promise<GenerationResult> {
     const isMock = sessionId.startsWith('demo-') || sessionId.startsWith('session-');
     const health = isMock ? { isLive: false } : await this.checkHealth();

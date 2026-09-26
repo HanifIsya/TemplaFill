@@ -33,13 +33,18 @@ export const Navbar: React.FC<NavbarProps> = ({
     { key: 'download', label: 'Export', num: 4 },
   ];
 
+  const activeStepIndex = steps.findIndex((s) => s.key === currentStep);
+  const activeStep = activeStepIndex >= 0 ? steps[activeStepIndex] : null;
+
   return (
     <header className="sticky top-0 z-40 w-full bg-slate-900 border-b border-slate-800">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between gap-2">
         {/* Brand */}
-        <div
-          className="flex items-center gap-2.5 cursor-pointer"
+        <button
+          type="button"
           onClick={() => onNavigateStep?.('landing')}
+          aria-label="TemplaFill home"
+          className="flex items-center gap-2.5 cursor-pointer focus-ring shrink-0"
         >
           <div className="w-7 h-7 rounded bg-blue-600 flex items-center justify-center text-white font-mono font-bold text-xs">
             TF
@@ -48,13 +53,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="font-bold text-base tracking-tight text-slate-100">
               TemplaFill
             </span>
-            <span className="font-mono text-[11px] text-slate-400">
+            <span className="font-mono text-[11px] text-slate-400 hidden sm:inline">
               v0.1.0
             </span>
           </div>
-        </div>
+        </button>
 
-        {/* Structured Workflow Steps Bar */}
+        {/* Structured Workflow Steps Bar (desktop) */}
         {currentStep !== 'landing' && (
           <nav aria-label="Workflow progress" className="hidden md:flex items-center gap-2">
             {steps.map((s, idx) => {
@@ -91,11 +96,37 @@ export const Navbar: React.FC<NavbarProps> = ({
           </nav>
         )}
 
-        {/* Right Controls */}
-        <div className="flex items-center gap-2">
-          {/* Tier Badge */}
+        {/* Compact workflow indicator (mobile only) */}
+        {currentStep !== 'landing' && activeStep && (
           <div
-            className={`hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border ${
+            className="flex md:hidden items-center gap-1.5 font-mono text-[11px] text-slate-400 shrink-0"
+            aria-label={`Step ${activeStep.num} of 4: ${activeStep.label}`}
+          >
+            <span className="flex items-center gap-1" aria-hidden="true">
+              {steps.map((s, idx) => (
+                <span
+                  key={s.key}
+                  className={`w-1.5 h-1.5 rounded-full ${
+                    idx < activeStepIndex
+                      ? 'bg-blue-500'
+                      : idx === activeStepIndex
+                      ? 'bg-blue-400'
+                      : 'bg-slate-700'
+                  }`}
+                />
+              ))}
+            </span>
+            <span className="text-slate-300">
+              {activeStep.num}/4 {activeStep.label}
+            </span>
+          </div>
+        )}
+
+        {/* Right Controls */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Tier Badge — full on desktop, short on mobile */}
+          <div
+            className={`flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border ${
               tier === 'pro'
                 ? 'border-blue-800 bg-blue-950/50 text-blue-300'
                 : 'border-slate-800 text-slate-400'
@@ -111,11 +142,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 tier === 'pro' ? 'bg-blue-400' : 'bg-slate-500'
               }`}
             />
-            <span>{TIER_BADGE[tier].label}</span>
+            <span className="hidden sm:inline">{TIER_BADGE[tier].label}</span>
+            <span className="sm:hidden">{TIER_BADGE[tier].short}</span>
           </div>
 
           {/* Backend Status Indicator */}
-          <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border border-slate-800 text-slate-400">
+          <div className="hidden lg:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border border-slate-800 text-slate-400">
             <span
               className={`w-1.5 h-1.5 rounded-full ${
                 isBackendLive ? 'bg-emerald-400' : 'bg-amber-400'
@@ -127,10 +159,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Tier Auth Control */}
           {tier === 'pro' ? (
             <button
+              type="button"
               onClick={onLogout}
               aria-label="Sign out"
               title="Sign out of the account tier"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer focus-ring"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Sign out</span>
@@ -138,10 +171,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           ) : (
             onOpenLogin && (
               <button
+                type="button"
                 onClick={onOpenLogin}
                 aria-label="Sign in"
                 title="Sign in to the account tier (DeepSeek)"
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer focus-ring"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Sign in</span>
@@ -152,10 +186,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* User Guide / Help Button */}
           {onOpenHelp && (
             <button
+              type="button"
               onClick={onOpenHelp}
               aria-label="User Guide"
               title="User Guide & Documentation"
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+              className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer focus-ring"
             >
               <BookOpen className="w-3.5 h-3.5 text-blue-400" />
               <span>Guide</span>
@@ -165,10 +200,11 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* History Button */}
           {onOpenHistory && (
             <button
+              type="button"
               onClick={onOpenHistory}
               aria-label="Recent Sessions"
               title="Recent Sessions"
-              className="p-1.5 rounded border border-slate-800 text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-1.5 rounded border border-slate-800 text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer focus-ring"
             >
               <History className="w-4 h-4" />
             </button>
@@ -180,7 +216,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             target="_blank"
             rel="noopener noreferrer"
             aria-label="GitHub Repository"
-            className="p-1.5 rounded border border-slate-800 text-slate-300 hover:bg-slate-800 transition-colors"
+            className="hidden sm:block p-1.5 rounded border border-slate-800 text-slate-300 hover:bg-slate-800 transition-colors focus-ring"
           >
             <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
               <path

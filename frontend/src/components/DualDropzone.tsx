@@ -18,6 +18,7 @@ interface DualDropzoneProps {
   freeLimit?: number;
   onRequestAccount?: () => void;
   onOpenLogin?: () => void;
+  onValidationError?: (message: string) => void;
 }
 
 export const DualDropzone: React.FC<DualDropzoneProps> = ({
@@ -33,6 +34,7 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
   freeLimit,
   onRequestAccount,
   onOpenLogin,
+  onValidationError,
 }) => {
   const [sourceDragActive, setSourceDragActive] = useState(false);
   const [templateDragActive, setTemplateDragActive] = useState(false);
@@ -48,6 +50,11 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   };
 
+  const reject = (message: string) => {
+    if (onValidationError) onValidationError(message);
+    else window.alert(message);
+  };
+
   const handleSourceDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setSourceDragActive(false);
@@ -56,7 +63,7 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
       if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
         onSetSourceFile(file);
       } else {
-        alert('Please upload a valid PDF document.');
+        reject('Please upload a valid PDF document.');
       }
     }
   };
@@ -70,7 +77,7 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
       if (['docx', 'xlsx', 'pptx', 'pdf'].includes(ext || '')) {
         onSetTemplateFile(file);
       } else {
-        alert('Please upload a supported template (.docx, .xlsx, .pptx, or .pdf).');
+        reject('Please upload a supported template (.docx, .xlsx, .pptx, or .pdf).');
       }
     }
   };

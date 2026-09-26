@@ -8,6 +8,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] — v0.3.0 Tier System (2026-09-26 → present)
 
 ### Added
+- **Frontend polish & accessibility pass (design-review follow-up, 2026-09-26)**:
+  - **Shared `Modal` primitive** (`frontend/src/components/Modal.tsx`): portal rendering, `role="dialog"` + `aria-modal` + `aria-labelledby`, **Escape-to-close**, backdrop click-to-close, **focus trap**, focus restoration to the trigger, and body scroll lock. Adopted by `LoginModal`, `HistoryModal`, `CitationModal`, `ReExtractModal`, `AddFieldModal`, and `HelpModal` (removes ~150 lines of duplicated overlay markup).
+  - **Tier-aware engine copy**: `ProcessingView`, `HeroLanding`, `Footer`, and the `DownloadView` audit log now name the active engine (`Free → Google Gemini 3.6 Flash`, `Account → DeepSeek`) instead of hardcoding Gemini.
+  - **Toast accessibility & policy** (`Toast.tsx`, `page.tsx`): `role="region"` wrapper, `role="alert"`/`aria-live` for errors, success/info auto-dismiss (~4.2s) while **warning/error persist until dismissed**.
+  - **Landing tagline** "Extract. Map. Fill." surfaced as a mono eyebrow (also in the Footer).
+  - **Mobile Navbar**: compact tier chip (`Free`/`Account`) and a dot-based workflow indicator replace the desktop-only stepper; brand/Guide/GitHub controls adapt at small widths.
+  - **Empty-generate guard**: `ReviewMappingView` disables *Generate Filled Document* until at least one non-skipped field has a value, with inline guidance.
+  - **`ReviewMappingView` state reset** via `key={sessionId}` so a new extraction never inherits stale fields/selection.
+  - **History export** now downloads a real JSON metadata record (`session_<id>_metadata.json`) instead of a `.txt` file mislabeled with the document's `.docx` name.
+
+### Fixed
+- **Frontend copy & stale references**: removed the leftover Indonesian timeout error in `page.tsx`; removed the stale `text-embedding-004` log line; corrected the Help guide to document **all 5** placeholder syntaxes (added single braces `{field}`).
+- **Validation UX**: invalid drag-and-drop files now raise an in-app warning toast (`onValidationError`) instead of a blocking native `alert()`.
+- **Accessibility**: added a `.focus-ring` (`:focus-visible`) utility to interactive controls, `prefers-reduced-motion` handling in `globals.css`, and `aria-label`s for icon-only controls. Removed dead `.solid-card`/`.btn-primary`/`.btn-secondary` utilities.
+
+### Tests & Docs
+- **Frontend**: added `src/tests/polish.test.mjs` (tier-aware engine labels, toast dismissal policy, history metadata export, empty-generate guard, 5-syntax doc coverage) → **59 tests green** (was 42). `npm run lint` now reports **0 warnings** (eslint `argsIgnorePattern: "^_"`).
+- **Docs**: `docs/3-design/DESIGN.md` and `DESIGN_SYSTEM.md` reconciled with the shipped implementation (dark-only theme, IBM Plex, blue accent, no gradients, shared Modal, a11y/reduced-motion); `USER_GUIDE.md` §4/§5 updated (interface & accessibility notes, generate guard).
+
+### Added (Tiers)
 - **Two-Tier Access (ADR-020, Free Gemini vs Account DeepSeek)** — *frontend + docs landed; backend in progress*:
   - **Frontend**: `LoginModal` (shared username/password), `api.login()/logout()/getQuota()` with signed tier token persisted as `tf_tier_token`, Navbar tier badge (`Free · Gemini` / `Account · DeepSeek`) with sign-in/sign-out; `TierDisclosure` free-tier Google-training + quota notice on landing/upload; `AccountRequestView` with contact `hanif.isya.annafi-2024@fst.unair.ac.id`; HelpModal privacy tab rewritten for both tiers (DeepSeek wording generic pending task 6.15); browser-local history store `tf_history` (`HistoryEntry` schema per TIER_ARCHITECTURE §6) with quota countdown (5/day); `types.ts`/`api.ts` unions gain `deepseek` + `Tier`/`QuotaInfo`/`LoginResult`; tier-aware engine badges/banners in `ReviewMappingView`.
   - **Tests**: new `frontend/src/tests/tier.test.mjs` covering T13–T18 (login, quota, disclosure, `tf_history`, deepseek badge, both-tier flow) + `e2e.test.mjs` extended with both-tier flows → **42 frontend tests green** (was 13).

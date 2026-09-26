@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Modal } from './Modal';
 
 interface HelpModalProps {
   isOpen: boolean;
@@ -12,16 +13,16 @@ type TabKey = 'workflow' | 'syntax' | 'engine' | 'review' | 'privacy';
 export function HelpModal({ isOpen, onClose }: HelpModalProps) {
   const [activeTab, setActiveTab] = useState<TabKey>('workflow');
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-2 sm:p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="help-modal-title"
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      labelledBy="help-modal-title"
+      maxWidthClass="max-w-3xl"
+      scrollPanel={false}
+      panelClassName="font-sans"
     >
-      <div className="w-full max-w-3xl bg-slate-900 border border-slate-800 rounded-lg shadow-2xl overflow-hidden font-sans flex flex-col max-h-[92vh] sm:max-h-[90vh]">
+      <div className="flex flex-1 flex-col min-h-0">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 sm:px-6 sm:py-4 border-b border-slate-800 bg-slate-950 shrink-0">
           <div>
@@ -36,8 +37,9 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="text-slate-400 hover:text-slate-100 text-xs font-mono px-2 py-1 rounded border border-slate-800 hover:bg-slate-800 transition-colors shrink-0 ml-2 cursor-pointer"
+            className="text-slate-400 hover:text-slate-100 text-xs font-mono px-2 py-1 rounded border border-slate-800 hover:bg-slate-800 transition-colors shrink-0 ml-2 cursor-pointer focus-ring"
             aria-label="Close dialog"
           >
             ESC / [✕]
@@ -163,7 +165,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
               <div>
                 <h3 className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold mb-1">
-                  4 Placeholder Syntax Options
+                  5 Placeholder Syntax Options
                 </h3>
                 <p className="text-xs text-slate-400 mb-2">
                   Use any of the following placeholder styles in your template — all are supported interchangeably:
@@ -179,6 +181,14 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
+                      <span className="text-indigo-300 font-bold">{'<<field_name>>'}</span>
+                      <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. &lt;&lt;contract_title&gt;&gt;</span>
+                    </div>
+                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Double Angle Brackets</span>
+                  </div>
+
+                  <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                    <div>
                       <span className="text-indigo-300 font-bold">{'[field_name]'}</span>
                       <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. [effective_date], [vendor_name]</span>
                     </div>
@@ -187,10 +197,10 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
                     <div>
-                      <span className="text-indigo-300 font-bold">{'<<field_name>>'}</span>
-                      <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. &lt;&lt;contract_title&gt;&gt;</span>
+                      <span className="text-indigo-300 font-bold">{'{field_name}'}</span>
+                      <span className="text-slate-500 ml-2 text-[11px] font-sans">e.g. {'{effective_date}'}</span>
                     </div>
-                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Double Angle Brackets</span>
+                    <span className="text-[11px] text-slate-400 self-start sm:self-auto">Single Braces</span>
                   </div>
 
                   <div className="p-2.5 bg-slate-950 border border-slate-800 rounded flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
@@ -457,15 +467,16 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
         {/* Footer */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 px-4 py-3 sm:px-6 sm:py-3 border-t border-slate-800 bg-slate-950 text-xs font-mono text-slate-400 shrink-0">
-          <span className="text-[11px] sm:text-xs text-center sm:text-left">TemplaFill v0.1.0 • Google Gemini 3.6 Flash</span>
+          <span className="text-[11px] sm:text-xs text-center sm:text-left">TemplaFill v0.1.0 • Free: Google Gemini 3.6 Flash / Account: DeepSeek</span>
           <button
+            type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded font-medium uppercase tracking-wider text-[11px] sm:text-xs transition-colors cursor-pointer text-center"
+            className="w-full sm:w-auto px-4 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white rounded font-medium uppercase tracking-wider text-[11px] sm:text-xs transition-colors cursor-pointer text-center focus-ring"
           >
             Close Guide
           </button>
         </div>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,8 +1,8 @@
 # TemplaFill — User Guide & Operations Manual
 
-> **Version**: 1.1.0 (tier sweep 2026-09-26, code is `gemini-3.6-flash`/`deepseek-flash` / `gemini-embedding-001` / `214 backend + 42 frontend tests`)  
+> **Version**: 1.2.0 (frontend polish 2026-09-26, code is `gemini-3.6-flash`/`deepseek-flash` / `gemini-embedding-001` / `214 backend + 59 frontend tests`)  
 > **Target Audience**: End-users, Legal Analysts, Operations Teams, Administrators  
-> **Last Updated**: 2026-09-26 · **Code references**: `frontend/src/lib/api.ts:13`, `frontend/src/lib/tier.ts:4`, `backend/app/services/mapping/parser.py:32`, `backend/app/services/generation/extractor.py:220`  
+> **Last Updated**: 2026-09-26 · **Code references**: `frontend/src/lib/api.ts:13`, `frontend/src/lib/tier.ts:4`, `frontend/src/components/Modal.tsx:1`, `backend/app/services/mapping/parser.py:32`, `backend/app/services/generation/extractor.py:220`  
 
 ---
 
@@ -95,10 +95,17 @@ TemplaFill offers two layout modes:
 - **Skip Field**: Toggle **Skip** (`action=skip`) — field omitted from `mapped` on `POST /confirm`; visual gray strike-through. **Filter Tabs** (All / Extracted / Not Found / Edited / Skipped) and **Confirm** checkboxes added 2026-09-24.
 
 ### Step 4: Confirm & Export
-1. Click **Confirm & Generate Document**.
+1. Click **Confirm & Generate Document**. The button stays disabled until at least one non-skipped field has a value.
 2. Download your generated file:
    - **Filled Document**: Preserves all native formatting with fields populated.
-   - **Audit Trail Summary**: JSON/PDF log of all extracted values, confidence scores, and manual edits.
+   - **Audit Trail Summary**: JSON log of all extracted values, confidence scores, and manual edits (records the active engine — Gemini on free, DeepSeek on account).
+
+### Interface & Accessibility Notes
+- **Dark-only theme**: TemplaFill ships a single high-contrast dark theme; there is no light-mode toggle.
+- **Keyboard**: every dialog closes with **Escape**, traps focus while open, and returns focus to the button that opened it. Controls show a visible focus ring when navigated by keyboard.
+- **Reduced motion**: animations are minimized automatically when your OS requests reduced motion.
+- **Notifications**: success/info toasts fade after a few seconds; **warning and error toasts stay until dismissed** so you can read the guidance.
+- **History**: the history drawer shows browser-local session metadata and downloads it as a JSON record. The filled document bytes expire with the server job (≤24h), so re-upload to regenerate.
 
 ---
 
@@ -139,7 +146,7 @@ TemplaFill runs on two tiers (Phase 6). There is no self-registration: the accou
 - **Privacy by Tier**:
   - *Free Tier*: Document text and chunks are sent to Google's free Gemini API, whose free-tier terms allow prompt data to be used to improve Google's products. Selective PII Masking keeps the masked identifiers off Google servers.
   - *Account Tier*: Documents are processed on DeepSeek instead of Google — no Gemini extraction and no Gemini embeddings. DeepSeek API retention/training wording remains generic until its terms are verified in writing (task 6.15).
-- **In-Memory & Ephemeral Storage**: InMemory jobs + `./uploads` (24h auto-delete) + vector store lifetime tied to job. 214 backend tests + 42 frontend tests pass with 100% offline safety via deterministic fallback.
+- **In-Memory & Ephemeral Storage**: InMemory jobs + `./uploads` (24h auto-delete) + vector store lifetime tied to job. 214 backend tests + 59 frontend tests pass with 100% offline safety via deterministic fallback.
 - **In-Flight Encryption & Headers**: TLS 1.3 + strict CSP (`default-src 'self'; frame-ancestors 'none'`), `nosniff`/`DENY`/`HSTS preload`/`Referrer-Policy`/`Permissions-Policy` triple-enforced in `backend/app/core/security.py:28` + `frontend/next.config.ts:24` + `frontend/vercel.json:33`.
 - **OWASP & Validation Compliance (ADR-012)**: `sanitize_filename()` strips `../`/null/path traversal + `sanitize_text_input` scrubs control codes (5000 edit / 2000 hint) + `validate_file_magic` (`%PDF`/`PK`) + `sanitize_filename` on `Content-Disposition: filename*=UTF-8''...` (RFC 5987) + no `str(e)` leak + `DEBUG` gates `/api/debug/gemini` + `docs` disabled when `DEBUG=False` + CORS whitelist + rate limit `10/hr, 30/min, 5/min` + tier quotas `5/day` free / `50/day` pro + auth `5/min` (CI exempt). Formula injection `= + - @` stripped on xlsx.
 

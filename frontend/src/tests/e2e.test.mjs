@@ -208,7 +208,7 @@ class TemplaFillTestClient {
     return field;
   }
 
-  async generateDocument(sessionId, overrides) {
+  async generateDocument(sessionId, _overrides) {
     return {
       sessionId,
       downloadUrl: `${this.baseUrl}/download/${sessionId}`,

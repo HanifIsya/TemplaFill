@@ -9,7 +9,7 @@
 [![Gemini](https://img.shields.io/badge/AI-Gemini%203.6%20Flash%20%7C%20DeepSeek-4285F4?logo=google)](https://ai.google.dev/)
 [![Embeddings](https://img.shields.io/badge/Embeddings-gemini--embedding--001-blue)](https://ai.google.dev/)
 [![Evaluation Benchmark](https://img.shields.io/badge/Evaluation%20F1-1.00%20(5%20Domains)-success)](docs/5-quality/EVAL.md)
-[![Test Suite](https://img.shields.io/badge/Tests-214%20Pytest%20%7C%2042%20Frontend-brightgreen)](tests/)
+[![Test Suite](https://img.shields.io/badge/Tests-214%20Pytest%20%7C%2059%20Frontend-brightgreen)](tests/)
 
 ---
 
@@ -202,14 +202,15 @@ The frontend is crafted using a **High-Contrast Dark Industrial Theme** prioriti
 - **System Status Bar**: Provides live indication of backend operational state (`API LIVE` / `DEV SIMULATION`) plus engine provenance (`Gemini 3.6 Flash` vs `Fallback`) via `/api/health` (`ai_configured`, `model`).
 - **Cold-Start Resilience**: Detects Render Hobby idle-wake cycles (15 min sleep → ~60s wake) and displays an automated countdown banner (`BackendWakingBanner.tsx`) with 5s×12 polling and manual retry triggers (`frontend/src/lib/api.ts:90` `waitForBackend`). Banner now shows `Contacting API at https://templafill-backend.onrender.com/api` on Vercel instead of `localhost:8000` (`api.ts:13` `getApiBaseUrl()`), fixing the prod-mock routing you encountered.
 - **Review & Verification Matrix + Engine Transparency (ADR-014)**:
-  - 🟢 **High Confidence ($\ge$ 80%)** + `[Gemini 3.6 Flash]` badge: Verbatim match with clear source context.
+  - 🟢 **High Confidence ($\ge$ 80%)** + engine badge: Verbatim match with clear source context.
   - 🟡 **Medium Confidence (50%–79%)**: Inferred from surrounding semantic context.
   - 🔴 **Low Confidence (< 50%) / Not Found**: Ambiguous or missing from source text.
-  - **Engine Badges**: Every field shows `[Gemini 3.6 Flash]` or `[Fallback]` with hoverable `fallback_reason`; top banner distinguishes `Gemini 100%` vs `Hybrid (partial AI + heuristic)` vs `Heuristic Fallback` with toast notifications in `frontend/src/app/page.tsx:235`.
-- **Direct Inline Editing & Confirm Filters**: Modify any extracted value immediately; filter fields by status (All / Extracted / Not Found / Edited) and trust tier.
+  - **Engine Badges**: Every field shows `[Gemini 3.6 Flash]` (free) / `[DeepSeek]` (account) / `[Fallback]` with hoverable `fallback_reason`; the top banner distinguishes `Gemini 100%` vs `Hybrid` vs `Heuristic Fallback`, and the engine name follows the active tier.
+- **Accessible dialogs**: All modals share one `Modal` primitive — Escape to close, focus trap, focus restore, `role="dialog"`/`aria-modal` (`frontend/src/components/Modal.tsx`).
+- **Direct Inline Editing & Confirm Filters**: Modify any extracted value immediately; filter fields by status (All / Extracted / Not Found / Edited) and trust tier. Generation is blocked until at least one field has a value.
 - **Contextual Re-Extraction**: Invoke the re-extraction modal with targeted natural language prompts (e.g., *"Extract the second witness signatory from page 4"*), routed to `POST /api/jobs/{id}/fields/{id}/re-extract` (5/min per IP) with sanitized `hint` (max 2000 chars).
-- **Pipeline Phase Fidelity (ADR-015)**: `JobManager` now sets `status=extracting` / `percent=80` before `extract_batch()`, so the processing view correctly animates Phase 4 “Structured Extraction via Gemini 3.6 Flash” with spinner during the 30–60s LLM call.
-- **Session History Drawer**: Access previously processed sessions directly in the browser via `localStorage` (`templafill_recent_sessions`) without requiring user credentials; download past outputs via `HistoryModal.tsx`.
+- **Pipeline Phase Fidelity (ADR-015)**: `JobManager` now sets `status=extracting` / `percent=80` before `extract_batch()`, so the processing view correctly animates Phase 4 extraction (engine name follows the tier) with spinner during the 30–60s LLM call.
+- **Session History Drawer**: Access previously processed sessions directly in the browser via `localStorage` (`tf_history`) without requiring user credentials; download the session metadata via `HistoryModal.tsx` (filled bytes expire server-side in ≤24h).
 
 ---
 
@@ -237,9 +238,9 @@ e:\TemplaFill\
 ├── frontend/                          # Next.js 16.3.6 Web Application (App Router)
 │   ├── src/
 │   │   ├── app/                       # Routes (page.tsx, layout.tsx, globals.css)
-│   │   ├── components/                # React components (Navbar with tier badge, LoginModal, AccountRequestView, TierDisclosure, DualDropzone, ProcessingView, ReviewMappingView, CitationModal, ReExtractModal, AddFieldModal, HistoryModal, DownloadView, BackendWakingBanner, HelpModal, Toast)
+│   │   ├── components/                # React components (Navbar with tier badge, Modal primitive, LoginModal, AccountRequestView, TierDisclosure, DualDropzone, ProcessingView, ReviewMappingView, CitationModal, ReExtractModal, AddFieldModal, HistoryModal, DownloadView, BackendWakingBanner, HelpModal, Toast)
 │   │   ├── lib/                       # API client (api.ts with checkHealth/waitForBackend/login/logout/quota + tf_history), types.ts, tier.ts, mockData.ts
-│   │   └── tests/                     # node --test suites (models.test.mjs, e2e.test.mjs, tier.test.mjs T13–T18)
+│   │   └── tests/                     # node --test suites (models, e2e, tier T13–T18, polish)
 │   ├── public/samples/                # Real binary demo assets (sample_contract.pdf, sample_template.docx)
 │   ├── vercel.json                    # Vercel deployment headers + CSP/HSTS
 │   ├── next.config.ts                 # Next.js config (securityHeaders, poweredByHeader:false)
@@ -427,9 +428,9 @@ pytest --cov=app --cov-report=term-missing   # coverage
 python scripts/generate_eval_datasets.py
 python eval/run_eval.py --dataset eval/datasets --output eval/results
 
-# Frontend (Next 16.3.6, 42 tests via node --test + next build):
+# Frontend (Next 16.3.6, 59 tests via node --test + next build):
 cd frontend
-npm test                # 42/42 (models.test.mjs + e2e.test.mjs + tier.test.mjs T13–T18)
+npm test                # 59/59 (models + e2e + tier T13–T18 + polish)
 npm run lint
 npm run build           # static prerender + CSP headers
 
@@ -469,7 +470,7 @@ The architecture is configured for **free-forever $0/mo** (Vercel Hobby 100GB + 
 
 - **Render Hobby cold-start**: Sleeps after 15 min idle, wakes ~60s. Handled via `BackendWakingBanner.tsx` + `api.ts:70` `waitForBackend(12×5s)` + keep-warm `GET /api/health` polling. Optional UptimeRobot 5-min ping (<720 req/month, within quota).
 - **DB setup**: `CREATE EXTENSION IF NOT EXISTS vector;` + `alembic upgrade head` on Supabase; connection via `postgresql+asyncpg://` pooling (6543 pgbouncer).
-- **CI/CD**: `.github/workflows/ci.yml` (backend 214 + coverage, frontend lint/build/42 tests, eval, pip-audit, docker sanity) + `deploy.yml` (Render deploy on `main`, Vercel auto-deploy).
+- **CI/CD**: `.github/workflows/ci.yml` (backend 214 + coverage, frontend lint/build/59 tests, eval, pip-audit, docker sanity) + `deploy.yml` (Render deploy on `main`, Vercel auto-deploy).
 
 ---
 

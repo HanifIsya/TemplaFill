@@ -68,47 +68,24 @@ body {
   min-height: 100vh;
 }
 
-/* Solid high-contrast container surface (replaces glassmorphism) */
-.solid-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+/* Visible keyboard focus indicator (WCAG 2.4.7). Applied alongside
+   `focus:outline-none` so mouse users see no ring but keyboard users do. */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--accent-base);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-.dark .solid-card {
-  background-color: var(--bg-surface);
-  border: 1px solid var(--border-base);
-  box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.4);
-}
-
-/* Snappy solid button utility - no opacity fading */
-.btn-primary {
-  background-color: var(--accent-base);
-  color: #FFFFFF;
-  border: 1px solid transparent;
-  font-weight: 600;
-  transition: background-color 0.12s ease, transform 0.08s ease;
-}
-
-.btn-primary:hover {
-  background-color: var(--accent-hover);
-}
-
-.btn-primary:active {
-  transform: translateY(1px);
-}
-
-.btn-secondary {
-  background-color: var(--bg-surface);
-  color: var(--text-primary);
-  border: 1px solid var(--border-strong);
-  font-weight: 500;
-  transition: background-color 0.12s ease, border-color 0.12s ease;
-}
-
-.btn-secondary:hover {
-  background-color: var(--bg-elevated);
-  border-color: var(--text-muted);
+/* Respect users who prefer reduced motion (WCAG 2.3.3). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Sleek modern scrollbars across all browsers (eliminates default 17px Windows scrollbars) */

@@ -10,10 +10,12 @@ interface ToastContainerProps {
 }
 
 export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismiss }) => {
-  if (toasts.length === 0) return null;
-
   return (
-    <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+    <div
+      className="fixed top-4 right-4 z-[60] flex flex-col gap-2 max-w-sm w-full pointer-events-none"
+      role="region"
+      aria-label="Notifications"
+    >
       {toasts.map((toast) => {
         let tag = 'INFO';
         let badgeColor = 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-300 border-blue-200 dark:border-blue-800';
@@ -32,6 +34,8 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismis
         return (
           <div
             key={toast.id}
+            role={toast.type === 'error' ? 'alert' : 'status'}
+            aria-live={toast.type === 'error' ? 'assertive' : 'polite'}
             className="pointer-events-auto flex items-start gap-2.5 p-3 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-md text-xs"
           >
             <span className={`px-1.5 py-0.5 rounded font-mono text-[10px] font-bold border uppercase shrink-0 ${badgeColor}`}>
@@ -46,8 +50,9 @@ export const ToastContainer: React.FC<ToastContainerProps> = ({ toasts, onDismis
               </p>
             </div>
             <button
+              type="button"
               onClick={() => onDismiss(toast.id)}
-              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer"
+              className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-0.5 cursor-pointer focus-ring"
               aria-label="Dismiss notification"
             >
               <X className="w-3.5 h-3.5" />

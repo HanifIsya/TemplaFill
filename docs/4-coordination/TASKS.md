@@ -134,6 +134,16 @@
 | 6.12 | Type/badge updates: `extractedBy`/`engineUsed` add `'deepseek'`, tier-aware engine badges and fallback banners | `done` | Antigravity | `types.ts`, `api.ts` mock stubs already have `tier` |
 | 6.13 | Frontend tests + extend `e2e.test.mjs` for both tier flows; lint/build green | `done` | Antigravity | 42 tests (was 13): tier.test.mjs T13–T18 + e2e both tiers |
 
+### 6.E Frontend Polish (Antigravity — design-review follow-up, 2026-09-26)
+
+| # | Task | Status | Assigned | Notes |
+|---|------|--------|----------|-------|
+| 6.18 | Shared accessible `Modal` primitive (portal, dialog semantics, Escape, focus trap, focus restore, scroll lock) adopted by all 6 modals | `done` | Antigravity | `frontend/src/components/Modal.tsx`; removes duplicated overlay markup |
+| 6.19 | Tier-aware engine copy + P0 copy fixes (Indonesian error, stale `text-embedding-004`, Help 4→5 syntaxes, tier-aware `ProcessingView`/`HeroLanding`/`Footer`/audit log) | `done` | Antigravity | No hardcoded Gemini on account tier |
+| 6.20 | Toast a11y (`role=alert`/`aria-live`) + persistence policy (success/info auto-dismiss, warning/error persist); `alert()`→toast | `done` | Antigravity | |
+| 6.21 | `focus-ring` (`:focus-visible`) + `prefers-reduced-motion`; empty-generate guard; `key={sessionId}` review reset; mobile Navbar tier chip + workflow dots; landing tagline; history JSON metadata export | `done` | Antigravity | |
+| 6.22 | Polish tests (`polish.test.mjs`) + reconcile `DESIGN.md`/`DESIGN_SYSTEM.md` with shipped code | `done` | Antigravity | 59 frontend tests, lint 0 warnings, build green |
+
 ### 6.D Joint
 
 | # | Task | Status | Assigned | Notes |

@@ -1,6 +1,18 @@
 # UX Design
 
 > Describes the user flow, page layouts, and interaction patterns for TemplaFill.
+> **Last updated**: 2026-09-26 (frontend polish pass — modal primitive, tier-aware
+> copy, a11y). Reflects the shipped implementation in `frontend/src`.
+
+---
+
+## Theme
+
+TemplaFill ships **dark-only** (the `dark` class is applied on `<html>` in
+`frontend/src/app/layout.tsx`). There is intentionally no light mode or theme
+toggle; the design targets a high-contrast technical/industrial dark surface.
+Light-mode utility classes retained in some components are inert and should not
+be relied upon.
 
 ---
 
@@ -220,8 +232,15 @@ flowchart TD
 - **Yellow dot** 🟡 = medium confidence (0.5 - 0.8)
 - **Red dot** 🔴 = not found or low confidence (< 0.5)
 - **Edit button** ✏️ = inline edit the value
-- **Re-extract** 🔄 = ask AI to try again (with optional hint)
+- **Re-extract** 🔄 = ask AI to try again (with optional hint; the modal names the active engine)
 - **Skip** ⏭️ = leave this field blank in output
+- **Generate** is disabled while every non-skipped field is empty, with inline guidance
+- Engine badges are tier-aware: `Gemini 3.6 Flash` (free) / `DeepSeek` (account) / `Fallback`
+
+> **Tier context**: the Navbar shows a persistent tier badge — `Free · Gemini`
+> (full) or `Free` (compact, mobile) / `Account · DeepSeek`. On the free tier the
+> landing and upload screens also show the Google-training + 5-jobs/day disclosure
+> and a quota countdown; hitting the cap routes to the request-an-account screen.
 
 ---
 
@@ -278,24 +297,42 @@ flowchart TD
 
 ### Drag & Drop Upload
 - Visual drop zone with dashed border
-- Drop zone highlights on drag over (color change + scale)
+- Drop zone highlights on drag over (border + background color change)
 - File type validation on drop (immediate feedback)
+- Invalid files surface an in-app toast (`onValidationError`), not a native `alert()`
 - Animated transition from empty state to file preview
 
 ### Progress Animation
-- Smooth progress bar with gradient
-- Animated phase icons (check mark slides in when phase completes)
-- Pulsing "current phase" indicator
-- Estimated time countdown
+- Solid progress bar (no gradient) with a smooth width transition
+- Phase rows: completed (`CheckCircle2`), active (spinner), pending (numbered)
+- Stage labels and the execution-log engine name are **tier-aware**
+  (`Free → Google Gemini 3.6 Flash`, `Account → DeepSeek`)
+- Respects `prefers-reduced-motion` (animations collapse to near-zero)
 
 ### Field Review
-- Smooth scroll between fields
-- Inline edit with auto-save (debounced)
-- Confidence badge with tooltip explaining score
-- Source reference panel slides in on click
-- Keyboard navigation: Tab between fields, Enter to confirm
+- Inline edit with explicit save/cancel
+- Confidence badge with color + percentage
+- Source reference opens the shared `CitationModal`
+- Empty-value guard: **Generate is disabled** until at least one non-skipped field
+  has a value
+- View state resets per session via `key={sessionId}` on `ReviewMappingView`
+
+### Modals
+All dialogs use the shared `Modal` primitive (`frontend/src/components/Modal.tsx`):
+- Rendered through a portal, `role="dialog"` + `aria-modal="true"` + `aria-labelledby`
+- **Escape** closes; clicking the backdrop closes
+- Focus moves into the dialog on open and **returns to the trigger** on close
+- Focus is trapped within the dialog while open; body scroll is locked
 
 ### Toast Notifications
-- Success: green, auto-dismiss 3s
-- Warning: yellow, manual dismiss
-- Error: red, manual dismiss with action button
+- Success / info auto-dismiss (~4.2s); **warning / error persist** until dismissed
+- `role="alert"` + `aria-live="assertive"` for errors, `status`/`polite` otherwise
+- Rendered in a labelled `role="region"` so assistive tech announces them
+
+### Accessibility
+- Keyboard-visible focus rings via the `.focus-ring` utility (`:focus-visible`)
+- Icon-only controls carry `aria-label`; the mobile workflow indicator exposes
+  `aria-label="Step N of 4: …"`
+- Reduced-motion users get near-instant transitions (`prefers-reduced-motion`)
+
+---

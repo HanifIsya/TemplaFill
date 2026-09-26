@@ -27,6 +27,9 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({
     <div className="w-full max-w-5xl mx-auto space-y-12 py-8 px-4 sm:px-6">
       {/* Primary Headline & Description */}
       <div className="space-y-4 max-w-3xl">
+        <p className="font-mono text-xs uppercase tracking-[0.2em] text-blue-400">
+          Extract. Map. Fill.
+        </p>
         <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
           Document Field Extraction and Template Population
         </h1>
@@ -66,7 +69,7 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({
             System Specifications & Supported Formats
           </span>
           <span className="font-mono text-[11px] text-slate-500 dark:text-slate-400">
-            Engine: Google Gemini 3.6 Flash + PyMuPDF
+            Engine: {tier === 'pro' ? 'DeepSeek (Account)' : 'Google Gemini 3.6 Flash'} + PyMuPDF
           </span>
         </div>
 
@@ -94,7 +97,9 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({
               Retrieval Pipeline
             </span>
             <span className="text-slate-600 dark:text-slate-300 md:col-span-3">
-              Semantic text chunking (800 tokens, 100 overlap) indexed with 768-dimensional embeddings. Extracts values with confidence scoring and exact page citations.
+              {tier === 'pro'
+                ? 'Semantic text chunking (800 tokens, 100 overlap) batched sequentially with no Google embedding calls. Extracts values with confidence scoring and exact page citations.'
+                : 'Semantic text chunking (800 tokens, 100 overlap) indexed with 768-dimensional embeddings. Extracts values with confidence scoring and exact page citations.'}
             </span>
           </div>
 

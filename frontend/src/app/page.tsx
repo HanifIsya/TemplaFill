@@ -71,13 +71,16 @@ export default function Home() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [recentSessions, setRecentSessions] = useState<HistoryEntry[]>([]);
 
-  // Toast dispatcher helper
+  // Toast dispatcher helper. Success/info auto-dismiss; warnings/errors persist
+  // until dismissed so users can actually read failure guidance.
   const addToast = useCallback((type: ToastMessage['type'], title: string, message: string) => {
     const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`;
     setToasts((prev) => [...prev, { id, type, title, message }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3800);
+    if (type === 'success' || type === 'info') {
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4200);
+    }
   }, []);
 
   const dismissToast = (id: string) => {
@@ -311,7 +314,7 @@ export default function Home() {
             }
           } else if (isTimeout) {
             clearInterval(interval);
-            throw new Error('Proses ekstraksi membutuhkan waktu lebih lama dari biasanya di server cloud. Silakan periksa koneksi atau coba sesaat lagi.');
+            throw new Error('Extraction is taking longer than usual on the cloud server. Please check your connection and try again shortly.');
           } else if (updated.status === 'failed') {
             clearInterval(interval);
             throw new Error(updated.errorMessage || 'Job failed during backend processing');
@@ -412,18 +415,22 @@ export default function Home() {
     addToast('info', 'History Cleared', 'All local session records removed.');
   };
 
-  // Download past session file
+  // Download the metadata record for a past session. The filled document bytes
+  // expire server-side with the job (≤24h), so history exposes metadata + a
+  // clear re-upload path rather than a dead download link.
   const handleDownloadSessionFile = (session: HistoryEntry) => {
-    const blob = new Blob([
-      `TemplaFill Restored Output\nSession: ${session.sessionId}\nDate: ${session.createdAt}`
-    ], { type: 'text/plain' });
+    const blob = new Blob([JSON.stringify(session, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = session.filledFilename;
+    a.download = `session_${session.sessionId.slice(0, 8)}_metadata.json`;
     a.click();
     URL.revokeObjectURL(url);
-    addToast('success', 'Downloaded', `Saved ${session.filledFilename}`);
+    addToast(
+      'info',
+      'Metadata Saved',
+      `Saved metadata for ${session.filledFilename}. The filled file itself expires with the server job (≤24h).`
+    );
   };
 
   // Reset to initial state
@@ -486,6 +493,7 @@ export default function Home() {
             freeLimit={quota.free_limit}
             onRequestAccount={openAccountRequest}
             onOpenLogin={() => setIsLoginOpen(true)}
+            onValidationError={(message) => addToast('warning', 'Unsupported File', message)}
           />
         )}
 
@@ -502,19 +510,22 @@ export default function Home() {
             progress={progress}
             sourceFilename={sourceFile?.name || 'Source.pdf'}
             templateFilename={templateFile?.name || 'Template.docx'}
+            tier={tier}
           />
         )}
 
         {currentStep === 'review' && extractionResult && (
           <ReviewMappingView
+            key={sessionInfo?.sessionId || 'review'}
             extractionResult={extractionResult}
             onConfirmAndGenerate={handleConfirmAndGenerate}
             onUpdateField={handleUpdateField}
             onReExtractField={async (fieldId, hint) => {
+              const engineName = tier === 'pro' ? 'DeepSeek' : 'Gemini';
               addToast(
                 'info',
                 'AI Re-extraction',
-                `Prompting the ${tier === 'pro' ? 'DeepSeek' : 'Gemini'} engine with hint: "${hint || 'Context refinement'}"`
+                `Prompting ${engineName} with hint: "${hint || 'Context refinement'}"`
               );
               if (sessionInfo) {
                 const updated = await api.reExtractField(sessionInfo.sessionId, fieldId, hint);
@@ -528,6 +539,7 @@ export default function Home() {
               }
             }}
             isGenerating={isGenerating}
+            engineLabel={tier === 'pro' ? 'DeepSeek' : 'Google Gemini 3.6 Flash'}
           />
         )}
 
@@ -540,7 +552,7 @@ export default function Home() {
         )}
       </main>
 
-      <Footer onOpenHelp={() => setIsHelpOpen(true)} />
+      <Footer onOpenHelp={() => setIsHelpOpen(true)} tier={tier} />
 
       {/* Global Toast Notifications Container */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
