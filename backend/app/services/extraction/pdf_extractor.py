@@ -18,7 +18,6 @@ import io
 from pathlib import Path
 from typing import Optional, Union
 
-from app.services.extraction.exceptions import PdfCorruptError
 from app.services.extraction.models import ExtractedDocument
 from app.services.extraction.table_extractor import extract_tables_from_pdf
 from app.services.extraction.text_extractor import extract_text_from_pdf
@@ -88,25 +87,14 @@ def extract_pdf(
         else:
             pdf_bytes = b""
 
-        if not pdf_bytes:
-            # If source was bytes-like but we couldn't get bytes, fallback to document's filename path?
-            # For BytesIO/path cases we already handled. For raw bytes we have it.
-            # If source was path string that failed, text extraction already raised.
-            pass
-
-        # Use bytes directly for pdfplumber
-        # If original source was path, pdf_bytes contains file content, reuse
         # Determine effective source for table extractor: prefer bytes
         table_source: PdfSource = pdf_bytes if pdf_bytes else source
         tables = extract_tables_from_pdf(table_source, table_settings=table_settings)
 
-    except PdfCorruptError:
-        # If table extraction fails due to corrupt PDF, text extraction already succeeded,
-        # so we should not fail entire pipeline — just return text-only document
-        # But if the PDF was truly corrupt, text extraction would have already raised.
-        # Here we treat table extraction as non-critical.
-        tables = []
     except Exception:  # noqa: BLE001
+        # Table extraction is non-critical: text extraction already succeeded
+        # (and would have raised first if the PDF were truly corrupt), so we
+        # degrade to a text-only document instead of failing the whole job.
         tables = []
 
     # Step 3: Merge tables into per-page and flattened lists

@@ -129,12 +129,7 @@ def _parse_docx(file_bytes: bytes, filename: str = "") -> ParsedTemplate:
         for raw, norm, pat in _find_placeholders(text):
             found.append((raw, norm, pat, location, context_str))
 
-    # Paragraphs
-    for idx, para in enumerate(doc.paragraphs):
-        scan_text(para.text, f"paragraph:{idx}")
-
-    # Tables
-    for t_idx, table in enumerate(doc.tables):
+    def scan_table(table, loc_prefix: str):
         header_cells = [c.text.strip() for c in table.rows[0].cells] if len(table.rows) > 0 else []
         for r_idx, row in enumerate(table.rows):
             for c_idx, cell in enumerate(row.cells):
@@ -148,25 +143,34 @@ def _parse_docx(file_bytes: bytes, filename: str = "") -> ParsedTemplate:
                     table_ctx = f"{table_ctx} (Header: {header_label})" if table_ctx else f"Header: {header_label}"
 
                 for p_idx, para in enumerate(cell.paragraphs):
-                    loc = f"table:{t_idx} row:{r_idx} col:{c_idx} para:{p_idx}"
+                    loc = f"{loc_prefix} row:{r_idx} col:{c_idx} para:{p_idx}"
                     full_ctx = f"{table_ctx} | {para.text}" if table_ctx else para.text
                     scan_text(para.text, loc, full_ctx)
+                # M7: recurse into nested tables
+                for n_idx, nested in enumerate(cell.tables):
+                    scan_table(nested, f"{loc_prefix} nested:{n_idx} r:{r_idx} c:{c_idx}")
 
-    # Headers / Footers
+    # Paragraphs
+    for idx, para in enumerate(doc.paragraphs):
+        scan_text(para.text, f"paragraph:{idx}")
+
+    # Tables
+    for t_idx, table in enumerate(doc.tables):
+        scan_table(table, f"table:{t_idx}")
+
+    # Headers / Footers (paragraphs + tables, M6)
     for s_idx, section in enumerate(doc.sections):
         # Header
         if section.header:
             for p_idx, para in enumerate(section.header.paragraphs):
                 scan_text(para.text, f"section:{s_idx} header para:{p_idx}")
-            # Header tables
             for t_idx, table in enumerate(section.header.tables):
-                for r_idx, row in enumerate(table.rows):
-                    for c_idx, cell in enumerate(row.cells):
-                        for p_idx, para in enumerate(cell.paragraphs):
-                            scan_text(para.text, f"section:{s_idx} header table:{t_idx} r:{r_idx} c:{c_idx}")
+                scan_table(table, f"section:{s_idx} header table:{t_idx}")
         if section.footer:
             for p_idx, para in enumerate(section.footer.paragraphs):
                 scan_text(para.text, f"section:{s_idx} footer para:{p_idx}")
+            for t_idx, table in enumerate(section.footer.tables):
+                scan_table(table, f"section:{s_idx} footer table:{t_idx}")
 
     fields = _aggregate_fields(found, "docx")
     field_names = [f.field_name for f in fields]
@@ -211,6 +215,13 @@ def _parse_xlsx(file_bytes: bytes, filename: str = "") -> ParsedTemplate:
             for cell in row:
                 if cell.value is None:
                     continue
+                # H2: skip existing formulas — structured references like
+                # `=SUM(Table1[Amount])` would otherwise be reported as bogus
+                # `[Amount]` placeholder fields. A formula that contains an
+                # unambiguous multi-char placeholder is still scanned.
+                if cell.data_type == "f" or (isinstance(cell.value, str) and cell.value.startswith("=")):
+                    if not (isinstance(cell.value, str) and any(d in cell.value for d in ("{{", "}}", "<<", ">>", "__"))):
+                        continue
                 # Only string cells can contain placeholders; but numeric cells could be formatted as placeholder?
                 text = str(cell.value) if cell.value is not None else ""
                 if not text:

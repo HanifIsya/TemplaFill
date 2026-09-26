@@ -386,9 +386,13 @@ class GeminiExtractor:
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None, use_fake: Optional[bool] = None):
         settings = get_settings()
         raw_key = api_key if api_key is not None else settings.gemini_api_key
-        from app.core.key_pool import get_key_pool
+        from app.core.key_pool import GeminiKeyPool, get_key_pool
 
-        self.key_pool = get_key_pool(raw_key if api_key is not None else None)
+        # Explicit per-instance keys must not mutate the shared settings pool.
+        if api_key is not None:
+            self.key_pool = GeminiKeyPool(raw_key)
+        else:
+            self.key_pool = get_key_pool()
         active_key = self.key_pool.get_current_key()
         self.api_key = active_key if active_key else raw_key
         self.model = model if model is not None else settings.gemini_model

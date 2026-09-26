@@ -22,22 +22,8 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from pydantic import BaseModel
-
 from app.services.rag.embedder import Embedder, get_embedder
 from app.services.rag.vector_store import SearchResult, VectorStore, get_vector_store
-
-
-class RetrievalResult(BaseModel):
-    """Single retrieved chunk with score."""
-
-    chunk_id: str
-    text: str
-    page_number: int
-    header: Optional[str] = None
-    score: float
-    # Full chunk object for downstream extraction
-    chunk: Optional[SearchResult] = None  # type: ignore[assignment]
 
 
 class Retriever:
@@ -50,7 +36,10 @@ class Retriever:
         default_top_k: int = 5,
     ):
         self.vector_store = vector_store or get_vector_store(force_in_memory=True)
-        self.embedder = embedder or get_embedder(force_fake=True)
+        # Default to the configured embedder (which itself falls back to fake
+        # when no API key is present) so a real vector store is queried with a
+        # matching real query embedder instead of a dimension-mismatched fake.
+        self.embedder = embedder or get_embedder()
         try:
             from app.core.config import get_settings
 
@@ -141,4 +130,4 @@ def get_retriever(
     return Retriever(vector_store=vector_store, embedder=embedder)
 
 
-__all__ = ["Retriever", "RetrievalResult", "get_retriever"]
+__all__ = ["Retriever", "get_retriever"]

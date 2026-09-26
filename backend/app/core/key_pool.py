@@ -3,9 +3,11 @@
 Allows configuring multiple comma-separated Gemini API keys:
   GEMINI_API_KEY="key1,key2,key3"
 
-When an API key exhausts its quota (HTTP 429), the pool automatically
-marks it exhausted and switches to the next available API key,
-effectively multiplying the daily free tier capacity by the number of keys.
+When an API key exhausts its quota (HTTP 429), the pool automatically marks it
+exhausted and switches to the next available key, effectively multiplying the
+free-tier capacity by the number of keys. Exhaustion is time-boxed per call via
+`mark_exhausted(duration_seconds=...)`: short for per-minute rate limits, longer
+for daily quota exhaustion.
 """
 
 from __future__ import annotations
@@ -104,7 +106,13 @@ _global_pool: Optional[GeminiKeyPool] = None
 
 
 def get_key_pool(raw_keys: Optional[str] = None) -> GeminiKeyPool:
-    """Singleton getter for global GeminiKeyPool."""
+    """Singleton getter for the settings-configured global GeminiKeyPool.
+
+    The global pool is initialized once from settings. A caller passing explicit
+    keys must NOT mutate the shared pool — doing so silently discarded another
+    component's configured keys and quota state. Callers that need an isolated
+    pool should construct `GeminiKeyPool(raw_keys)` directly.
+    """
     global _global_pool
     if _global_pool is None:
         from app.core.config import get_settings
@@ -112,8 +120,6 @@ def get_key_pool(raw_keys: Optional[str] = None) -> GeminiKeyPool:
         settings = get_settings()
         keys_str = raw_keys if raw_keys is not None else settings.gemini_api_key
         _global_pool = GeminiKeyPool(keys_str)
-    elif raw_keys is not None:
-        _global_pool.set_keys(raw_keys)
     return _global_pool
 
 

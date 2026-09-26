@@ -1,11 +1,11 @@
-"""Embedding service — Task 1.5 (Gemini text-embedding-004).
+"""Embedding service — Task 1.5 (Gemini gemini-embedding-001).
 
 Generates 768-dim embeddings with batching (100/chunk) and rate limiting (15 RPM).
 Falls back to deterministic fake embeddings when GEMINI_API_KEY is missing
 or for tests (so suite is offline-safe).
 
 Spec per TECH_STACK.md:
-  Model: text-embedding-004, dims 768, batch 100, respect 15 RPM via 4s interval
+  Model: gemini-embedding-001 (truncated to 768 dims), batch 100, 15 RPM via 4s interval
 
 Usage:
     from app.services.rag.embedder import embed_texts, embed_query, get_embedder
@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import logging
 import math
-import os
 import random
 import time
 from typing import List, Optional
@@ -45,12 +45,7 @@ MIN_INTERVAL_S = 60.0 / RATE_LIMIT_RPM  # 4 seconds
 _last_call_ts: float = 0.0
 _lock = asyncio.Lock()
 
-try:
-    import numpy as np  # type: ignore
-
-    _HAS_NUMPY = True
-except Exception:  # noqa: BLE001
-    _HAS_NUMPY = False
+_logger = logging.getLogger(__name__)
 
 
 def _fake_embedding(text: str, dims: int = EMBEDDING_DIMS) -> List[float]:
@@ -84,8 +79,8 @@ def _fake_embedding(text: str, dims: int = EMBEDDING_DIMS) -> List[float]:
     return vec
 
 
-def _fake_embeddings_batch(texts: List[str]) -> List[List[float]]:
-    return [_fake_embedding(t) for t in texts]
+def _fake_embeddings_batch(texts: List[str], dims: int = EMBEDDING_DIMS) -> List[List[float]]:
+    return [_fake_embedding(t, dims) for t in texts]
 
 
 class Embedder:
@@ -101,9 +96,13 @@ class Embedder:
     ):
         settings = get_settings()
         raw_key = api_key if api_key is not None else settings.gemini_api_key
-        from app.core.key_pool import get_key_pool
+        from app.core.key_pool import GeminiKeyPool, get_key_pool
 
-        self.key_pool = get_key_pool(raw_key if api_key is not None else None)
+        # Explicit per-instance keys must not mutate the shared settings pool.
+        if api_key is not None:
+            self.key_pool = GeminiKeyPool(raw_key)
+        else:
+            self.key_pool = get_key_pool()
         active_key = self.key_pool.get_current_key()
         self.api_key = active_key if active_key else raw_key
         self.model = model if model is not None else settings.gemini_embedding_model
@@ -150,7 +149,7 @@ class Embedder:
             return []
         # Fake path: deterministic, no network, no rate limit
         if self.use_fake:
-            return _fake_embeddings_batch(texts)
+            return _fake_embeddings_batch(texts, self.dims)
 
         # Live path: batch via Gemini
         all_vectors: List[List[float]] = []
@@ -161,33 +160,80 @@ class Embedder:
             all_vectors.extend(vectors)
         return all_vectors
 
-    async def _embed_batch_live(self, batch: List[str]) -> List[List[float]]:
-        """Call Gemini embedding API for a single batch."""
-        assert self._client is not None
-        # google-genai embedding API: client.models.embed_content or client.aio
-        # We support both sync and async; wrap sync in thread if needed
-        # For simplicity, try async first, fallback to sync in executor
+    def _embed_config(self):  # type: ignore[no-untyped-def]
+        """Build an EmbedContentConfig requesting our target dimensionality, if supported."""
+        if not _HAS_GENAI or not self.dims:
+            return None
         try:
-            # Newer SDK: await client.aio.models.embed_content
+            return types.EmbedContentConfig(output_dimensionality=self.dims)
+        except Exception:  # noqa: BLE001  older SDK without the field
+            return None
+
+    async def _embed_call(self, contents):  # type: ignore[no-untyped-def]
+        """Single embed_content call, requesting self.dims dimensions when supported."""
+        assert self._client is not None
+        config = self._embed_config()
+        if config is not None:
+            try:
+                return await self._client.aio.models.embed_content(
+                    model=self.model, contents=contents, config=config
+                )
+            except TypeError:
+                # SDK/model does not accept the config kwarg — retry without it.
+                pass
+        return await self._client.aio.models.embed_content(model=self.model, contents=contents)
+
+    def _extract_vectors(self, resp) -> List[List[float]]:  # type: ignore[no-untyped-def]
+        """Extract a list of vectors from a multi-content embed response."""
+        embeddings = getattr(resp, "embeddings", None)
+        if embeddings:
+            vectors: List[List[float]] = []
+            for emb in embeddings:
+                values = getattr(emb, "values", None)
+                if values is None:
+                    try:
+                        values = list(emb)
+                    except TypeError:
+                        continue
+                vectors.append(list(values))
+            return vectors
+        # Single-embedding shape
+        vec = self._extract_vector(resp)
+        return [vec] if vec else []
+
+    async def _embed_batch_live(self, batch: List[str]) -> List[List[float]]:
+        """Call Gemini embedding API for a single batch.
+
+        Prefers one batched request for the whole batch. If the SDK/model cannot
+        batch, falls back to per-text calls — each taking its own rate-limit slot
+        so we never fire 100 unthrottled requests (free-tier 429 protection).
+        """
+        assert self._client is not None
+        try:
             if hasattr(self._client, "aio"):
-                results = []
+                # 1. Preferred: one request for the whole batch.
+                try:
+                    resp = await self._embed_call(batch)
+                    vectors = self._extract_vectors(resp)
+                    if len(vectors) == len(batch):
+                        return vectors
+                except Exception:  # noqa: BLE001  batch unsupported — fall through
+                    pass
+                # 2. Fallback: per-text calls, rate-limited individually.
+                results: List[List[float]] = []
                 for text in batch:
-                    resp = await self._client.aio.models.embed_content(
-                        model=self.model, contents=text
-                    )
-                    # resp.embeddings[0].values or resp.embedding
-                    vec = self._extract_vector(resp)
-                    results.append(vec)
+                    await self._rate_limit()
+                    resp = await self._embed_call(text)
+                    results.append(self._extract_vector(resp))
                 return results
-            else:
-                # Sync fallback run in thread
-                loop = asyncio.get_running_loop()
-                return await loop.run_in_executor(None, self._embed_batch_sync, batch)
+            # 3. Sync SDK: run in a thread.
+            loop = asyncio.get_running_loop()
+            return await loop.run_in_executor(None, self._embed_batch_sync, batch)
         except Exception as e:  # noqa: BLE001
-            # On any API error, fallback to fake for resilience in pipeline
-            # Log warning and use fake to keep pipeline moving (eval will show hallucination if overused)
-            print(f"[embedder] Gemini API error, falling back to fake: {e}")
-            return _fake_embeddings_batch(batch)
+            # On any API error, fallback to fake for resilience in pipeline.
+            # This is logged (not silent) so overuse is visible in ops.
+            _logger.warning("[embedder] Gemini API error, falling back to fake: %s", e)
+            return _fake_embeddings_batch(batch, self.dims)
 
     def _embed_batch_sync(self, batch: List[str]) -> List[List[float]]:
         """Synchronous embedding call for thread executor."""
@@ -226,14 +272,14 @@ class Embedder:
     async def embed_query(self, query: str) -> List[float]:
         """Embed a single query string."""
         vectors = await self.embed_texts([query])
-        return vectors[0] if vectors else _fake_embedding(query)
+        return vectors[0] if vectors else _fake_embedding(query, self.dims)
 
     # Sync convenience wrappers for tests / simple scripts
     def embed_texts_sync(self, texts: List[str]) -> List[List[float]]:
-        return _fake_embeddings_batch(texts) if self.use_fake else asyncio.run(self.embed_texts(texts))
+        return _fake_embeddings_batch(texts, self.dims) if self.use_fake else asyncio.run(self.embed_texts(texts))
 
     def embed_query_sync(self, query: str) -> List[float]:
-        return _fake_embedding(query) if self.use_fake else asyncio.run(self.embed_query(query))
+        return _fake_embedding(query, self.dims) if self.use_fake else asyncio.run(self.embed_query(query))
 
 
 # Singleton factory
