@@ -48,6 +48,8 @@ Professionals across industries (legal, HR, finance, education, government) rout
 | **Manual correction** | Allow user to edit/correct extracted values before generating the final document |
 | **Document generation** | Generate the filled template document for download |
 | **Source highlighting** | For each extracted field, show exactly where in the source PDF the data was found |
+| **Two-tier access (Phase 6)** | Free tier (anonymous, Google Gemini, 5 jobs/day/IP) vs Account tier (shared-credential login, DeepSeek engine, higher cap) |
+| **Tier disclosures & quota** | Honest free-tier Google-training/quota notices, quota countdown, and a request-an-account screen |
 
 ### Out of Scope (Future)
 | Feature | Phase |
@@ -55,7 +57,7 @@ Professionals across industries (legal, HR, finance, education, government) rout
 | Scanned PDF / image OCR | v0.2.0 |
 | Batch processing (multiple documents) | v0.2.0 |
 | Custom template creation (drag & drop field designer) | v0.3.0 |
-| User accounts / saved projects | v0.2.0 |
+| User accounts / saved projects | v0.2.0 (Phase 6 ships a single shared account, not per-user accounts) |
 | API access for developers | v0.3.0 |
 | Multi-language document support | v0.3.0 |
 | PDF form field filling | v0.2.0 |
@@ -104,6 +106,16 @@ Professionals across industries (legal, HR, finance, education, government) rout
 - **FR-052**: User can download the filled document in its original format
 - **FR-053**: Download includes a summary report of all extracted fields and their sources
 
+### 4.7 Tiers & Access (Phase 6)
+- **FR-060**: Anonymous visitors use the **free tier** — Google Gemini extraction + embeddings, capped at **5 jobs/day per IP**
+- **FR-061**: The free tier shows an honest disclosure (Google free API may use prompt data; quota can be rate-limited) on the landing and upload screens
+- **FR-062**: When the free cap is reached, the system shows a request-an-account screen with contact `hanif.isya.annafi-2024@fst.unair.ac.id` (no self-registration)
+- **FR-063**: Approved users sign in with a single shared username/password; the backend issues a signed 30-day tier token (HttpOnly cookie + `localStorage` fallback)
+- **FR-064**: Account-tier jobs run on **DeepSeek** with **zero Google calls** (no Gemini extraction and no Gemini embeddings); on DeepSeek failure the job falls back to the local heuristic engine only, never to Google
+- **FR-065**: The Navbar shows the active tier badge (`Free · Gemini` / `Account · DeepSeek`) with sign-in/sign-out controls
+- **FR-066**: Session history and results are stored in the browser (`tf_history`, `localStorage`) only — never synced to a server database
+- **FR-067**: Account-tier privacy wording stays factual and generic until DeepSeek's API no-training/retention terms are verified in writing (task 6.15)
+
 ---
 
 ## 5. Non-Functional Requirements
@@ -148,10 +160,12 @@ Professionals across industries (legal, HR, finance, education, government) rout
 - Source PDFs are text-based (not scanned images) for MVP
 - Template placeholders follow recognizable patterns (brackets, curly braces, etc.)
 - Users have a modern web browser with JavaScript enabled
-- Gemini free tier API limits are sufficient for MVP traffic
+- Gemini free tier API limits are sufficient for free-tier MVP traffic
+- Account-tier usage fits the DeepSeek paid API budget (≈ $0.002 per typical contract job)
 
 ### Constraints
-- **Budget**: Using free tier services where possible (Gemini free plan, Vercel free, Supabase free)
-- **LLM Rate Limits**: Gemini free plan has 15 RPM / 1,500 RPD — must design for queuing
+- **Budget**: Using free tier services where possible (Gemini free plan, Vercel free, Supabase free); DeepSeek token cost absorbed by the host for the account tier
+- **LLM Rate Limits**: Gemini free plan has 15 RPM / 1,500 RPD — must design for queuing; free tier additionally capped at 5 jobs/day/IP
+- **Shared Credential**: There is one fixed account credential (no per-user accounts, no payments, no password reset)
 - **Team**: Development by 2 AI agents (Antigravity + OpenCode) coordinated by 1 human
 - **Timeline**: MVP target is 4-6 weeks from development start

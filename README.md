@@ -1,15 +1,15 @@
 # TemplaFill 📄✨
 
 > **AI-Powered Document Field Extraction & Multi-Format Template Population Engine**  
-> *Extract precise structured data from unstructured PDF documents via Retrieval-Augmented Generation (RAG) and Google Gemini 3.6 Flash (with deterministic heuristic fallback), then automatically map and populate variables into Microsoft Word (`.docx`), Excel (`.xlsx`), and PowerPoint (`.pptx`) templates while preserving 100% of original formatting, layouts, and styles.*
+> *Extract precise structured data from unstructured PDF documents via Retrieval-Augmented Generation (RAG) and Google Gemini 3.6 Flash (with deterministic heuristic fallback), then automatically map and populate variables into Microsoft Word (`.docx`), Excel (`.xlsx`), and PowerPoint (`.pptx`) templates while preserving 100% of original formatting, layouts, and styles. An optional **account tier** processes documents on DeepSeek with zero Google calls.*
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2016-black?logo=next.js)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Gemini](https://img.shields.io/badge/AI-Gemini%203.6%20Flash-4285F4?logo=google)](https://ai.google.dev/)
+[![Gemini](https://img.shields.io/badge/AI-Gemini%203.6%20Flash%20%7C%20DeepSeek-4285F4?logo=google)](https://ai.google.dev/)
 [![Embeddings](https://img.shields.io/badge/Embeddings-gemini--embedding--001-blue)](https://ai.google.dev/)
 [![Evaluation Benchmark](https://img.shields.io/badge/Evaluation%20F1-1.00%20(5%20Domains)-success)](docs/5-quality/EVAL.md)
-[![Test Suite](https://img.shields.io/badge/Tests-180%20Pytest%20%7C%2013%20E2E-brightgreen)](tests/)
+[![Test Suite](https://img.shields.io/badge/Tests-214%20Pytest%20%7C%2042%20Frontend-brightgreen)](tests/)
 
 ---
 
@@ -46,7 +46,7 @@ In legal, financial, procurement, and administrative workflows, organizations ex
 3. **Automated Pipeline**: High-fidelity PDF text and table parsing (PyMuPDF + pdfplumber) $\rightarrow$ Recursive semantic chunking (800 tokens / 100 overlap, header metadata) $\rightarrow$ Dense semantic vector embedding (`gemini-embedding-001`, 768 dimensions, batched 100) $\rightarrow$ Adaptive retrieval (≤15 chunks: full context, zero retriever calls; >15: sparse top-K 3 for 8 fields, deduped ≤12) $\rightarrow$ **Selective PII Masking** (Sanitize high-entropy identifiers: NPWP, NIK, Bank Accounts, Emails, Phones into surrogate tokens) $\rightarrow$ Single-prompt batch structured extraction via Google Gemini (candidate fallback: `gemini-3-flash-preview` / `gemini-3.6-flash`, multi-key rotation on 429/503/timeout + REST fallback) $\rightarrow$ Deterministic heuristic fallback engine (zero-downtime) $\rightarrow$ Post-extraction restoration (Unmasking real values) $\rightarrow$ Atomic placeholder replacement (whole `{{field}}` → value, brace-free) with style preservation.
 4. **Output Document**: Fully populated template document preserving 100% of the original typography, run-level formatting, table designs, formulas, and slide compositions, with per-field citations and engine provenance.
 
-TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Retention** architecture, eliminating mandatory account registration and ensuring that user documents remain private and ephemeral.
+TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Retention** architecture, eliminating mandatory account registration and ensuring that user documents remain private and ephemeral. Users who need a Google-free, higher-quota engine can request the shared **account tier** (DeepSeek) shown in the tier section below.
 
 ---
 
@@ -66,10 +66,11 @@ TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Ret
   - Generates explicit confidence scores (*High $\ge$ 80%*, *Medium 50%–79%*, *Low < 50%*), exact source PDF page citations, and verbatim snippet excerpts for every extracted variable.
 - ✏️ **Human-in-the-Loop Verification**:
   - Review mapped fields in real time, modify values directly via inline editing, or trigger targeted re-extractions using contextual instruction hints.
-- 🚀 **Zero Friction (No Login Required)**:
-  - Instant access with zero barriers—no mandatory sign-up, credential entry, or credit card requirements.
+- 🚀 **Two Tiers — Free & Account (Phase 6)**:
+  - **Free tier** (default, anonymous): Google Gemini, capped at **5 jobs/day per IP**, with an honest disclosure that Google's free API may use prompt data.
+  - **Account tier** (shared-credential sign-in by request): DeepSeek engine with **zero Google calls** (no Gemini extraction or embeddings), higher daily cap, and a request-an-account flow (`hanif.isya.annafi-2024@fst.unair.ac.id`). Navbar badge shows `Free · Gemini` / `Account · DeepSeek`.
 - 🛡️ **Zero Data Retention**:
-  - Ephemeral session memory processing. User files and extracted information are purged upon job completion or session termination, with zero data utilized for model training.
+  - Ephemeral session memory processing. User files and extracted information are purged upon job completion or session termination, with zero data utilized for model training. Session history lives only in the browser (`tf_history`).
 
 ---
 
@@ -236,9 +237,9 @@ e:\TemplaFill\
 ├── frontend/                          # Next.js 16.3.6 Web Application (App Router)
 │   ├── src/
 │   │   ├── app/                       # Routes (page.tsx, layout.tsx, globals.css)
-│   │   ├── components/                # React components (Navbar, DualDropzone, ProcessingView, ReviewMappingView, CitationModal, ReExtractModal, AddFieldModal, HistoryModal, DownloadView, BackendWakingBanner, Toast)
-│   │   ├── lib/                       # API client (api.ts with checkHealth/waitForBackend), types.ts, mockData.ts
-│   │   └── tests/                     # Vitest/node --test suites (models.test.mjs, e2e.test.mjs)
+│   │   ├── components/                # React components (Navbar with tier badge, LoginModal, AccountRequestView, TierDisclosure, DualDropzone, ProcessingView, ReviewMappingView, CitationModal, ReExtractModal, AddFieldModal, HistoryModal, DownloadView, BackendWakingBanner, HelpModal, Toast)
+│   │   ├── lib/                       # API client (api.ts with checkHealth/waitForBackend/login/logout/quota + tf_history), types.ts, tier.ts, mockData.ts
+│   │   └── tests/                     # node --test suites (models.test.mjs, e2e.test.mjs, tier.test.mjs T13–T18)
 │   ├── public/samples/                # Real binary demo assets (sample_contract.pdf, sample_template.docx)
 │   ├── vercel.json                    # Vercel deployment headers + CSP/HSTS
 │   ├── next.config.ts                 # Next.js config (securityHeaders, poweredByHeader:false)
@@ -254,10 +255,10 @@ e:\TemplaFill\
 │   │   │   ├── extraction/            # PyMuPDF text & pdfplumber table → ExtractedDocument
 │   │   │   ├── rag/                   # chunker.py (800/100), vector_store.py (InMemory/pgvector), embedder.py (gemini-embedding-001 768d), retriever.py (top-K)
 │   │   │   ├── mapping/               # parser.py (5 syntaxes, docx/xlsx/pptx), mapper.py, generator.py (style-preserving fill)
-│   │   │   ├── jobs/                  # manager.py (queued→processing→extracting→mapping→completed, batch extract), models.py (Job/FieldResult with extracted_by)
-│   │   │   └── generation/            # extractor.py (Gemini batch + FakeExtractor fallback, 404 blacklist)
+│   │   │   ├── jobs/                  # manager.py (queued→processing→extracting→mapping→completed, tier-aware provider selection), models.py (Job/FieldResult with extracted_by)
+│   │   │   └── generation/            # extractor.py (Gemini batch + FakeExtractor fallback, 404 blacklist), deepseek_extractor.py (account tier, no Google calls)
 │   │   └── utils/                     # Helpers
-│   ├── tests/                         # Pytest suite (167 passing tests: pdf_extraction, chunker, rag, template_parser, mapping_generator, generation_extractor, health, api)
+│   ├── tests/                         # Pytest suite (214 passing tests incl. auth/quota/provider-selection)
 │   ├── requirements.txt               # Pinned deps (FastAPI, PyMuPDF, pdfplumber, python-docx, openpyxl, python-pptx, google-genai, pgvector)
 │   ├── Dockerfile                     # python:3.11-slim, non-root, HEALTHCHECK, 2 workers
 │   └── pyproject.toml                 # Project meta + pytest/ruff/black/mypy config
@@ -359,9 +360,16 @@ The application supports the following configurable environment variables:
 
 | Variable | Required | Default Value | Description |
 |---|---|---|---|
-| `GEMINI_API_KEY` | Optional | `""` | Google AI Studio API key (activates live LLM extraction; without it, heuristic fallback runs and all 167 tests still pass) |
+| `GEMINI_API_KEY` | Optional | `""` | Google AI Studio API key (activates live LLM extraction; without it, heuristic fallback runs and all 214 tests still pass) |
 | `GEMINI_MODEL` | No | `gemini-3.6-flash` | Primary Gemini model (candidates: 3.6 → 3.5 → 3.5-lite → 3.7 → 3.8, auto-blacklisted on 404) |
 | `GEMINI_EMBEDDING_MODEL` | No | `gemini-embedding-001` | Semantic embedding model (768 dimensions, batch 100; legacy `text-embedding-004` auto-sanitized) |
+| `DEEPSEEK_API_KEY` | Optional | `""` | DeepSeek API key (account tier). Unset → tier system off, all jobs run free |
+| `DEEPSEEK_MODEL` | No | `deepseek-flash` | DeepSeek model (account tier) |
+| `DEEPSEEK_BASE_URL` | No | `https://api.deepseek.com` | OpenAI-compatible Chat Completions base URL |
+| `TIER_ACCOUNT_USERNAME` | Optional | `""` | Shared account username (Phase 6) |
+| `TIER_ACCOUNT_PASSWORD_HASH` | Optional | `""` | scrypt hash of the shared password (`scripts/hash_password.py`) |
+| `FREE_JOBS_PER_DAY` | No | `5` | Free-tier daily cap per IP |
+| `PRO_JOBS_PER_DAY` | No | `50` | Account-tier daily cap per IP (cost guard) |
 | `DATABASE_URL` | No | `postgresql+asyncpg://...` | Connection URI for Supabase / PostgreSQL |
 | `CORS_ORIGINS` | No | `http://localhost:3000` | Whitelisted frontend origins (comma-separated) |
 | `NEXT_PUBLIC_API_URL` | Yes (Frontend) | `http://localhost:8000/api` | Base URL for backend API requests |
@@ -378,9 +386,12 @@ The backend provides structured, type-safe REST endpoints:
 |---|---|---|
 | `GET` | `/api/health` | Health verification, uptime, API version, `ai_configured` + active `model` (no DB, fast wake detection) |
 | `GET` | `/api/debug/gemini` | Gemini API connectivity probe (active only when `DEBUG=True`; 404 in production) |
-| `POST` | `/api/upload` | Multipart file upload for PDF source + template (50MB PDF strict `%PDF`, 20MB `PK` template, 202 + `job_id`) |
-| `GET` | `/api/jobs/{job_id}` | Retrieve job status, lifecycle stage, and progress (`queued→processing→extracting→mapping→completed` with `percent`/`phase`) |
-| `GET` | `/api/jobs/{job_id}/results` | Retrieve extracted fields with `confidence`, `source_reference`, `extracted_by` (`gemini`/`heuristic`/`hybrid`), `fallback_reason`, overall metrics |
+| `POST` | `/api/auth/login` | Shared-credential sign-in → signed 30-day tier token + HttpOnly cookie (generic 401, `5/min/IP`) |
+| `POST` | `/api/auth/logout` | Clear the tier cookie/token |
+| `GET` | `/api/auth/quota` | `{free_used_today, free_limit, tier}` for the free-tier countdown |
+| `POST` | `/api/upload` | Multipart upload for PDF source + template (50MB `%PDF`, 20MB `PK`, 202 + `job_id`); accepts `X-Session-Token` tier token, returns `tier`, `429 QUOTA_EXCEEDED` on daily cap |
+| `GET` | `/api/jobs/{job_id}` | Job status, lifecycle stage, progress, and `tier` (`queued→processing→extracting→mapping→completed`) |
+| `GET` | `/api/jobs/{job_id}/results` | Extracted fields with `confidence`, `source_reference`, `extracted_by` (`gemini`/`deepseek`/`heuristic`/`hybrid`), `fallback_reason`, overall metrics |
 | `PATCH` | `/api/jobs/{job_id}/fields/{field_id}` | Edit / skip / confirm / re-extract (`re_extract` with sanitized `hint`) a field |
 | `POST` | `/api/jobs/{job_id}/fields/{field_id}/re-extract` | Dedicated re-extract endpoint (5/min per IP, hint ≤2000 chars, returns `previous_value`/`new_value`) |
 | `POST` | `/api/jobs/{job_id}/confirm` | Confirm mapped fields and trigger style-preserving generation (`mapped` skips empty/skipped, RFC5987 download name) |
@@ -407,7 +418,7 @@ Extraction accuracy and model fidelity are verified across 5 synthetic domains (
 ### Executing Test Suites
 
 ```bash
-# Backend Pytest (180 tests, offline-safe, no GEMINI_API_KEY required):
+# Backend Pytest (214 tests, offline-safe, no GEMINI_API_KEY required):
 cd backend
 pytest -v
 pytest --cov=app --cov-report=term-missing   # coverage
@@ -416,9 +427,9 @@ pytest --cov=app --cov-report=term-missing   # coverage
 python scripts/generate_eval_datasets.py
 python eval/run_eval.py --dataset eval/datasets --output eval/results
 
-# Frontend (Next 16.3.6, 13 tests via node --test + next build):
+# Frontend (Next 16.3.6, 42 tests via node --test + next build):
 cd frontend
-npm test                # 13/13 (models.test.mjs + e2e.test.mjs 106ms)
+npm test                # 42/42 (models.test.mjs + e2e.test.mjs + tier.test.mjs T13–T18)
 npm run lint
 npm run build           # static prerender + CSP headers
 
@@ -438,10 +449,10 @@ TemplaFill adheres to strict defense-in-depth principles:
   - **Preserved for 100% Accuracy**: Company names (`PT`/`CV`), authorized representative names & titles, narrative contract scopes, dates, financial amounts, and payment milestone terms remain untouched to ensure the LLM's semantic reasoning is never degraded.
   - **Local Restoration**: Surrogate tokens are safely unmasked on the local server post-extraction before template generation and user display.
 - 📜 **Privacy Tiers & Zero Model Training**:
-  - *Free Tier*: Protected by Selective PII Masking, ensuring sensitive credentials are never stored or trained on by external AI providers.
-  - *Commercial Paid Tier*: Supports Google Cloud / AI Studio keys with billing enabled, backed by Google's commercial Data Processing Addendum (DPA) legally guaranteeing 0% data usage for model training.
-- 🔒 **Zero Data Retention**: Document binaries, embeddings, and filled outputs are retained exclusively in volatile / ephemeral storage (in-memory jobs, `./uploads` 24h auto-delete, vector store tied to job lifetime; see `SECURITY.md` & `DATA_PRIVACY.md`).
-- 🛡️ **Zero Credential Dependency (MVP)**: The platform operates in anonymous guest mode (`free` tier, 3 fills/day local; `pro` unlimited after login). `AuthModal` + `localStorage` tokens exist only as UI stub for future JWT Phase 2 (`OWNERSHIP.md`).
+  - *Free Tier*: Google's free Gemini API may use prompt data to improve its products (disclosed in the UI). Selective PII Masking keeps masked identifiers off Google servers.
+  - *Account Tier*: Documents are processed on DeepSeek with **zero Google calls** — no Gemini extraction and no Gemini embeddings. DeepSeek retention/training wording stays generic until its API terms are verified in writing (task 6.15).
+- 🔒 **Zero Data Retention**: Document binaries, embeddings, and filled outputs are retained exclusively in volatile / ephemeral storage (in-memory jobs, `./uploads` 24h auto-delete, vector store tied to job lifetime; see `SECURITY.md` & `DATA_PRIVACY.md`). Session history is browser-local (`tf_history`) only.
+- 🛡️ **Two-Tier Access (Phase 6)**: Free tier is anonymous (`5 jobs/day/IP`); the account tier uses a single shared credential (no self-registration) and issues a signed 30-day tier token (`purpose:"tier"`, mutually invalid with per-job tokens). Login is rate-limited `5/min/IP` with a generic 401.
 - 🧱 **Injection & Validation Armor (VULN-1 → 10, ADR-012)**: `sanitize_filename()` strips `../`/null/path traversal; `sanitize_text_input(max_len=5000)` scrubs control codes; `validate_file_magic` enforces `%PDF`/`PK` beyond extensions; `sanitize_text_input` limits hints to 2000 chars; download `Content-Disposition` uses RFC 5987 `filename*=UTF-8''`; raw exception traces are never leaked to clients.
 - 🛡️ **Defense-in-Depth Headers**: Enforced via `SecurityHeadersMiddleware` (`backend/app/core/security.py:28`) + `next.config.ts` + `vercel.json`: strict `Content-Security-Policy` (no `frame-ancestors`, limited `connect-src`), `HSTS preload`, `nosniff`, `DENY` frames, `Referrer-Policy strict-origin-when-cross-origin`, `Permissions-Policy` + `x-powered-by: false`. Rate limiting: 10/hr upload, 30/min write, 5/min re-extract, with `testclient` exemption for CI.
 
@@ -458,7 +469,7 @@ The architecture is configured for **free-forever $0/mo** (Vercel Hobby 100GB + 
 
 - **Render Hobby cold-start**: Sleeps after 15 min idle, wakes ~60s. Handled via `BackendWakingBanner.tsx` + `api.ts:70` `waitForBackend(12×5s)` + keep-warm `GET /api/health` polling. Optional UptimeRobot 5-min ping (<720 req/month, within quota).
 - **DB setup**: `CREATE EXTENSION IF NOT EXISTS vector;` + `alembic upgrade head` on Supabase; connection via `postgresql+asyncpg://` pooling (6543 pgbouncer).
-- **CI/CD**: `.github/workflows/ci.yml` (backend 167 + coverage, frontend lint/build/13 E2E, eval, pip-audit, docker sanity) + `deploy.yml` (Render deploy on `main`, Vercel auto-deploy).
+- **CI/CD**: `.github/workflows/ci.yml` (backend 214 + coverage, frontend lint/build/42 tests, eval, pip-audit, docker sanity) + `deploy.yml` (Render deploy on `main`, Vercel auto-deploy).
 
 ---
 

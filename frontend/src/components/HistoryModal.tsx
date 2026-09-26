@@ -2,14 +2,14 @@
 
 import React from 'react';
 import { X, Download, Trash2 } from 'lucide-react';
-import { RecentSession } from '../lib/types';
+import { HistoryEntry } from '../lib/types';
 
 interface HistoryModalProps {
   isOpen: boolean;
   onClose: () => void;
-  sessions: RecentSession[];
+  sessions: HistoryEntry[];
   onClearHistory: () => void;
-  onDownloadSessionFile: (session: RecentSession) => void;
+  onDownloadSessionFile: (session: HistoryEntry) => void;
 }
 
 export const HistoryModal: React.FC<HistoryModalProps> = ({
@@ -31,7 +31,7 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               Recent Extraction Sessions
             </h3>
             <p className="font-mono text-[11px] text-slate-500 mt-0.5">
-              Saved in browser local storage. Auto-purged per 24-hour privacy policy.
+              Saved in browser local storage (tf_history). Server files auto-purge per 24-hour policy.
             </p>
           </div>
 
@@ -58,10 +58,12 @@ export const HistoryModal: React.FC<HistoryModalProps> = ({
               >
                 <div className="space-y-0.5 min-w-0">
                   <div className="font-semibold text-slate-900 dark:text-slate-100 truncate">
-                    {s.downloadFilename}
+                    {s.filledFilename}
                   </div>
                   <div className="font-mono text-[11px] text-slate-500 break-words">
-                    Source: {s.sourceFilename} | {s.fieldCount} fields | {new Date(s.date).toLocaleDateString()}
+                    Source: {s.sourceDoc.filename} | {s.fieldCount} fields |{' '}
+                    {new Date(s.createdAt).toLocaleDateString()} |{' '}
+                    {s.tier === 'pro' ? 'Account · DeepSeek' : 'Free · Gemini'}
                   </div>
                 </div>
 

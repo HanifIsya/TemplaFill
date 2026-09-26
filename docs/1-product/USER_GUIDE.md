@@ -1,8 +1,8 @@
 # TemplaFill — User Guide & Operations Manual
 
-> **Version**: 1.0.1 (doc sweep 2026-09-24, code is `gemini-3.6-flash` / `gemini-embedding-001` / `167 tests`)  
+> **Version**: 1.1.0 (tier sweep 2026-09-26, code is `gemini-3.6-flash`/`deepseek-flash` / `gemini-embedding-001` / `214 backend + 42 frontend tests`)  
 > **Target Audience**: End-users, Legal Analysts, Operations Teams, Administrators  
-> **Last Updated**: 2026-09-24 · **Code references**: `frontend/src/lib/api.ts:23`, `backend/app/services/mapping/parser.py:32`, `backend/app/services/generation/extractor.py:220`  
+> **Last Updated**: 2026-09-26 · **Code references**: `frontend/src/lib/api.ts:13`, `frontend/src/lib/tier.ts:4`, `backend/app/services/mapping/parser.py:32`, `backend/app/services/generation/extractor.py:220`  
 
 ---
 
@@ -102,33 +102,46 @@ TemplaFill offers two layout modes:
 
 ---
 
-## 4. User Accounts & Session Modes
+## 4. Tiers, Access & Session Modes
 
-TemplaFill offers both guest anonymous access and registered accounts:
+TemplaFill runs on two tiers (Phase 6). There is no self-registration: the account tier is granted by personal request and uses one shared credential.
 
-| Feature | Anonymous Guest | Registered Pro Account |
-|---------|-----------------|------------------------|
-| Account Required | No | Yes (Email + Password) |
-| Daily Extractions | 3 fills / day | Unlimited |
-| Local Session History | Last 5 sessions | Cloud persistent history |
-| Custom Presets | Local only | Synchronized presets |
-| Cost | Free | Free tier (MVP) / Pro |
+| Feature | Free Tier (anonymous) | Account Tier (signed in) |
+|---------|----------------------|--------------------------|
+| Account Required | No | Yes — shared username/password (by request) |
+| AI Engine | Google Gemini free API (`gemini-3.6-flash` + `gemini-embedding-001`) | DeepSeek (`deepseek-flash`), **zero Google calls** |
+| Daily Extractions | **5 jobs / day per network (IP)** | 50 jobs / day per network (cost guard) |
+| Privacy | Prompts may be used by Google to improve its services | Documents are not sent to Google on this tier |
+| Fallback | local heuristic engine | local heuristic engine only (never Google) |
+| Session History | Browser-local (`tf_history`), last sessions | Browser-local (`tf_history`) |
+| Cost | Free | Free to the user (host absorbs token cost) |
+
+### Getting the Account Tier
+1. Click **Request an account** (landing/upload) or reach the quota screen.
+2. Email **hanif.isya.annafi-2024@fst.unair.ac.id** with your name/organization and intended use.
+3. The owner replies with the shared username and password.
+4. Click **Sign in**, enter the credentials → the Navbar badge switches to `Account · DeepSeek`.
+
+### Tier Badge & Quota
+- The Navbar badge shows `Free · Gemini` or `Account · DeepSeek`; use **Sign out** to return to free.
+- The landing/upload screens show a free-tier disclosure and a countdown (e.g. "2 of 5 free jobs remaining today").
+- On the 6th free job in a day, a **Daily Limit Reached** screen appears with the contact email above.
 
 ---
 
 ## 5. Security & Privacy Safeguards (see `SECURITY.md` + `DATA_PRIVACY.md` + ADR-012/018)
 
-- **Selective PII Masking (Zero-Leakage AI Processing, ADR-018)**:
-  Before document text chunks are sent to Google Gemini API, sensitive identifiers are sanitized using automated tokenization:
+- **Selective PII Masking (Zero-Leakage AI Processing, ADR-018 — both tiers)**:
+  Before document text chunks are sent to an AI provider, sensitive identifiers are sanitized using automated tokenization:
   - **Masked with Tokens**: NPWP (Indonesian Tax IDs), NIK/KTP (Citizen IDs), Bank Account Numbers (Rekening), Emails, and Phone/WhatsApp numbers.
   - **Preserved for 100% Accuracy**: Company names (`PT`/`CV`), Person names with titles, project titles, scopes, narrative clauses, dates, financial amounts, and payment percentages.
   - **Surrogate Restoration**: Tokens are restored automatically to their original values upon extraction prior to template generation.
-- **Privacy Tiers**:
-  - *Free Tier*: Selective PII Masking ensures sensitive credentials and tax IDs are never transmitted to Google servers.
-  - *Commercial Paid Tier*: Supports Google Cloud / AI Studio keys with billing enabled for formal Data Processing Addendum (DPA) enterprise zero-model-training compliance.
-- **In-Memory & Ephemeral Storage**: InMemory jobs + `./uploads` (24h auto-delete) + vector store lifetime tied to job. 180 backend tests + 13 frontend tests pass with 100% offline safety via deterministic fallback.
+- **Privacy by Tier**:
+  - *Free Tier*: Document text and chunks are sent to Google's free Gemini API, whose free-tier terms allow prompt data to be used to improve Google's products. Selective PII Masking keeps the masked identifiers off Google servers.
+  - *Account Tier*: Documents are processed on DeepSeek instead of Google — no Gemini extraction and no Gemini embeddings. DeepSeek API retention/training wording remains generic until its terms are verified in writing (task 6.15).
+- **In-Memory & Ephemeral Storage**: InMemory jobs + `./uploads` (24h auto-delete) + vector store lifetime tied to job. 214 backend tests + 42 frontend tests pass with 100% offline safety via deterministic fallback.
 - **In-Flight Encryption & Headers**: TLS 1.3 + strict CSP (`default-src 'self'; frame-ancestors 'none'`), `nosniff`/`DENY`/`HSTS preload`/`Referrer-Policy`/`Permissions-Policy` triple-enforced in `backend/app/core/security.py:28` + `frontend/next.config.ts:24` + `frontend/vercel.json:33`.
-- **OWASP & Validation Compliance (ADR-012)**: `sanitize_filename()` strips `../`/null/path traversal + `sanitize_text_input` scrubs control codes (5000 edit / 2000 hint) + `validate_file_magic` (`%PDF`/`PK`) + `sanitize_filename` on `Content-Disposition: filename*=UTF-8''...` (RFC 5987) + no `str(e)` leak + `DEBUG` gates `/api/debug/gemini` + `docs` disabled when `DEBUG=False` + CORS whitelist + rate limit `10/hr, 30/min, 5/min` (CI exempt). Formula injection `= + - @` stripped on xlsx.
+- **OWASP & Validation Compliance (ADR-012)**: `sanitize_filename()` strips `../`/null/path traversal + `sanitize_text_input` scrubs control codes (5000 edit / 2000 hint) + `validate_file_magic` (`%PDF`/`PK`) + `sanitize_filename` on `Content-Disposition: filename*=UTF-8''...` (RFC 5987) + no `str(e)` leak + `DEBUG` gates `/api/debug/gemini` + `docs` disabled when `DEBUG=False` + CORS whitelist + rate limit `10/hr, 30/min, 5/min` + tier quotas `5/day` free / `50/day` pro + auth `5/min` (CI exempt). Formula injection `= + - @` stripped on xlsx.
 
 ---
 

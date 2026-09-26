@@ -110,29 +110,29 @@
 |---|------|--------|----------|-------|
 | 6.0 | Write tier plan + architecture design docs | `review` | OpenCode (user-directed) | TIER_PLAN.md + TIER_ARCHITECTURE.md — **awaiting user approval** |
 | 6.15 | Verify DeepSeek API no-training / data-retention terms in writing | `todo` | OpenCode | Must pass **before** any privacy claim ships in UI copy |
-| 6.14 | Docs sync: PRD, USER_STORIES, USER_GUIDE, API.md (new Tiers & Auth section), ARCHITECTURE, TECH_STACK, DATA_MODEL, SECURITY.md + DATA_PRIVACY.md tier sections, README, CHANGELOG | `todo` | Antigravity | Full docs sweep after backend/frontend land |
+| 6.14 | Docs sync: PRD, USER_STORIES, USER_GUIDE, API.md (new Tiers & Auth section), ARCHITECTURE, TECH_STACK, DATA_MODEL, SECURITY.md + DATA_PRIVACY.md tier sections, README, CHANGELOG | `done` | Antigravity | Full docs sweep after backend/frontend land |
 
 ### 6.B Backend (OpenCode)
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 6.2 | Tier auth: shared-credential login (`POST /api/auth/login`), scrypt password hash, signed tier token with `purpose:"tier"` (30d), logout, `auth` rate limit 5/min/IP, `scripts/hash_password.py` | `todo` | OpenCode | Reuses ADR-019 HMAC primitives; token purpose isolation from job tokens |
-| 6.3 | Quotas: add `day` window to rate limiter; `free_upload` 5/day/IP, `pro_upload` 50/day/IP; 429 `QUOTA_EXCEEDED` + `Retry-After`; `GET /api/auth/quota` | `todo` | OpenCode | Enforced even for logged-in users (shared-password cost guard) |
-| 6.4 | `DeepSeekExtractor` (`deepseek-flash`, httpx Chat Completions, JSON mode, pacing/backoff, shared prompt + VULN-07 output validation, `force_fake` for CI) + provider selection by `Job.tier` | `todo` | OpenCode | Fallback = heuristic only, **never Gemini** on pro path |
-| 6.5 | Pro-tier retrieval bypass: sequential chunk batching, zero embedding calls; `engine_used/extracted_by = deepseek` | `todo` | OpenCode | Chosen over local embeddings — see TIER_ARCHITECTURE §3 |
-| 6.6 | Config/env: `DEEPSEEK_*`, `TIER_*`, quota caps in `config.py` + `.env.example` + `render.yaml` | `todo` | OpenCode | Shared files — note in CONTEXT.md before editing |
-| 6.7 | Backend tests: auth/token purpose/quota/provider-selection/DeepSeek-fake/zero-Gemini-on-pro; keep full suite green | `todo` | OpenCode | Baseline is **214 tests** |
-| 6.8 | Eval: `run_eval.py --provider deepseek` (fake offline in CI) meeting EVAL.md thresholds | `todo` | OpenCode | Live DeepSeek run before release |
+| 6.2 | Tier auth: shared-credential login (`POST /api/auth/login`), scrypt password hash, signed tier token with `purpose:"tier"` (30d), logout, `auth` rate limit 5/min/IP, `scripts/hash_password.py` | `in_progress` | OpenCode | Reuses ADR-019 HMAC primitives; token purpose isolation from job tokens |
+| 6.3 | Quotas: add `day` window to rate limiter; `free_upload` 5/day/IP, `pro_upload` 50/day/IP; 429 `QUOTA_EXCEEDED` + `Retry-After`; `GET /api/auth/quota` | `in_progress` | OpenCode | Enforced even for logged-in users (shared-password cost guard) |
+| 6.4 | `DeepSeekExtractor` (`deepseek-flash`, httpx Chat Completions, JSON mode, pacing/backoff, shared prompt + VULN-07 output validation, `force_fake` for CI) + provider selection by `Job.tier` | `in_progress` | OpenCode | Fallback = heuristic only, **never Gemini** on pro path |
+| 6.5 | Pro-tier retrieval bypass: sequential chunk batching, zero embedding calls; `engine_used/extracted_by = deepseek` | `in_progress` | OpenCode | Chosen over local embeddings — see TIER_ARCHITECTURE §3 |
+| 6.6 | Config/env: `DEEPSEEK_*`, `TIER_*`, quota caps in `config.py` + `.env.example` + `render.yaml` | `in_progress` | OpenCode | Shared files — noted in CONTEXT.md |
+| 6.7 | Backend tests: auth/token purpose/quota/provider-selection/DeepSeek-fake/zero-Gemini-on-pro; keep full suite green | `in_progress` | OpenCode | Baseline is **214 tests** |
+| 6.8 | Eval: `run_eval.py --provider deepseek` (fake offline in CI) meeting EVAL.md thresholds | `in_progress` | OpenCode | Live DeepSeek run before release |
 
 ### 6.C Frontend (Antigravity)
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 6.9 | Login modal (shared username/password), `api.login/logout/quota`, tier state + Navbar badge (`Free · Gemini` / `Account · DeepSeek`) | `todo` | Antigravity | No AuthModal exists in repo despite TASK 3.8 note — build fresh |
-| 6.10 | Tier disclosures: free-tier Google-training + quota notices on landing/upload, request-an-account screen with contact email, HelpModal privacy tab rewrite | `todo` | Antigravity | Copy gated on 6.15 verdict for DeepSeek claims |
-| 6.11 | localStorage history store (`tf_history`) for results + filled-doc metadata + quota display (5/day countdown) | `todo` | Antigravity | Schema in TIER_ARCHITECTURE §6 |
-| 6.12 | Type/badge updates: `extractedBy`/`engineUsed` add `'deepseek'`, tier-aware engine badges and fallback banners | `todo` | Antigravity | `types.ts`, `api.ts` mock stubs already have `tier` |
-| 6.13 | Frontend tests + extend `e2e.test.mjs` for both tier flows; lint/build green | `todo` | Antigravity | Baseline 13 tests |
+| 6.9 | Login modal (shared username/password), `api.login/logout/quota`, tier state + Navbar badge (`Free · Gemini` / `Account · DeepSeek`) | `done` | Antigravity | No AuthModal exists in repo despite TASK 3.8 note — built fresh (LoginModal) |
+| 6.10 | Tier disclosures: free-tier Google-training + quota notices on landing/upload, request-an-account screen with contact email, HelpModal privacy tab rewrite | `done` | Antigravity | Copy gated on 6.15 verdict for DeepSeek claims (kept generic) |
+| 6.11 | localStorage history store (`tf_history`) for results + filled-doc metadata + quota display (5/day countdown) | `done` | Antigravity | Schema in TIER_ARCHITECTURE §6 |
+| 6.12 | Type/badge updates: `extractedBy`/`engineUsed` add `'deepseek'`, tier-aware engine badges and fallback banners | `done` | Antigravity | `types.ts`, `api.ts` mock stubs already have `tier` |
+| 6.13 | Frontend tests + extend `e2e.test.mjs` for both tier flows; lint/build green | `done` | Antigravity | 42 tests (was 13): tier.test.mjs T13–T18 + e2e both tiers |
 
 ### 6.D Joint
 
@@ -140,3 +140,4 @@
 |---|------|--------|----------|-------|
 | 6.16 | Live staging E2E both tiers, live eval both providers, cost sanity check, CHANGELOG release notes | `todo` | Both | After 6.2–6.13 |
 | 6.17 | Flip ADR-020 to `Accepted`, update CONTEXT.md with results | `todo` | OpenCode | Close-out |
+

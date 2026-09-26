@@ -2,6 +2,8 @@
 
 import React, { useRef, useState } from 'react';
 import { UploadCloud, CheckCircle2, Trash2, ArrowRight } from 'lucide-react';
+import { Tier } from '../lib/types';
+import { TierDisclosure } from './TierDisclosure';
 
 interface DualDropzoneProps {
   sourceFile: File | null;
@@ -11,6 +13,11 @@ interface DualDropzoneProps {
   onStartExtraction: () => void;
   onLoadDemoFiles: () => void;
   isLoading?: boolean;
+  tier?: Tier;
+  remaining?: number;
+  freeLimit?: number;
+  onRequestAccount?: () => void;
+  onOpenLogin?: () => void;
 }
 
 export const DualDropzone: React.FC<DualDropzoneProps> = ({
@@ -21,6 +28,11 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
   onStartExtraction,
   onLoadDemoFiles,
   isLoading = false,
+  tier = 'free',
+  remaining,
+  freeLimit,
+  onRequestAccount,
+  onOpenLogin,
 }) => {
   const [sourceDragActive, setSourceDragActive] = useState(false);
   const [templateDragActive, setTemplateDragActive] = useState(false);
@@ -76,6 +88,14 @@ export const DualDropzone: React.FC<DualDropzoneProps> = ({
           Select a source PDF document containing extraction data and a destination template.
         </p>
       </div>
+
+      <TierDisclosure
+        tier={tier}
+        remaining={remaining}
+        freeLimit={freeLimit}
+        onRequestAccount={onRequestAccount}
+        onOpenLogin={onOpenLogin}
+      />
 
       {/* Dual Upload Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

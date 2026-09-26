@@ -10,7 +10,27 @@
 2. **Transparent Processing** — Users know exactly what happens to their documents
 3. **User Control** — Users can delete their data at any time
 4. **Short Retention** — Documents are auto-deleted within 24 hours
-5. **No Training** — User documents are NEVER used to train AI models
+5. **No Training by TemplaFill** — We never use user documents to train our own models
+6. **Honest Tier Disclosure** — Each tier states plainly which AI provider receives the data
+
+---
+
+## Tiers & Data Handling (Phase 6)
+
+TemplaFill has two tiers with different external data flows. There is one shared account credential; no per-user profile is stored.
+
+| Data | Free tier (Gemini) | Account tier (DeepSeek) |
+|------|--------------------|--------------------------|
+| Document text → Google (extraction) | ✅ yes (free Gemini API) | ❌ never |
+| Document chunks → Google (embeddings) | ✅ yes | ❌ never (retrieval bypassed) |
+| Document text → DeepSeek | ❌ n/a | ✅ yes |
+| PII masked before any LLM call (ADR-018) | ✅ | ✅ |
+| Document persisted server-side | ❌ RAM only, ≤24h TTL | ❌ RAM only, ≤24h TTL |
+| History/results storage | browser `localStorage` only | browser `localStorage` only |
+
+- **Free tier**: Google's free-tier terms permit prompt data to be used to improve Google's products. This is disclosed in the UI (landing/upload) and in the Help guide.
+- **Account tier**: No Gemini extraction and no Gemini embeddings — documents never reach Google. DeepSeek API retention/training wording stays **generic** until its terms are verified in writing (task 6.15); no specific no-training claim is published before then.
+- **Browser-local history** means *storage*, not *processing*: files still cross the network to the server, are held in RAM only for the job, and are purged within 24 hours.
 
 ---
 
@@ -25,13 +45,14 @@
 | Vector embeddings | Similarity search during extraction | 24 hours, then deleted |
 | Generated filled document | User download | 24 hours, then deleted |
 
-### Account Data (Persistent — Phase 2+)
+### Account Data (Shared Credential — Phase 6)
 | Data | Purpose | Retention |
 |------|---------|-----------|
-| Email address | Authentication, notifications | Until account deletion |
-| Display name | UI personalization | Until account deletion |
-| Password hash | Authentication | Until account deletion |
-| Processing history (metadata only) | User convenience (re-download) | 7 days, or until deletion |
+| Shared username + password hash | Tier authentication (one fixed credential) | Server env only, until rotation |
+| Tier token (signed, 30d) | Keep the user signed in | HttpOnly cookie + `localStorage`; expiry 30d |
+| Session history (metadata only) | User convenience | Browser `localStorage` only — never synced |
+
+> **No per-user profile is stored.** TemplaFill does not store emails, names, or any identifier about who logs in.
 
 ### Automatically Collected
 | Data | Purpose | Retention |
@@ -45,8 +66,8 @@
 ## What We DON'T Collect
 
 - ❌ **Document content is NOT logged** — text extracted from PDFs is never written to logs
-- ❌ **Documents are NOT used for AI training** — Gemini API is called with `safetySettings`, and we use API mode (not data-sharing mode)
-- ❌ **No cookies for tracking** — only functional cookies (auth session)
+- ❌ **Documents are NOT used by TemplaFill for AI training** — we use API mode (not data-sharing mode). Note: Google's **free tier** may use Gemini prompt data to improve its products (disclosed in the UI); the account tier never sends documents to Google
+- ❌ **No cookies for tracking** — only functional cookies (job session + tier auth)
 - ❌ **No third-party analytics that receive document content**
 
 ---
@@ -57,10 +78,11 @@
 
 | Service | Data Shared | Purpose | Their Privacy Policy |
 |---------|------------|---------|---------------------|
-| Gemini API (Google) | Document text chunks (temporary, via API) | AI extraction | [Google AI Privacy](https://ai.google.dev/terms) |
+| Gemini API (Google) | Document text chunks (temporary, via API) — **free tier only** | AI extraction + embeddings | [Google AI Privacy](https://ai.google.dev/terms) |
+| DeepSeek API | Document text (temporary, via API) — **account tier only** | AI extraction (no embeddings) | DeepSeek API terms (verification pending, task 6.15) |
 | Hosting provider | Encrypted files on disk | Storage | Varies by provider |
 
-> **Important**: Gemini API free tier data usage policy — Google states that free-tier API data may be used for model improvement. To protect user privacy under free-tier usage, TemplaFill enforces **Selective PII Masking** before transmitting chunks to external LLM endpoints.
+> **Important**: Gemini API free tier data usage policy — Google states that free-tier API data may be used for model improvement. To protect user privacy under free-tier usage, TemplaFill enforces **Selective PII Masking** before transmitting chunks to external LLM endpoints. Account-tier jobs do not call Google at all.
 
 ### Selective PII Masking (Sanitize → Store Map → Call → Restore)
 TemplaFill protects confidential identity and financial details through automated client/server pseudonymization:
@@ -83,10 +105,10 @@ TemplaFill protects confidential identity and financial details through automate
 
 ### Data Flow
 ```
-User uploads → Server receives → Encrypted at rest → 
-→ Text extracted (in memory) → Selective PII Masker (Tokens generated) → 
-→ Sanitized Chunks sent to Gemini API → Gemini extracts tokens → 
-→ Unmasker restores real PII values → Results stored in DB → 
+User uploads → Server receives → (RAM only, never persisted) →
+→ Text extracted (in memory) → Selective PII Masker (Tokens generated) →
+→ Sanitized chunks sent to the active provider (Gemini free tier | DeepSeek account tier) →
+→ Provider extracts tokens → Unmasker restores real PII values →
 → User reviews → Document generated → User downloads → Auto-deleted after 24h
 ```
 
@@ -125,4 +147,6 @@ Before launching any feature, verify:
 - [ ] API responses don't leak other users' data
 - [ ] Error messages don't expose document content
 - [ ] Gemini API calls don't include unnecessary context
+- [ ] Account-tier jobs make zero Google calls
+- [ ] Any tier privacy claim matches verified provider terms (task 6.15)
 - [ ] New data collection is documented in this file

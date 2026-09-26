@@ -5,6 +5,10 @@
 ---
 
 ## Last Updated
+- **Date**: 2026-09-26 (Antigravity frontend session)
+- **By**: Antigravity
+- **Summary**: **Phase 6 frontend + docs complete (tasks 6.9–6.14, all `done`)**: built `LoginModal`, `AccountRequestView`, `TierDisclosure`; added `api.login/logout/getQuota/getTier/getTierToken` with signed tier token (`tf_tier_token`) and `QuotaExceededError` on 429 `QUOTA_EXCEEDED`; Navbar tier badge (`Free · Gemini` / `Account · DeepSeek`) + sign-in/out; free-tier Google-training/quota disclosure on landing/upload; HelpModal engine + privacy tabs rewritten for both tiers (DeepSeek wording kept generic pending 6.15); browser-local history migrated to `tf_history` (`HistoryEntry` per TIER_ARCHITECTURE §6) with 5/day quota countdown; `types.ts`/`api.ts` unions gain `deepseek` + `Tier`/`QuotaInfo`/`LoginResult`; tier-aware engine badges/banners in `ReviewMappingView`. Tests **42/42** (new `tier.test.mjs` T13–T18 + `e2e.test.mjs` both-tier flows; was 13). `npm run lint` 0 errors, `npm run build` clean. Docs swept: PRD §4.7, USER_STORIES Epic 5, USER_GUIDE §4–5, API.md "Tiers & Auth", ARCHITECTURE tier diagram, TECH_STACK DeepSeek plan, DATA_MODEL `Job.tier` + browser storage, SECURITY tier auth, DATA_PRIVACY tier matrix, README, CHANGELOG v0.3.0. Branch `feat/ag-tier-frontend`. **Backend endpoints are coded against but still in progress (OpenCode 6.2–6.8); UI degrades gracefully via existing mock/fallback patterns.**
+
 - **Date**: 2026-09-26 (later session)
 - **By**: OpenCode
 - **Summary**: **Tier system planning (Phase 6, PROPOSED — awaiting user approval)**: wrote `docs/1-product/TIER_PLAN.md` and `docs/2-architecture/TIER_ARCHITECTURE.md` (user-directed creation of new planning files in Antigravity-owned doc folders — noted under Cross-Agent Requests). User decisions locked: one fixed shared password (contact `hanif.isya.annafi-2024@fst.unair.ac.id`), free tier = Gemini with **5 jobs/day/IP** cap, account tier = DeepSeek `deepseek-flash` with zero Google calls (retrieval bypassed via sequential batching), history/results in browser localStorage only, pro fallback = heuristic never Gemini. `TASKS.md` Phase 6 added (6.0–6.17 split OpenCode backend / Antigravity frontend+docs / joint), `TESTING.md` + `FEEDBACK_LOOP.md` revised (real counts 214/13, corrected commands, new 18-case tier test matrix, per-provider eval), ADR-020 logged as **Pending**. **No implementation started — waiting for user's go.**
@@ -45,8 +49,9 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - [x] `eval/` — 5 synthetic datasets + `generate_eval_datasets.py` + `run_eval.py` (1.00 PASS, halluc 0.00, placeholder 1.00) ✅
 
 ### What's Being Worked On Right Now
-- **Phase 6 (Tiers) PLANNED, NOT STARTED** — plan docs in `docs/1-product/TIER_PLAN.md` + `docs/2-architecture/TIER_ARCHITECTURE.md` await user approval; tasks 6.0–6.17 in `TASKS.md`.
+- **Phase 6 (Tiers) IN PROGRESS** — frontend + docs (Antigravity 6.9–6.14) **done** on branch `feat/ag-tier-frontend`; backend (OpenCode 6.2–6.8) in progress on `feat/oc-tier-backend`.
 - Phases 0–5 are complete; PR #1 (security remediation) merged to `main`.
+- **Antigravity next**: nothing until backend endpoints land — then joint task 6.16 (live both-tier E2E) and 6.17 close-out (OpenCode).
 
 ### Completed Milestones
 1. ✅ OpenCode Phase 1 done — 140/140 tests green.
@@ -90,7 +95,36 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - **File(s)**: `docs/1-product/TIER_PLAN.md`, `docs/2-architecture/TIER_ARCHITECTURE.md` (both **new** files)
 - **Description**: User directly instructed OpenCode to produce the tier plan/design markdown. Both files are new (no existing Antigravity files were edited); please review for consistency with PRD/ARCHITECTURE conventions when you pick up tasks 6.9–6.14, and treat them as the approved spec once the user signs off.
 - **Priority**: medium
+- **Status**: done (Antigravity implemented 6.9–6.14 against both docs; no convention conflicts found)
+
+### Request: Backend tier endpoints must match the frontend contract (OpenCode 6.2–6.6)
+- **From**: Antigravity
+- **To**: OpenCode
+- **File(s)**: `backend/app/api/` (auth routes + upload/jobs tier additions)
+- **Description**: The frontend (`frontend/src/lib/api.ts`) is coded against these exact shapes and will show generic errors otherwise:
+  - `POST /api/auth/login` `{username,password}` → `200 {success,data:{tier:"pro",token}}`; generic `401` on failure; `429` on brute force.
+  - `POST /api/auth/logout` → `200` (frontend also clears `tf_tier_token` locally).
+  - `GET /api/auth/quota` → `{success,data:{free_used_today,free_limit,tier}}`; accepts the tier token via `X-Session-Token`.
+  - `POST /api/upload` accepts `X-Session-Token` (tier token), returns `data.tier`, and on daily-cap returns `429` with `error.code:"QUOTA_EXCEEDED"` + `Retry-After`.
+  - `GET /api/jobs/{id}/results` includes `data.tier` and per-field `extracted_by:"deepseek"`.
+  Frontend falls back to mock/optimistic tier when these 404, so nothing blocks you — but the UI only becomes truthful once they land.
+- **Priority**: high
 - **Status**: pending
+
+### Note: No shared files edited by Antigravity
+- **From**: Antigravity
+- **File(s)**: `.env.example`, `render.yaml`, `README.md`
+- **Description**: Antigravity edited **README.md** and **CHANGELOG.md** (Both-owned / allowed) but did **not** touch `.env.example` or `render.yaml` (OpenCode's 6.6). New env vars documented in README: `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_BASE_URL`, `TIER_ACCOUNT_USERNAME`, `TIER_ACCOUNT_PASSWORD_HASH`, `FREE_JOBS_PER_DAY`, `PRO_JOBS_PER_DAY` — OpenCode to add them to `.env.example`/`render.yaml` in 6.6.
+- **Priority**: low
+- **Status**: pending
+
+### Request: OpenCode editing shared `.env.example` + `render.yaml` for Phase 6 tiers
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: `.env.example`, `render.yaml` (both shared — Rule 2 note given BEFORE editing)
+- **Description**: Task 6.6 adds tier/provider env vars: `TIER_ACCOUNT_USERNAME`, `TIER_ACCOUNT_PASSWORD_HASH`, `FREE_JOBS_PER_DAY`, `PRO_JOBS_PER_DAY`, `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `DEEPSEEK_BASE_URL`, `TIER_TOKEN_EXPIRE_DAYS`. These are backend-only; no frontend `NEXT_PUBLIC_*` vars are added. Edits are happening on branch `feat/oc-tier-backend` (git worktree `E:\TemplaFill-oc`, since the shared checkout is on your `feat/ag-tier-frontend` branch). Please avoid touching these same keys.
+- **Priority**: high
+- **Status**: in_progress
 
 <!-- Template for new requests:
 ### Request: [Short Title]
@@ -133,6 +167,7 @@ _No known issues._
 | 2026-09-24 | Both | **Close-Loop Live Test with `Test source/` 51-field contract (ADR-017 validation)**: OpenCode validated live `https://templa-fill.vercel.app` (`Checking backend → https://templafill-backend.onrender.com/api` via `getApiBaseUrl()` ) and ran local+direct REST checks on `source_kontrak_konsultasi.pdf` (2 pages, 3546 chars, 2 chunks) + `target_template_ringkasan_kontrak.docx` (6 tables, 51 placeholders). Direct REST `gemini-3.5-flash` succeeded for 6118-char prompt (51/51 found) while `gemini-3.6-flash` gave 503 — confirmed need for candidate reorder `3.5→3.6` and SDK→REST fallback. Enhanced `FakeExtractor` with Indonesian date (`15 September 2026`), `PT ...` company, `Jl.` address, `Optimalisasi` title, `BCA ...`, `0,5%` heuristics — fallback coverage `1→20/51` for 503/429 resilience. Added `_call_gemini` REST fallback (`httpx`+`urllib` 35s) and `PT [A-Za-z]` atomic regex fix. Verified filled docx brace-free (`{{value}}` absent) via `generate_filled_document` on 6-table docx, 167/167 pytest + 13/13 frontend + `next build` clean. |
 | 2026-09-26 | OpenCode | **Security remediation shipped**: all 15 findings from `docs/6-security/CYBER_SECURITY_REPORT.md` fixed (session-token authz, eviction, body cap, formula guard, trusted-proxy IP, Gemini header key, prompt fencing, CORS allow-list, debug gating, read rate limits, ZIP guard, pinned deps + blocking pip-audit, SECRET_KEY fail-fast, docs corrected); 214 backend tests (34 new) + 13 frontend + build green; PR #1 merged to `main` (CI fully green after fixing pre-existing `npm ci` lockfile drift and 10 lint errors). |
 | 2026-09-26 | OpenCode | **Tier system planned (Phase 6, awaiting approval)**: TIER_PLAN.md + TIER_ARCHITECTURE.md created (user-directed), TASKS.md Phase 6 added with OpenCode/Antigravity split, TESTING.md + FEEDBACK_LOOP.md revised (214/13 counts, real commands, tier test matrix, per-provider eval), ADR-020 Pending, cross-agent note added. |
+| 2026-09-26 | Antigravity | **Phase 6 frontend + docs (tasks 6.9–6.14) complete** on `feat/ag-tier-frontend`: `LoginModal` (shared credential, generic error), `AccountRequestView` (contact `hanif.isya.annafi-2024@fst.unair.ac.id`), `TierDisclosure` (Google-training + 5/day quota notice); `api.login/logout/getQuota/getTier/getTierToken/getHistory/saveHistoryEntry/clearHistory` + `QuotaExceededError` (429 `QUOTA_EXCEEDED`); Navbar badge `Free · Gemini`/`Account · DeepSeek` + sign-in/out; `tf_history` browser store (`HistoryEntry`) + quota countdown; `types.ts` `Tier`/`HistoryEntry`/`QuotaInfo`/`LoginResult` + `deepseek` unions; tier-aware badges/banners. Tests **42/42** (new `tier.test.mjs` T13–T18 + `e2e.test.mjs` both tiers; was 13), lint 0 errors, build clean. Docs swept (PRD/USER_STORIES/USER_GUIDE/API/ARCHITECTURE/TECH_STACK/DATA_MODEL/SECURITY/DATA_PRIVACY/README/CHANGELOG). Cross-agent contract request logged for OpenCode 6.2–6.6. |
 
 
 

@@ -9,6 +9,10 @@ export type JobStatusType = 'pending' | 'extracting' | 'embedding' | 'mapping' |
 
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
+export type Tier = 'free' | 'pro';
+
+export type ExtractionEngine = 'gemini' | 'deepseek' | 'heuristic' | 'hybrid' | 'mock';
+
 export interface UploadedDocInfo {
   filename: string;
   sizeBytes: number;
@@ -22,6 +26,8 @@ export interface SessionInfo {
   sourceDoc: UploadedDocInfo;
   templateDoc: UploadedDocInfo;
   createdAt: string;
+  tier?: Tier;
+  sessionToken?: string;
 }
 
 export interface JobProgress {
@@ -50,7 +56,7 @@ export interface FieldMapping {
   isSkipped?: boolean;
   reExtractHint?: string;
   fieldType: 'text' | 'date' | 'number' | 'currency' | 'table';
-  extractedBy?: 'gemini' | 'heuristic' | 'manual';
+  extractedBy?: 'gemini' | 'deepseek' | 'heuristic' | 'manual';
   fallbackReason?: string;
 }
 
@@ -66,7 +72,8 @@ export interface ExtractionResult {
   hasFallback?: boolean;
   aiErrorMessage?: string;
   fallbackReason?: string;
-  engineUsed?: 'gemini' | 'heuristic' | 'hybrid' | 'mock';
+  engineUsed?: ExtractionEngine;
+  tier?: Tier;
 }
 
 export interface GenerationResult {
@@ -85,20 +92,25 @@ export interface ToastMessage {
   message: string;
 }
 
-export interface RecentSession {
+/** Browser-local history entry persisted under `tf_history` (TIER_ARCHITECTURE §6). */
+export interface HistoryEntry {
   sessionId: string;
-  sourceFilename: string;
-  templateFilename: string;
-  date: string;
+  createdAt: string;
+  tier: Tier;
+  engineUsed: ExtractionEngine;
+  sourceDoc: { filename: string; size: number };
+  templateDoc: { filename: string; format: string };
+  overallConfidence: number;
   fieldCount: number;
-  downloadFilename: string;
+  filledFilename: string;
+  downloadExpired: boolean;
 }
 
 export interface UserAccount {
   id: string;
   email: string;
   name: string;
-  tier: 'free' | 'pro' | 'enterprise';
+  tier: Tier | 'enterprise';
   remainingFills: number; // e.g. 3 for free anonymous, unlimited for registered
   isAnonymous: boolean;
   createdAt: string;
@@ -115,4 +127,24 @@ export interface AuthResponse {
   tokens: AuthTokens;
 }
 
-export type WorkflowStep = 'landing' | 'upload' | 'processing' | 'review' | 'download';
+/** `POST /api/auth/login` response — shared credential → signed tier token. */
+export interface LoginResult {
+  tier: Tier;
+  token: string;
+}
+
+/** `GET /api/auth/quota` response — powers the free-tier quota countdown. */
+export interface QuotaInfo {
+  free_used_today: number;
+  free_limit: number;
+  tier: Tier;
+}
+
+/** Raised by `api.uploadFiles` when the backend returns 429 QUOTA_EXCEEDED. */
+export interface QuotaExceededError extends Error {
+  code: 'QUOTA_EXCEEDED';
+  tier: Tier;
+  retryAfterSeconds?: number;
+}
+
+export type WorkflowStep = 'landing' | 'upload' | 'processing' | 'review' | 'download' | 'account-request';

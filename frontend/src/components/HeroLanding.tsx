@@ -1,13 +1,28 @@
 'use client';
 
 import React from 'react';
+import { Tier } from '../lib/types';
+import { TierDisclosure } from './TierDisclosure';
 
 interface HeroLandingProps {
   onGetStarted: () => void;
   onTryDemo: () => void;
+  tier?: Tier;
+  remaining?: number;
+  freeLimit?: number;
+  onRequestAccount?: () => void;
+  onOpenLogin?: () => void;
 }
 
-export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDemo }) => {
+export const HeroLanding: React.FC<HeroLandingProps> = ({
+  onGetStarted,
+  onTryDemo,
+  tier = 'free',
+  remaining,
+  freeLimit,
+  onRequestAccount,
+  onOpenLogin,
+}) => {
   return (
     <div className="w-full max-w-5xl mx-auto space-y-12 py-8 px-4 sm:px-6">
       {/* Primary Headline & Description */}
@@ -18,6 +33,14 @@ export const HeroLanding: React.FC<HeroLandingProps> = ({ onGetStarted, onTryDem
         <p className="text-sm sm:text-base text-slate-600 dark:text-slate-300 leading-relaxed">
           TemplaFill extracts structured data from multi-page source PDFs and maps values directly into Word (.docx), Excel (.xlsx), and PowerPoint (.pptx) template documents using Retrieval-Augmented Generation.
         </p>
+
+        <TierDisclosure
+          tier={tier}
+          remaining={remaining}
+          freeLimit={freeLimit}
+          onRequestAccount={onRequestAccount}
+          onOpenLogin={onOpenLogin}
+        />
 
         {/* Action Controls */}
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">

@@ -6,9 +6,28 @@ import {
   GenerationResult,
   FieldMapping,
   UserAccount,
-  AuthResponse,
+  Tier,
+  HistoryEntry,
+  LoginResult,
+  QuotaInfo,
 } from './types';
 import { MOCK_FIELDS, MOCK_GENERATION } from './mockData';
+
+const TIER_TOKEN_KEY = 'tf_tier_token';
+const HISTORY_KEY = 'tf_history';
+
+export class QuotaExceededError extends Error {
+  code = 'QUOTA_EXCEEDED' as const;
+  tier: Tier;
+  retryAfterSeconds?: number;
+
+  constructor(message: string, tier: Tier, retryAfterSeconds?: number) {
+    super(message);
+    this.name = 'QuotaExceededError';
+    this.tier = tier;
+    this.retryAfterSeconds = retryAfterSeconds;
+  }
+}
 
 export function getApiBaseUrl(): string {
   if (process.env.NEXT_PUBLIC_API_URL) {
@@ -46,6 +65,8 @@ class ApiClient {
   private isBackendAvailable: boolean | null = null;
   // VULN-01: per-job session token received at upload, sent on subsequent calls.
   private sessionTokens: Record<string, string> = {};
+  // Phase 6: signed tier token from /auth/login, sent on upload + quota calls.
+  private tierToken: string | null = null;
 
   constructor(baseUrl: string) {
     this._baseUrl = baseUrl;
@@ -59,6 +80,43 @@ class ApiClient {
 
   private authHeaders(jobId: string): Record<string, string> {
     const token = this.sessionTokens[jobId];
+    return token ? { 'X-Session-Token': token } : {};
+  }
+
+  /** Load the persisted tier token (localStorage fallback when cookies are blocked). */
+  getTierToken(): string | null {
+    if (this.tierToken) return this.tierToken;
+    if (typeof window === 'undefined') return null;
+    try {
+      this.tierToken = localStorage.getItem(TIER_TOKEN_KEY);
+    } catch {
+      // Ignore localStorage access errors
+    }
+    return this.tierToken;
+  }
+
+  private saveTierToken(token: string): void {
+    this.tierToken = token;
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.setItem(TIER_TOKEN_KEY, token);
+    } catch {
+      // Ignore
+    }
+  }
+
+  private clearTierToken(): void {
+    this.tierToken = null;
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(TIER_TOKEN_KEY);
+    } catch {
+      // Ignore
+    }
+  }
+
+  private tierHeaders(): Record<string, string> {
+    const token = this.getTierToken();
     return token ? { 'X-Session-Token': token } : {};
   }
 
@@ -147,25 +205,41 @@ class ApiClient {
 
       const res = await fetch(`${this.baseUrl}/upload`, {
         method: 'POST',
+        headers: this.tierHeaders(),
         body: formData,
       });
 
       if (!res.ok) {
         let errMessage = res.statusText;
+        let errCode = '';
         try {
           const errData = await res.json();
           if (errData?.error?.message) errMessage = errData.error.message;
+          if (errData?.error?.code) errCode = errData.error.code;
         } catch {}
+
+        if (res.status === 429 && (errCode === 'QUOTA_EXCEEDED' || errMessage.includes('QUOTA_EXCEEDED'))) {
+          const retryAfter = Number(res.headers.get('Retry-After'));
+          throw new QuotaExceededError(
+            errMessage || 'Daily extraction limit reached.',
+            (this.getTierToken() ? 'pro' : 'free') as Tier,
+            Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined
+          );
+        }
+
         throw new Error(`Upload failed: ${errMessage}`);
       }
 
       const data = await res.json();
       const jobData = data.data || data;
       const jobId = jobData.job_id || `job-${Date.now().toString(36)}`;
+      const tier: Tier = jobData.tier === 'pro' ? 'pro' : 'free';
       // Store the session token issued for this job so later calls are authorized.
       this.setSessionToken(jobId, jobData.session_token);
       return {
         sessionId: jobId,
+        tier,
+        sessionToken: jobData.session_token,
         sourceDoc: {
           filename: jobData.source_file?.filename || sourceFile.name,
           sizeBytes: jobData.source_file?.size_bytes || sourceFile.size,
@@ -343,6 +417,7 @@ class ApiClient {
                 fallbackReason,
                 aiErrorMessage: fallbackReason,
                 engineUsed,
+                tier: data.tier === 'pro' ? 'pro' : 'free',
               };
             }
           } else if (res.status === 404 && attempt < 5) {
@@ -533,120 +608,135 @@ class ApiClient {
     }
   }
 
-  // Authentication & Session Management (Task 3.8)
+  // Phase 6: Tier authentication (shared credential → signed tier token)
   getAnonymousUser(): UserAccount {
     return {
       id: 'anon-guest-user',
       email: 'guest@templafill.local',
       name: 'Guest User',
       tier: 'free',
-      remainingFills: 3,
+      remainingFills: 5,
       isAnonymous: true,
       createdAt: new Date().toISOString(),
     };
   }
 
-  getStoredUser(): UserAccount | null {
-    if (typeof window === 'undefined') return null;
-    try {
-      const stored = localStorage.getItem('templafill_auth_user');
-      if (stored) return JSON.parse(stored);
-    } catch {
-      // Ignore localStorage access errors
-    }
-    return null;
+  /** Optimistic tier from local token presence; `getQuota()` is authoritative. */
+  getTier(): Tier {
+    return this.getTierToken() ? 'pro' : 'free';
   }
 
-  saveUserSession(auth: AuthResponse): void {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.setItem('templafill_auth_user', JSON.stringify(auth.user));
-      localStorage.setItem('templafill_auth_token', auth.tokens.accessToken);
-    } catch {
-      // Ignore
-    }
+  isLoggedIn(): boolean {
+    return this.getTierToken() !== null;
   }
 
-  clearUserSession(): void {
-    if (typeof window === 'undefined') return;
-    try {
-      localStorage.removeItem('templafill_auth_user');
-      localStorage.removeItem('templafill_auth_token');
-    } catch {
-      // Ignore
-    }
-  }
-
-  async login(email: string, password: string): Promise<AuthResponse> {
+  /**
+   * Shared-credential login. Backend returns a generic 401 on failure so we
+   * surface a single "Invalid credentials" message (no user enumeration).
+   */
+  async login(username: string, password: string): Promise<LoginResult> {
     const health = await this.checkHealth();
     if (health.isLive) {
       const res = await fetch(`${this.baseUrl}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ username, password }),
       });
       if (res.ok) {
-        const data = await res.json();
-        this.saveUserSession(data);
-        return data;
+        const json = await res.json();
+        const data = json.data || json;
+        const token: string = data.token || data.session_token;
+        if (!token) throw new Error('Invalid credentials');
+        this.saveTierToken(token);
+        return { tier: data.tier === 'free' ? 'free' : 'pro', token };
       }
+      throw new Error('Invalid credentials');
     }
 
-    // Local / Dev Fallback
+    // Offline / dev fallback: accept any non-empty credentials as account tier.
     await new Promise((r) => setTimeout(r, 400));
-    const mockAuth: AuthResponse = {
-      user: {
-        id: `user-${Date.now().toString(36)}`,
-        email,
-        name: email.split('@')[0].replace(/[._]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
-        tier: 'pro',
-        remainingFills: 9999,
-        isAnonymous: false,
-        createdAt: new Date().toISOString(),
-      },
-      tokens: {
-        accessToken: `tf_jwt_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`,
-        expiresIn: 86400,
-      },
-    };
-    this.saveUserSession(mockAuth);
-    return mockAuth;
+    if (!username.trim() || !password.trim()) {
+      throw new Error('Invalid credentials');
+    }
+    const token = `tf_tier_dev_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`;
+    this.saveTierToken(token);
+    return { tier: 'pro', token };
   }
 
-  async register(name: string, email: string, password: string): Promise<AuthResponse> {
+  async logout(): Promise<void> {
     const health = await this.checkHealth();
     if (health.isLive) {
-      const res = await fetch(`${this.baseUrl}/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        this.saveUserSession(data);
-        return data;
+      try {
+        await fetch(`${this.baseUrl}/auth/logout`, {
+          method: 'POST',
+          headers: this.tierHeaders(),
+        });
+      } catch {
+        // Best-effort: token expiry is the real boundary.
       }
     }
+    this.clearTierToken();
+  }
 
-    // Local / Dev Fallback
-    await new Promise((r) => setTimeout(r, 500));
-    const mockAuth: AuthResponse = {
-      user: {
-        id: `user-${Date.now().toString(36)}`,
-        email,
-        name,
-        tier: 'pro',
-        remainingFills: 9999,
-        isAnonymous: false,
-        createdAt: new Date().toISOString(),
-      },
-      tokens: {
-        accessToken: `tf_jwt_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 9)}`,
-        expiresIn: 86400,
-      },
-    };
-    this.saveUserSession(mockAuth);
-    return mockAuth;
+  async getQuota(): Promise<QuotaInfo> {
+    const fallback: QuotaInfo = { free_used_today: 0, free_limit: 5, tier: this.getTier() };
+    const health = await this.checkHealth();
+    if (health.isLive) {
+      try {
+        const res = await fetch(`${this.baseUrl}/auth/quota`, {
+          cache: 'no-store',
+          headers: this.tierHeaders(),
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const data = json.data || json;
+          return {
+            free_used_today: Number(data.free_used_today) || 0,
+            free_limit: Number(data.free_limit) || 5,
+            tier: data.tier === 'pro' ? 'pro' : 'free',
+          };
+        }
+      } catch {
+        // Fall through to fallback below.
+      }
+    }
+    return fallback;
+  }
+
+  // Browser-local history store (TIER_ARCHITECTURE §6, key `tf_history`)
+  getHistory(): HistoryEntry[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem(HISTORY_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed as HistoryEntry[];
+      }
+    } catch {
+      // Ignore malformed history
+    }
+    return [];
+  }
+
+  saveHistoryEntry(entry: HistoryEntry): HistoryEntry[] {
+    const updated = [entry, ...this.getHistory().filter((h) => h.sessionId !== entry.sessionId)];
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore quota / privacy-mode errors
+      }
+    }
+    return updated;
+  }
+
+  clearHistory(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      localStorage.removeItem(HISTORY_KEY);
+    } catch {
+      // Ignore
+    }
   }
 }
 

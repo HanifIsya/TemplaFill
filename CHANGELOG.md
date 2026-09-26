@@ -5,6 +5,26 @@ All notable changes to TemplaFill will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] — v0.3.0 Tier System (2026-09-26 → present)
+
+### Added
+- **Two-Tier Access (ADR-020, Free Gemini vs Account DeepSeek)** — *frontend + docs landed; backend in progress*:
+  - **Frontend**: `LoginModal` (shared username/password), `api.login()/logout()/getQuota()` with signed tier token persisted as `tf_tier_token`, Navbar tier badge (`Free · Gemini` / `Account · DeepSeek`) with sign-in/sign-out; `TierDisclosure` free-tier Google-training + quota notice on landing/upload; `AccountRequestView` with contact `hanif.isya.annafi-2024@fst.unair.ac.id`; HelpModal privacy tab rewritten for both tiers (DeepSeek wording generic pending task 6.15); browser-local history store `tf_history` (`HistoryEntry` schema per TIER_ARCHITECTURE §6) with quota countdown (5/day); `types.ts`/`api.ts` unions gain `deepseek` + `Tier`/`QuotaInfo`/`LoginResult`; tier-aware engine badges/banners in `ReviewMappingView`.
+  - **Tests**: new `frontend/src/tests/tier.test.mjs` covering T13–T18 (login, quota, disclosure, `tf_history`, deepseek badge, both-tier flow) + `e2e.test.mjs` extended with both-tier flows → **42 frontend tests green** (was 13).
+  - **Docs**: PRD §4.7 (FR-060→067), USER_STORIES Epic 5 (US-040→044), USER_GUIDE §4 tier table + request flow, API.md "Tiers & Auth" section (login/logout/quota + upload tier/429 + `tf_history` schema), ARCHITECTURE tier diagram, TECH_STACK DeepSeek usage plan, DATA_MODEL `Job.tier` + browser-local storage, SECURITY tier auth, DATA_PRIVACY tier data-handling matrix, README, CHANGELOG.
+- **`QuotaExceededError`** in `frontend/src/lib/api.ts` — surfaces backend `429 QUOTA_EXCEEDED` and routes the UI to the account-request screen.
+
+### Changed
+- `api.uploadFiles()` sends the tier token via `X-Session-Token`, returns `tier`, and maps quota 429s; `getFieldMappings()` propagates `tier` and recognizes `deepseek` provenance.
+- History storage migrated from `templafill_recent_sessions` (`RecentSession`) to `tf_history` (`HistoryEntry`); `HistoryModal` now shows tier + engine per entry.
+- Free-tier daily limit surfaced in the UI as **5 jobs/day** (replaces the earlier mock `3 fills/day` copy).
+
+### Pending
+- Backend tier endpoints (`/api/auth/*`, quotas, `DeepSeekExtractor`, provider selection) ship in tasks 6.2–6.8 (OpenCode).
+- DeepSeek no-training/retention terms verification (task 6.15) gates specific account-tier privacy claims.
+
+---
+
 ## [Unreleased] — v0.2.0 Hardening (2026-09-24 → present)
 
 ### Added

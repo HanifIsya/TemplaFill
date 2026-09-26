@@ -216,6 +216,17 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
         </span>
       );
     }
+    if (field.extractedBy === 'deepseek') {
+      return (
+        <span
+          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium bg-blue-50 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60"
+          title="Extracted directly by DeepSeek (Account tier)"
+        >
+          <Sparkles className="w-2.5 h-2.5 text-blue-500" />
+          DeepSeek
+        </span>
+      );
+    }
     if (field.extractedBy === 'gemini') {
       return (
         <span
@@ -325,9 +336,25 @@ export const ReviewMappingView: React.FC<ReviewMappingViewProps> = ({
               </span>
             </div>
             <p className="text-[11px] text-amber-700 dark:text-amber-400 leading-relaxed">
-              {extractionResult.fallbackReason || extractionResult.aiErrorMessage || 'The AI engine switched to the local heuristic due to a Gemini API issue (404/429/Missing Key).'} Your extraction was transparently secured to prevent failure. Review, edit, or confirm the fields below before export.
+              {extractionResult.fallbackReason || extractionResult.aiErrorMessage || (extractionResult.tier === 'pro'
+                ? 'The DeepSeek engine was unavailable, so extraction was secured by the local heuristic engine (never Google on the account tier).'
+                : 'The AI engine switched to the local heuristic due to a Gemini API issue (404/429/Missing Key).')}{' '}
+              Your extraction was transparently secured to prevent failure. Review, edit, or confirm the fields below before export.
             </p>
           </div>
+        </div>
+      ) : extractionResult.engineUsed === 'deepseek' ? (
+        <div className="p-2.5 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 text-xs flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <Sparkles className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0" />
+            <span className="text-[11px]">
+              <strong>Powered by DeepSeek (Account tier)</strong>: All fields were extracted on the
+              DeepSeek engine — no data was sent to Google.
+            </span>
+          </div>
+          <span className="font-mono text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-blue-300 dark:border-blue-800 bg-blue-100 dark:bg-blue-900/60 text-blue-800 dark:text-blue-200 shrink-0">
+            DeepSeek Active
+          </span>
         </div>
       ) : extractionResult.engineUsed === 'hybrid' ? (
         <div className="p-3 rounded border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 text-xs flex items-center justify-between gap-3">

@@ -42,7 +42,8 @@ graph TB
     end
 
     subgraph External ["External Services"]
-        GEMINI[Gemini API]
+        GEMINI[Gemini API<br/>free tier]
+        DEEPSEEK[DeepSeek API<br/>account tier]
     end
 
     UI --> AC
@@ -231,6 +232,37 @@ Detection: case-insensitive, whitespace-normalized (`_normalize_field_name` repl
 3. Replace atomically via `_replace_in_text` (`generator.py:61`): scans `_find_placeholders` sorted by `len(raw)` descending and replaces whole enclosed `raw` with `direct_map[raw]` or `norm_map[norm]`, then direct keys. This fixes the prior bug where `nomor_kontrak→SPK/0847` left `{{SPK/0847}}`; now `{{nomor_kontrak}}→SPK/0847` cleanly.
 4. Preserve formatting: docx saves `first_run` bold/italic/underline/color/name/size (`generator.py:143`), xlsx keeps cell style on `cell.value` change, pptx saves first run font via `text_frame` (`generator.py:226`). Validated `Test source/target_* → filled: contains SPK true, {{SPK}} false, {{nomor}} false`.
 5. Generate extraction summary report (optional, appended or separate file — `GET /download?type=summary` `501` stub, `jobs.py:310`)
+
+---
+
+## Tier System Architecture (Phase 6)
+
+TemplaFill runs two provider paths selected by `Job.tier`. Full design in
+[TIER_ARCHITECTURE.md](./TIER_ARCHITECTURE.md); the key points:
+
+```mermaid
+flowchart LR
+    FE[Next.js frontend] -->|no tier token| FREE[Job.tier = free]
+    FE -->|"POST /api/auth/login"| AUTH[Signed tier token<br/>30d, purpose=tier]
+    AUTH --> FE
+    FE -->|"X-Session-Token: tier token"| PRO[Job.tier = pro]
+    FREE --> G[GeminiExtractor<br/>+ embeddings/RAG]
+    PRO --> D[DeepSeekExtractor<br/>sequential batching, NO embeddings]
+    G --> HF[heuristic fallback]
+    D --> HF2[heuristic fallback only]
+```
+
+- **Free path** (`tier:"free"`): unchanged Gemini extraction + `gemini-embedding-001`
+  RAG, capped at **5 jobs/day/IP**.
+- **Account path** (`tier:"pro"`): DeepSeek `deepseek-flash` with **no embeddings**
+  (retrieval bypassed via sequential chunk batching). **Hard rule: the pro path
+  never calls a Google endpoint** — enforced by tests with Gemini mocked to raise.
+- On failure the account path falls back to the local heuristic engine only, never
+  to Gemini.
+- Tier tokens carry `purpose:"tier"` so they are mutually invalid with per-job
+  tokens (`purpose:"job"`).
+- History/results are stored in the browser (`tf_history` in `localStorage`); the
+  backend keeps documents in RAM only (≤24h TTL).
 
 ---
 

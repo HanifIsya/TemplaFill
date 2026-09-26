@@ -120,7 +120,10 @@ erDiagram
 
 ## Table Definitions
 
-### `users`
+### `users` (legacy/planned — superseded by the Phase 6 shared credential)
+
+> **Phase 6 does not use per-user accounts.** The tier system stores one shared credential in server env (`TIER_ACCOUNT_USERNAME` + `TIER_ACCOUNT_PASSWORD_HASH`, scrypt). The `users` table below is retained for a future per-user phase; nothing is persisted about who signs in today.
+
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | UUID | PK, default gen_random_uuid() | Unique user ID |
@@ -135,14 +138,15 @@ erDiagram
 | Column | Type | Constraints | Description |
 |--------|------|-------------|-------------|
 | `id` | UUID | PK | Unique job ID |
-| `user_id` | UUID | FK → users.id, nullable | Owner (null for anonymous; MVP anonymous via `free` tier) |
+| `user_id` | UUID | FK → users.id, nullable | Owner (null for anonymous; not used in Phase 6) |
+| `tier` (Phase 6) | VARCHAR(10) | NOT NULL, default `free` | `free` (Gemini) or `pro` (DeepSeek); set from the upload `X-Session-Token` tier token |
 | `status` | VARCHAR(50) | NOT NULL | `queued`→`processing`→`extracting`(80%)→`mapping`→`completed`|`failed`|`generating` (`JobStatus`) |
 | `error_message` | TEXT | | Error details if failed (sanitized, not raw `str(e)` per VULN-5) |
 | `created_at` | TIMESTAMPTZ | NOT NULL | Job creation time (ISO-8601 `Z`) |
 | `started_at` | TIMESTAMPTZ | | Processing start time |
 | `completed_at` | TIMESTAMPTZ | | Processing completion time |
 | `progress` (in-memory) | JSONB/`JobProgress` | `phase/percent/current_field/total_fields` | `percent 0→100`, `phase: queued/pdf_extraction/embedding/template_mapping/ai_extraction`; ADR-015 fixed `ai_extraction@80%` before batch |
-| `engine_used` / `has_fallback` / `fallback_reason` (in-memory) | `VARCHAR/TEXT/BOOLEAN` | | `gemini|hybrid|heuristic` + `fallback_reason` from `extractor.last_fallback_reason` → returned via `to_results_dict()` as `engine_used`/`has_fallback`/`has_ai_error` |
+| `engine_used` / `has_fallback` / `fallback_reason` (in-memory) | `VARCHAR/TEXT/BOOLEAN` | | `gemini|deepseek|hybrid|heuristic` + `fallback_reason` from `extractor.last_fallback_reason` → returned via `to_results_dict()` as `engine_used`/`has_fallback`/`has_ai_error` |
 | `overall_confidence` | FLOAT | | `avg(confidence)` over `field_results` |
 | `filled_doc_bytes/name` (in-memory) | `BYTEA/VARCHAR` | | Generated docx/xlsx/pptx for `GET /download` (RFC5987 filename) |
 
@@ -233,7 +237,7 @@ erDiagram
 | `is_manually_edited` | BOOLEAN | default false | `true` after `edit` |
 | `is_skipped` / `status=skipped` | BOOLEAN/VARCHAR | default false | Set by `action=skip`; `PATCH confirm` omits skipped fields from `mapped` |
 | `status` | VARCHAR(50) | `extracted|not_found|edited|skipped|confirmed` | `not_found` when `value==null` |
-| `extracted_by` (new) | VARCHAR(20) | `gemini|heuristic` (or `hybrid` at job level) | Provenance per field (`extractor.py:45` + `jobs/models.py:53`) → `[Gemini 3.6 Flash]`/`[Fallback]` badges |
+| `extracted_by` (new) | VARCHAR(20) | `gemini|deepseek|heuristic` (or `hybrid` at job level) | Provenance per field (`extractor.py:45` + `jobs/models.py:53`) → `[Gemini 3.6 Flash]`/`[DeepSeek]`/`[Fallback]` badges |
 | `fallback_reason` (new) | TEXT | | `GEMINI_API_KEY missing` / `model 404 …` / `quota …` / `Field missing…` → `hasFallback` banner |
 | `confidence_score` bucketing | — | `≥0.8 high (🟢)`, `0.5–0.8 medium (🟡)`, `<0.5 low/error (🔴)` | Rendered in `ReviewMappingView.tsx` |
 
@@ -341,3 +345,34 @@ Prompt `_build_prompt` requests `{"value": "...", "confidence": 0.95, "source_pa
   ]
 }
 ```
+
+---
+
+## Browser-local Storage (Frontend, Phase 6)
+
+No server database stores history or results. The frontend persists everything in
+`localStorage` per [TIER_ARCHITECTURE.md](./TIER_ARCHITECTURE.md) §6.
+
+### `tf_history` (`HistoryEntry[]`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sessionId` | string | Job/session ID |
+| `createdAt` | string (ISO) | When the job completed |
+| `tier` | `'free' \| 'pro'` | Tier that processed the job |
+| `engineUsed` | `'gemini' \| 'deepseek' \| 'heuristic' \| 'hybrid' \| 'mock'` | Engine provenance |
+| `sourceDoc` | `{ filename, size }` | Source PDF metadata |
+| `templateDoc` | `{ filename, format }` | Template metadata |
+| `overallConfidence` | number | `avg(confidence)` |
+| `fieldCount` | number | Number of filled fields |
+| `filledFilename` | string | Generated document name |
+| `downloadExpired` | boolean | Server bytes expire with the job (≤24h) |
+
+### `tf_tier_token`
+
+Signed tier token (30-day) used as a fallback when HttpOnly cookies are blocked.
+Never contains document content. Cleared on sign-out.
+
+> Schema implemented in `frontend/src/lib/types.ts` (`HistoryEntry`, `LoginResult`,
+> `QuotaInfo`) and persisted via `frontend/src/lib/api.ts` (`getHistory` /
+> `saveHistoryEntry` / `clearHistory` / `getTierToken`).

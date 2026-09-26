@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
-import { History, BookOpen } from 'lucide-react';
-import { WorkflowStep } from '../lib/types';
+import { History, BookOpen, LogIn, LogOut } from 'lucide-react';
+import { Tier, WorkflowStep } from '../lib/types';
+import { TIER_BADGE } from '../lib/tier';
 
 interface NavbarProps {
   currentStep: WorkflowStep;
@@ -10,6 +11,9 @@ interface NavbarProps {
   isBackendLive?: boolean;
   onOpenHistory?: () => void;
   onOpenHelp?: () => void;
+  tier?: Tier;
+  onOpenLogin?: () => void;
+  onLogout?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -18,6 +22,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   isBackendLive = false,
   onOpenHistory,
   onOpenHelp,
+  tier = 'free',
+  onOpenLogin,
+  onLogout,
 }) => {
   const steps: { key: WorkflowStep; label: string; num: number }[] = [
     { key: 'upload', label: 'Upload', num: 1 },
@@ -86,6 +93,27 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right Controls */}
         <div className="flex items-center gap-2">
+          {/* Tier Badge */}
+          <div
+            className={`hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border ${
+              tier === 'pro'
+                ? 'border-blue-800 bg-blue-950/50 text-blue-300'
+                : 'border-slate-800 text-slate-400'
+            }`}
+            title={
+              tier === 'pro'
+                ? 'Account tier — DeepSeek engine'
+                : 'Free tier — Google Gemini free API'
+            }
+          >
+            <span
+              className={`w-1.5 h-1.5 rounded-full ${
+                tier === 'pro' ? 'bg-blue-400' : 'bg-slate-500'
+              }`}
+            />
+            <span>{TIER_BADGE[tier].label}</span>
+          </div>
+
           {/* Backend Status Indicator */}
           <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-mono border border-slate-800 text-slate-400">
             <span
@@ -95,6 +123,31 @@ export const Navbar: React.FC<NavbarProps> = ({
             />
             <span>{isBackendLive ? 'API LIVE' : 'DEV SIMULATION'}</span>
           </div>
+
+          {/* Tier Auth Control */}
+          {tier === 'pro' ? (
+            <button
+              onClick={onLogout}
+              aria-label="Sign out"
+              title="Sign out of the account tier"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          ) : (
+            onOpenLogin && (
+              <button
+                onClick={onOpenLogin}
+                aria-label="Sign in"
+                title="Sign in to the account tier (DeepSeek)"
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded border border-slate-800 text-xs font-mono text-slate-300 hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <LogIn className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Sign in</span>
+              </button>
+            )
+          )}
 
           {/* User Guide / Help Button */}
           {onOpenHelp && (

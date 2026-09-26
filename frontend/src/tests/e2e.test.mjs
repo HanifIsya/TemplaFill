@@ -1,12 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
+const ACCOUNT_REQUEST_EMAIL = 'hanif.isya.annafi-2024@fst.unair.ac.id';
+const FREE_DAILY_LIMIT = 5;
+
 // E2E Client Simulation implementing the frontend API contract (API.md & types.ts)
 class TemplaFillTestClient {
   constructor(baseUrl = 'http://localhost:8000/api') {
     this.baseUrl = baseUrl;
     this.currentUser = null;
     this.sessions = new Map();
+    this.tier = 'free';
+    this.tierToken = null;
+    this.freeUsedToday = 0;
+    this.history = [];
   }
 
   async checkHealth() {
@@ -19,33 +26,36 @@ class TemplaFillTestClient {
       email: 'guest@templafill.local',
       name: 'Guest User',
       tier: 'free',
-      remainingFills: 3,
+      remainingFills: FREE_DAILY_LIMIT,
       isAnonymous: true,
       createdAt: new Date().toISOString(),
     };
   }
 
-  async login(email, password) {
-    if (!email || !email.includes('@')) throw new Error('Invalid email');
-    if (!password || password.length < 6) throw new Error('Password too short');
-
-    const auth = {
-      user: {
-        id: 'user-apex-01',
-        email,
-        name: 'Apex Legal Analyst',
-        tier: 'pro',
-        remainingFills: 9999,
-        isAnonymous: false,
-        createdAt: new Date().toISOString(),
-      },
-      tokens: {
-        accessToken: `tf_jwt_test_${Date.now()}`,
-        expiresIn: 86400,
-      },
+  async login(username, password) {
+    if (!username || !password) throw new Error('Invalid credentials');
+    this.tier = 'pro';
+    this.tierToken = `tf_tier_test_${Date.now()}`;
+    this.currentUser = {
+      id: 'shared-account',
+      email: 'shared@templafill.local',
+      name: 'Shared Account',
+      tier: 'pro',
+      remainingFills: 9999,
+      isAnonymous: false,
+      createdAt: new Date().toISOString(),
     };
-    this.currentUser = auth.user;
-    return auth;
+    return { tier: 'pro', token: this.tierToken };
+  }
+
+  async logout() {
+    this.tier = 'free';
+    this.tierToken = null;
+    this.currentUser = null;
+  }
+
+  async getQuota() {
+    return { free_used_today: this.freeUsedToday, free_limit: FREE_DAILY_LIMIT, tier: this.tier };
   }
 
   async uploadFiles(sourceFile, templateFile) {
@@ -59,9 +69,19 @@ class TemplaFillTestClient {
     if (sourceFile.size > 50 * 1024 * 1024) throw new Error('Source file exceeds 50MB');
     if (templateFile.size > 20 * 1024 * 1024) throw new Error('Template file exceeds 20MB');
 
+    // Tier quota enforcement (T14)
+    if (this.tier === 'free' && this.freeUsedToday >= FREE_DAILY_LIMIT) {
+      const err = new Error('Daily extraction limit reached.');
+      err.code = 'QUOTA_EXCEEDED';
+      err.tier = 'free';
+      throw err;
+    }
+    this.freeUsedToday += 1;
+
     const sessionId = `session-${Date.now().toString(36)}`;
     const session = {
       sessionId,
+      tier: this.tier,
       sourceDoc: {
         filename: sourceFile.name,
         sizeBytes: sourceFile.size,
@@ -221,14 +241,14 @@ test('TemplaFill End-to-End (E2E) Integration Flow', async (t) => {
     const anon = client.getAnonymousUser();
     assert.equal(anon.isAnonymous, true);
     assert.equal(anon.tier, 'free');
-    assert.equal(anon.remainingFills, 3);
+    assert.equal(anon.remainingFills, FREE_DAILY_LIMIT);
 
-    // Registered Pro User Login
-    const auth = await client.login('analyst@apexlegal.com', 'securePassword99');
-    assert.ok(auth.tokens.accessToken, 'Access token generated');
-    assert.equal(auth.user.email, 'analyst@apexlegal.com');
-    assert.equal(auth.user.tier, 'pro');
-    assert.equal(auth.user.isAnonymous, false);
+    // Shared-credential login → account tier
+    const auth = await client.login('shared-user', 'shared-password');
+    assert.ok(auth.token, 'Tier token generated');
+    assert.equal(auth.tier, 'pro');
+    assert.equal(client.tier, 'pro');
+    assert.equal(client.currentUser.isAnonymous, false);
   });
 
   await t.test('3. Document Upload & File Type Validation', async () => {
@@ -307,5 +327,49 @@ test('TemplaFill End-to-End (E2E) Integration Flow', async (t) => {
 
     const downloadUrl = client.getDownloadUrl(sessionId);
     assert.ok(downloadUrl.endsWith(`/download/${sessionId}`));
+  });
+});
+
+test('TemplaFill Tier Flows (T18) — Free vs Account', async (t) => {
+  const validPdf = { name: 'Master_Services_Agreement.pdf', size: 1048576 };
+  const validDocx = { name: 'Contract_Summary_Template.docx', size: 45056 };
+
+  await t.test('free tier: anonymous upload runs on the free path', async () => {
+    const client = new TemplaFillTestClient();
+    const quota = await client.getQuota();
+    assert.equal(quota.tier, 'free');
+    assert.equal(quota.free_limit, FREE_DAILY_LIMIT);
+
+    const session = await client.uploadFiles(validPdf, validDocx);
+    assert.equal(session.tier, 'free');
+    const after = await client.getQuota();
+    assert.equal(after.free_used_today, 1);
+  });
+
+  await t.test('free tier: 6th job is blocked with QUOTA_EXCEEDED + contact email', async () => {
+    const client = new TemplaFillTestClient();
+    for (let i = 0; i < FREE_DAILY_LIMIT; i++) {
+      await client.uploadFiles(validPdf, validDocx);
+    }
+    await assert.rejects(
+      () => client.uploadFiles(validPdf, validDocx),
+      (err) => {
+        assert.equal(err.code, 'QUOTA_EXCEEDED');
+        assert.equal(err.tier, 'free');
+        return true;
+      }
+    );
+    assert.equal(ACCOUNT_REQUEST_EMAIL, 'hanif.isya.annafi-2024@fst.unair.ac.id');
+  });
+
+  await t.test('account tier: login → pro upload → logout', async () => {
+    const client = new TemplaFillTestClient();
+    await client.login('shared-user', 'shared-password');
+    const session = await client.uploadFiles(validPdf, validDocx);
+    assert.equal(session.tier, 'pro');
+
+    await client.logout();
+    const quota = await client.getQuota();
+    assert.equal(quota.tier, 'free');
   });
 });
