@@ -23,13 +23,23 @@ flowchart TD
     DIAGNOSE_INT --> FIX_INT[Fix Code]
     FIX_INT --> INTEGRATION_TEST
 
-    IS_EXTRACTION -->|Yes| EVAL[Run Eval Suite]
     IS_EXTRACTION -->|No| UPDATE[Update CONTEXT.md + TASKS.md]
+    IS_EXTRACTION -->|Yes| PROVIDER{Which provider does this affect?}
+
+    PROVIDER -->|Gemini or shared code| EVAL[Run Eval Suite --provider gemini]
+    PROVIDER -->|DeepSeek only| EVALD[Run Eval Suite --provider deepseek]
+    PROVIDER -->|Multiple providers| BOTH[Run eval for BOTH providers]
 
     EVAL -->|Pass thresholds| UPDATE
     EVAL -->|Fail thresholds| DIAGNOSE_EVAL[Analyze Eval Results]
-    DIAGNOSE_EVAL --> OPTIMIZE[Optimize: prompts, chunking, retrieval]
+    EVALD -->|Pass thresholds| UPDATE
+    EVALD -->|Fail thresholds| DIAGNOSE_EVAL
+    BOTH -->|Pass thresholds| UPDATE
+    BOTH -->|Any fail| DIAGNOSE_EVAL
+    DIAGNOSE_EVAL --> OPTIMIZE[Optimize: prompts, chunking, retrieval, batching]
     OPTIMIZE --> EVAL
+    OPTIMIZE --> EVALD
+    OPTIMIZE --> BOTH
 
     UPDATE --> COMMIT[Commit + Push]
     COMMIT --> DONE([Task Complete])
@@ -54,32 +64,44 @@ flowchart TD
 
 ### Step 2: Test (Unit)
 ```bash
-# Backend
-cd backend && pytest tests/unit/ -v
+# Backend (tests/ is flat — there is no tests/unit split)
+cd backend && pytest -q
 
-# Frontend
-cd frontend && npm test -- --watchAll=false
+# Frontend (node test runner, not Jest)
+cd frontend && npm test
 ```
 - **Exit criteria**: All unit tests pass
+- **Tier change?** Also run the tier-focused subset: `cd backend && pytest -k "auth or tier or quota or deepseek" -v`
 - **Max retry cycles**: 5 (if still failing after 5 fix attempts, escalate to user)
 
 ### Step 3: Test (Integration)
 ```bash
-# Backend integration
-cd backend && pytest tests/integration/ -v
+# Backend API + pipeline
+cd backend && pytest tests/test_api.py tests/test_security_hardening.py -v
 
-# Full pipeline test
-cd backend && pytest tests/test_pipeline.py -v
+# Full backend suite
+cd backend && pytest -q
+
+# Frontend full-flow E2E (API-contract level)
+cd frontend && npm test
 ```
-- **Exit criteria**: All integration tests pass
+- **Exit criteria**: All integration tests pass, including the tier matrix in `TESTING.md` (login → capped free upload → pro upload with Google mocked to raise)
 - **Max retry cycles**: 3
 
 ### Step 4: Evaluate (Extraction changes only)
 ```bash
-cd eval && python run_eval.py --dataset datasets/ --output results/
+# Offline/CI (fake extractors, no API keys)
+cd eval && python run_eval.py --dataset datasets/ --output results/ --provider gemini
+cd eval && python run_eval.py --dataset datasets/ --output results/ --provider deepseek
+
+# Live run before release (real keys, local only — never in CI)
+python run_eval.py --provider gemini --live
+python run_eval.py --provider deepseek --live
 ```
-- **Exit criteria**: All metrics meet thresholds defined in `EVAL.md`
-- **Max retry cycles**: 5 (each cycle involves optimizing prompts, chunking, or retrieval)
+- **Exit criteria**: All metrics meet thresholds in `EVAL.md` **for every provider touched by the change**
+- **Rule**: a change to shared prompt/validation code must pass **both** provider runs; a provider-specific change needs only its own
+- **Max retry cycles**: 5 (each cycle involves optimizing prompts, chunking, or batching)
+- **Note**: the `--provider` flag ships with Phase 6 task 6.8; until then the runner uses the default Gemini path
 
 ### Step 5: Diagnose & Fix
 When a test or eval fails, the agent MUST:
@@ -105,10 +127,12 @@ After all tests/evals pass:
 |--------|-----------------|---------------|
 | **Unit tests** | Individual function correctness | Every code change |
 | **Integration tests** | System component interaction | Every feature completion |
-| **Eval suite** | Extraction accuracy vs. ground truth | Extraction/RAG changes |
-| **User corrections** | Where AI gets it wrong in real usage | Post-launch (Phase 2+) |
-| **Error logs** | Runtime failures, API errors | During testing & production |
-| **Gemini API response** | Model quality, response format | Extraction changes |
+| **Eval suite (per provider)** | Extraction accuracy vs. ground truth for Gemini **and** DeepSeek paths | Extraction/RAG/batching changes |
+| **Quota & auth responses** | 429 `QUOTA_EXCEEDED`, login 401s, rate-limit `Retry-After` behaving as designed | Tier flow changes |
+| **Zero-Google-on-pro assertion** | Proves account-tier jobs never touch a Google endpoint | Any provider-selection or fallback change |
+| **User corrections** | Where AI gets it wrong in real usage | Post-launch |
+| **Error logs** | Runtime failures, provider API errors (Gemini 404/429/503, DeepSeek 4xx/5xx) | During testing & production |
+| **Provider API responses** | Model quality, response format, renamed/retired model ids | Extraction changes |
 
 ---
 
@@ -118,6 +142,8 @@ After all tests/evals pass:
 |-----------|--------|
 | Test fails after 5 fix attempts | Agent stops, logs issue in `CONTEXT.md`, asks user for help |
 | Eval metrics are close but don't meet threshold | Agent documents the gap, proposes solutions, asks user to accept or iterate |
+| A provider-specific eval passes but the other regresses | Treat as a **fail** — shared prompt/validation code must satisfy both providers |
+| Provider privacy/terms claim can't be verified (e.g. no-training wording) | Hold the UI copy, log in `CONTEXT.md`, ask user — never ship an unverified privacy claim |
 | Test passes but behavior seems wrong | Agent adds more test cases to cover the suspicious behavior |
 | Conflicting requirements discovered | Agent logs in `DECISIONS.md` with status `PENDING`, asks user |
 
@@ -133,3 +159,4 @@ After all tests/evals pass:
 | Make changes without re-running tests | Always re-run after every fix |
 | Fix symptoms instead of causes | Diagnose root cause before patching |
 | Refactor unrelated code during a fix cycle | Stay focused on the failing test |
+| Let the pro tier silently fall back to Gemini | Fallback is heuristic only — the zero-Gemini test must stay green |

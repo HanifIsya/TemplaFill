@@ -333,4 +333,26 @@
   - Residual/planned: full accounts, Supabase persistence with RLS, out-of-process parsing sandbox, optional full-redaction PII mode.
   - Cross-site deployments must configure `TRUSTED_PROXIES`, `SESSION_COOKIE_SECURE`, `SESSION_COOKIE_SAMESITE`, and exact `CORS_ORIGINS`.
 
+---
+
+### ADR-020: Two-Tier Product — Free (Gemini) vs Account (DeepSeek) (2026-09-26)
+- **Date**: 2026-09-26
+- **Status**: **Pending** — user has answered the design questions below; implementation awaits user approval of `docs/1-product/TIER_PLAN.md` + `docs/2-architecture/TIER_ARCHITECTURE.md`
+- **Context**: Everything runs on the Gemini free plan (15 RPM/1,500 RPD quota → random 429/404/503 fallbacks) and Google free-tier terms allow prompt data to be used to improve products. A privacy/reliability premium tier is needed without building accounts, payments, or a user database.
+- **Decision (answers given by user 2026-09-26)**:
+  1. **One fixed shared account**: a single username+password the owner hands out personally after an email request; server stores only a salted hash (`TIER_ACCOUNT_PASSWORD_HASH`); no self-registration, no per-user records. Contact email in UI: `hanif.isya.annafi-2024@fst.unair.ac.id`.
+  2. **Engine split**: anonymous → existing Gemini pipeline; logged-in → **DeepSeek `deepseek-flash` (DeepSeek-V4.1-Flash)**, with **zero Google calls** on that path (RAG retrieval bypassed → sequential chunk batching; DeepSeek's 1M context makes semantic retrieval unnecessary for v1).
+  3. **Free-tier cap**: **5 jobs/day per IP** (user's explicit choice over the 3-lifetime/uncapped options); pro tier gets a tunable daily cap (proposed 50/day/IP) as the cost guard since one password is shared by everyone.
+  4. **Storage**: uploaded files stay RAM-only ≤24 h on the server (already true); session history/results/filled-doc metadata are stored **only in browser `localStorage`**.
+  5. **Fallback rule**: pro tier falls back to the local heuristic engine only — never to Google.
+- **Alternatives Considered**:
+  - Per-user accounts (user rejected — too much admin for now)
+  - Client-side-only password check (rejected — trivially bypassable)
+  - Keeping Gemini embeddings for the pro tier (rejected — leaks chunks to Google, breaks the privacy claim)
+  - Local embedding model for pro tier (deferred — size/CPU cost on Render Hobby)
+- **Consequences**:
+  - New backend surface: tier auth, day-window quotas, `DeepSeekExtractor`, provider selection, ~10+ tests; new frontend surface: login modal, tier badge, disclosures, `tf_history` localStorage.
+  - **Privacy advertising is gated on task 6.15** (verify DeepSeek API no-training/retention terms) — no unverified claims may ship (see FEEDBACK_LOOP.md escalation policy).
+  - Cost exposure is bounded only by per-IP daily caps; shared-password leakage = budget risk, accepted with rotation as mitigation.
+
 
