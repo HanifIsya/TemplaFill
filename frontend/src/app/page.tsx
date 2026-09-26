@@ -123,7 +123,11 @@ export default function Home() {
   }, [addToast]);
 
   useEffect(() => {
-    checkBackend();
+    // Deferred so the initial backend check doesn't set state synchronously in the effect body.
+    const id = setTimeout(() => {
+      checkBackend();
+    }, 0);
+    return () => clearTimeout(id);
   }, [checkBackend]);
 
   // Load demo preset files
@@ -260,24 +264,24 @@ export default function Home() {
             clearInterval(interval);
             throw new Error(updated.errorMessage || 'Job failed during backend processing');
           }
-        } catch (pollErr: any) {
+        } catch (pollErr: unknown) {
           clearInterval(interval);
           console.error('Extraction polling failed:', pollErr);
           addToast(
             'error',
             'Extraction Notice',
-            pollErr?.message || 'Backend processing encountered an issue.'
+            pollErr instanceof Error ? pollErr.message : 'Backend processing encountered an issue.'
           );
           setIsProcessing(false);
           setCurrentStep('upload');
         }
       }, 1000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Upload / Extraction error:', err);
       addToast(
         'error',
         'Upload / Extraction Failed',
-        err?.message || 'Could not process via live backend.'
+        err instanceof Error ? err.message : 'Could not process via live backend.'
       );
       setIsProcessing(false);
       setCurrentStep('upload');

@@ -25,6 +25,22 @@ export function getApiBaseUrl(): string {
 
 const BASE_URL = getApiBaseUrl();
 
+/** Shape of a raw `/jobs/{id}/results` field entry before mapping to `FieldMapping`. */
+interface RawApiField {
+  field_id?: string;
+  field_name?: string;
+  field_label?: string;
+  placeholder?: string;
+  confidence?: number;
+  status?: string;
+  extracted_value?: string;
+  user_edited_value?: string;
+  is_manually_edited?: boolean;
+  extracted_by?: string;
+  fallback_reason?: string;
+  source_reference?: { page?: number; snippet?: string };
+}
+
 class ApiClient {
   private _baseUrl: string;
   private isBackendAvailable: boolean | null = null;
@@ -73,7 +89,7 @@ class ApiClient {
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
         // API returns {success:true, data:{status, version}} ; handle both shapes
-        const version = (data as any)?.data?.version || (data as any)?.version || '0.1.0';
+        const version = data?.data?.version || data?.version || '0.1.0';
         this.isBackendAvailable = true;
         return { status: 'healthy', version, isLive: true };
       }
@@ -82,8 +98,9 @@ class ApiClient {
         this.isBackendAvailable = false;
         return { status: 'waking', version: '0.1.0', isLive: false, isWaking: true, error: `Backend waking (HTTP ${res.status})` };
       }
-    } catch (e: any) {
-      const msg = e?.name === 'AbortError' ? 'Health check timed out (Render may be waking)' : String(e?.message || e);
+    } catch (e: unknown) {
+      const err = e as { name?: string; message?: string };
+      const msg = err?.name === 'AbortError' ? 'Health check timed out (Render may be waking)' : String(err?.message || e);
       // Timeout after 15 min idle is expected for Render Hobby
       const isWaking = msg.includes('timed out') || msg.includes('Failed to fetch') || msg.includes('NetworkError');
       this.isBackendAvailable = false;
@@ -259,9 +276,9 @@ class ApiClient {
           if (res.ok) {
             const json = await res.json();
             const data = json.data || json;
-            const rawFields: any[] = data.fields || [];
+            const rawFields: RawApiField[] = data.fields || [];
             if (rawFields.length > 0) {
-              const fields: FieldMapping[] = rawFields.map((f: any, idx: number) => {
+              const fields: FieldMapping[] = rawFields.map((f: RawApiField, idx: number) => {
                 const conf = typeof f.confidence === 'number' ? f.confidence : 0.85;
                 const confLevel: 'high' | 'medium' | 'low' = conf >= 0.8 ? 'high' : conf >= 0.5 ? 'medium' : 'low';
                 const fieldName = f.field_name || `field_${idx}`;
@@ -285,7 +302,7 @@ class ApiClient {
                   isConfirmed: f.status === 'confirmed',
                   isSkipped: f.status === 'skipped',
                   fieldType: fType,
-                  extractedBy: f.extracted_by || (f.source_reference?.snippet?.includes('AI_ERROR') ? 'heuristic' : 'gemini'),
+                  extractedBy: (f.extracted_by as FieldMapping['extractedBy']) || (f.source_reference?.snippet?.includes('AI_ERROR') ? 'heuristic' : 'gemini'),
                   fallbackReason: f.fallback_reason,
                 };
               });
@@ -299,7 +316,7 @@ class ApiClient {
                 data.has_ai_error ||
                 data.has_fallback ||
                 data.engine_used === 'heuristic' ||
-                rawFields.some((f: any) =>
+                rawFields.some((f: RawApiField) =>
                   f.extracted_by === 'heuristic' ||
                   f.source_reference?.snippet?.includes('AI_ERROR') ||
                   f.source_reference?.snippet?.includes('404') ||
@@ -311,7 +328,7 @@ class ApiClient {
                 ? 'AI service hit a quota or model limit (404/429/Missing Key). The extraction engine automatically switched to the local heuristic fallback.'
                 : undefined);
 
-              const engineUsed = (data.engine_used as any) || (hasAiError ? 'heuristic' : 'gemini');
+              const engineUsed = (data.engine_used as ExtractionResult['engineUsed']) || (hasAiError ? 'heuristic' : 'gemini');
 
               return {
                 sessionId,

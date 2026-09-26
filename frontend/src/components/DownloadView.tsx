@@ -97,10 +97,11 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <button
             onClick={handleDownload}
-            className="px-4 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            disabled={isDownloading}
+            className="px-4 py-2.5 rounded bg-blue-700 hover:bg-blue-800 dark:bg-blue-600 dark:hover:bg-blue-500 text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-wait"
           >
             <Download className="w-3.5 h-3.5" />
-            <span>Download Populated Document</span>
+            <span>{isDownloading ? 'Downloading…' : 'Download Populated Document'}</span>
           </button>
 
           <button
