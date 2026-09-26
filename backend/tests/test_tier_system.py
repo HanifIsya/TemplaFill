@@ -147,9 +147,13 @@ class TestTierTokens:
 
     def test_tampered_tier_token_rejected(self):
         token = create_tier_token(tier="pro")
-        # Flip the last character of the signature (guaranteed different).
-        flipped = "y" if token[-1] != "y" else "x"
-        assert verify_tier_token(token[:-1] + flipped) is None
+        # Flip a signature character well inside the base64 data. (The LAST
+        # character is a bad choice: its unused bits are ignored by the b64
+        # decoder, so a flip there can still decode to the same bytes.)
+        dot = token.index(".")
+        idx = dot + 10
+        flipped = "y" if token[idx] != "y" else "x"
+        assert verify_tier_token(token[:idx] + flipped + token[idx + 1 :]) is None
 
     def test_empty_and_garbage_tokens_rejected(self):
         assert verify_tier_token("") is None
