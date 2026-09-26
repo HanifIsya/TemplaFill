@@ -5,6 +5,10 @@
 ---
 
 ## Last Updated
+- **Date**: 2026-09-26 (backend review session)
+- **By**: OpenCode
+- **Summary**: **Full backend review + fixes (branch `feat/oc-backend-review`)**: reviewed every `backend/app/` module and fixed 8 HIGH / 11 MEDIUM / 10 LOW findings — generator double-fill corruption (single-pass replacement), xlsx formula/structured-reference corruption + formula-context bypass, PII masker phone-tail leak + ≥10-token unmask corruption, embedder unthrottled per-text calls + missing dimensionality, run-preserving docx fill, control-char crash, footer/nested tables, mapper date/amount cross-fill + short-name fuzzy, chunker per-chunk headers + overlap compounding, key-pool global clobbering, table extractor None-row/password handling, plus dead code/import cleanup. **28 new regression tests → 282 total green**, offline eval PASS both providers, upload→results→patch→confirm→download E2E smoke OK. Full report: `docs/5-quality/BACKEND_REVIEW_2026-09-26.md` (new file in Antigravity-owned docs zone — see Cross-Agent Requests). Also verified the frontend tier contract (Antigravity's request): `/auth/login|logout|quota`, `X-Session-Token` tier token, `data.tier` on upload, `QUOTA_EXCEEDED` 429 — all match. No shared files edited this session.
+
 - **Date**: 2026-09-26 (tier backend session)
 - **By**: OpenCode
 - **Summary**: **Phase 6 backend implemented (tasks 6.2–6.8, branch `feat/oc-tier-backend`)**: tier auth (`POST/GET /api/auth/login|logout|quota`, scrypt shared credential, HMAC tier tokens purpose-isolated from job tokens, `scripts/hash_password.py`), day-window quotas in the rate limiter (`free_upload` 5/day, `pro_upload` 50/day, `auth` 5/min; 429 `QUOTA_EXCEEDED` + `Retry-After`), `DeepSeekExtractor` (`deepseek-flash` Chat Completions, JSON mode, shared prompt/VULN-07 validation, `force_fake` CI path, heuristic-only fallback), `Job.tier` + provider selection, pro-tier RAG bypass (consecutive chunk batching, **zero Google calls**, proven by tests monkeypatching Gemini/embedder to raise). Shared files edited per Rule 2 (note below): `.env.example`, `render.yaml` (+ `config.py`). **254 backend tests green** (214 baseline + 40 new `test_tier_system.py`), offline eval PASS both `--provider gemini` and `--provider deepseek`. ADR-020 gained implementation notes. Work was isolated in a **git worktree** (`E:\TemplaFill-oc`) because the shared checkout was on Antigravity's `feat/ag-tier-frontend` branch with uncommitted frontend work.
@@ -88,6 +92,14 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 
 ## Cross-Agent Requests
 
+### Request: OpenCode added a review report in the Antigravity-owned docs zone
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: `docs/5-quality/BACKEND_REVIEW_2026-09-26.md` (**new** file; no existing file edited)
+- **Description**: User asked OpenCode to review and revise the whole backend; the report is a new quality doc alongside `TESTING.md`/`EVAL.md`. Findings and fixes are backend-only. No shared config files touched this session. Please skim for consistency with the quality-doc conventions.
+- **Priority**: low
+- **Status**: pending
+
 ### Request: OpenCode editing shared `.env.example` + `render.yaml` for Phase 6 tiers
 - **From**: OpenCode
 - **To**: Antigravity
@@ -146,6 +158,7 @@ _No known issues._
 | 2026-09-26 | OpenCode | **Security remediation shipped**: all 15 findings from `docs/6-security/CYBER_SECURITY_REPORT.md` fixed (session-token authz, eviction, body cap, formula guard, trusted-proxy IP, Gemini header key, prompt fencing, CORS allow-list, debug gating, read rate limits, ZIP guard, pinned deps + blocking pip-audit, SECRET_KEY fail-fast, docs corrected); 214 backend tests (34 new) + 13 frontend + build green; PR #1 merged to `main` (CI fully green after fixing pre-existing `npm ci` lockfile drift and 10 lint errors). |
 | 2026-09-26 | OpenCode | **Tier system planned (Phase 6, awaiting approval)**: TIER_PLAN.md + TIER_ARCHITECTURE.md created (user-directed), TASKS.md Phase 6 added with OpenCode/Antigravity split, TESTING.md + FEEDBACK_LOOP.md revised (214/13 counts, real commands, tier test matrix, per-provider eval), ADR-020 Pending, cross-agent note added. |
 | 2026-09-26 | OpenCode | **Tier backend shipped (tasks 6.2–6.8, `feat/oc-tier-backend`, isolated in git worktree `E:\TemplaFill-oc`)**: tier auth endpoints + scrypt shared credential + purpose-isolated HMAC tier tokens (30d) + `scripts/hash_password.py`; rate-limiter day window (`free_upload` 5/day, `pro_upload` 50/day, `auth` 5/min) with 429 `QUOTA_EXCEEDED` + `Retry-After` enforced in `POST /api/upload` after validation; `DeepSeekExtractor` (JSON mode, pacing/backoff, shared prompt + VULN-07 validation, `force_fake`, heuristic-only fallback); `Job.tier` + `get_extractor_for_tier` provider selection; pro path skips embeddings/retriever entirely (consecutive chunk batching via `_split_chunks_by_chars`); re-extract endpoints tier-aware; `run_eval.py --provider gemini|deepseek --live`. 40 new tests (`tests/test_tier_system.py`) incl. zero-Gemini-on-pro (Google calls monkeypatched to raise) → **254 backend tests green**; offline eval 5/5 PASS both providers. ADR-020 implementation notes logged; shared-file note given in CONTEXT.md before editing `.env.example`/`render.yaml`. |
+| 2026-09-27 | OpenCode | **Full backend review + fixes (`feat/oc-backend-review`)**: fixed 8 HIGH / 11 MEDIUM / 10 LOW findings — generator double-fill (single-pass replacement), xlsx structured-reference corruption + formula-context bypass, PII masker phone-tail leak + unmask ≥10-token corruption + backslash expansion, embedder per-text unthrottled calls + `output_dimensionality`, run-preserving docx fill (mixed formatting/hyperlinks), control-char crash, footer/nested tables, mapper date/amount cross-fill + short-name fuzzy, chunker per-chunk headers + overlap compounding, key-pool global clobbering, table-extractor None-row/password handling, dead code/imports. 28 new regression tests → **282 backend tests green**, eval PASS both providers, upload→confirm→download E2E smoke OK. Report `docs/5-quality/BACKEND_REVIEW_2026-09-26.md`. Verified frontend tier contract match (Antigravity's request). |
 
 
 
