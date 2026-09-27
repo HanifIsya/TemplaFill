@@ -148,6 +148,6 @@
 
 | # | Task | Status | Assigned | Notes |
 |---|------|--------|----------|-------|
-| 6.16 | Live staging E2E both tiers, live eval both providers, cost sanity check, CHANGELOG release notes | `review` | Both | Offline eval PASS both providers + CHANGELOG v0.3.0 done; **live staging E2E with real keys is the user's final acceptance step** (needs `DEEPSEEK_API_KEY` + `TIER_ACCOUNT_PASSWORD_HASH` on Render) |
+| 6.16 | Live staging E2E both tiers, live eval both providers, cost sanity check, CHANGELOG release notes | `done` | Both | **Verified live 2026-09-27**: pro upload on Render via kenari.id gateway → `engine_used: deepseek`, 5/5 fields `extracted_by: deepseek`, no fallback; confirm+download 37,760-byte filled docx; free tier `gemini`; wrong password 401; quota counters correct. **Live DeepSeek eval 1.00 PASS all metrics** (54.96s real calls). Cost ≈ Rp 20/1M in, Rp 50/1M out (~Rp 0.2–0.5/job) |
 | 6.17 | Flip ADR-020 to `Accepted`, update CONTEXT.md with results | `done` | OpenCode | ADR-020 Accepted 2026-09-27; CONTEXT.md close-out written |
 
