@@ -362,3 +362,15 @@
 - **Gateway note (2026-09-27)**: the deployed account tier uses the **kenari.id** OpenAI-compatible gateway (key prefix `kn-`, base `https://kenari.id`, model id `deepseek-v4-1-flash`) rather than DeepSeek's own API. This is env-only (`DEEPSEEK_BASE_URL`/`DEEPSEEK_MODEL`) plus a `DEEPSEEK_DISABLE_THINKING` switch that sends `reasoning:{enabled:false}` and retries without it on HTTP 400, so any OpenAI-compatible endpoint keeps working. Privacy consequence: document text now transits kenari.id as well as DeepSeek; the zero-Google-call guarantee is unchanged, and the 6.15 verdict (no no-training claim) still applies. **Live-verified 2026-09-27**: pro upload on Render returned `engine_used: deepseek` with no fallback; live eval 1.00 PASS.
 
 
+
+### ADR-021: Visual Tutorial as In-App Tab + Committed Screenshots (2026-09-27)
+- **Date**: 2026-09-27
+- **Status**: **Accepted** (user-directed)
+- **Context**: New non-technical users could not follow the text-only USER_GUIDE, and not all users know GitHub. The user asked for a step-by-step tutorial with screenshots, available both in the app and on GitHub, split by tier, with credentials/PII masked.
+- **Decision**:
+  1. **Single image source**: all tutorial screenshots live in frontend/public/guide/ (served in-app); docs/1-product/TUTORIAL.md references them by relative path (no duplication).
+  2. **In-app**: HelpModal gains a **Tutorial** tab as tab 1, rendered from the plain-data module frontend/src/lib/tutorial.ts; **account-tier steps render only when 	ier === 'pro'**, with a teaser for free users.
+  3. **Capture pipeline outside the repo**: Playwright + Chromium installed in a temp dir; only optimized JPEGs (<1 MB total) are committed. No new npm dependency enters package.json/CI.
+  4. **Tier gating is unit-tested** (DOM-free, like the rest of the frontend suite): screenshot existence, step integrity, and free/pro filtering.
+- **Alternatives Considered**: PNG screenshots (rejected — ~2× repo weight); duplicating images under docs/ (rejected — drift risk); committed Playwright dev-dependency + capture script (rejected — CI weight for a one-off task; can be revisited if screenshots need frequent regeneration).
+- **Consequences**: Tutorial screenshots can go stale when the UI changes; regeneration is a documented manual step (re-run the capture flow). HelpModal tab count grew 5→6.

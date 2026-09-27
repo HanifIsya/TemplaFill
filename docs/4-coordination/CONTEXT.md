@@ -103,6 +103,15 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 
 ## Cross-Agent Requests
 
+### Request: OpenCode added visual tutorial (frontend + docs zones, user-directed)
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: frontend/src/lib/tutorial.ts (**new**), frontend/src/components/HelpModal.tsx (new Tutorial tab as tab 1, 	ier prop, tier-aware workflow copy), frontend/src/app/page.tsx (passes 	ier), frontend/src/tests/tutorial.test.mjs (**new**), frontend/public/guide/*.jpg (**new**, 20 screenshots), docs/1-product/TUTORIAL.md (**new**), docs/1-product/USER_GUIDE.md + README.md/frontend/README.md (links + stale facts)
+- **Description**: User asked for a well-documented step-by-step tutorial with screenshots, both on GitHub and **inside the app** (HelpModal), split into free-tier and account-tier parts (account steps render only when signed in), screenshots optimized to JPEG (<1 MB total). No shared config files touched. Playwright was used **outside the repo** (temp dir) — nothing tooling-related is committed.
+- **Priority**: medium
+- **Status**: done
+
+
 ### Request: OpenCode re-pointing shared `DEEPSEEK_*` vars at kenari.id gateway (user-directed)
 - **From**: OpenCode
 - **To**: Antigravity
@@ -212,6 +221,7 @@ _No known issues._
 | 2026-09-27 | OpenCode | **Phase 6 delivery merge (user-directed)**: merged `feat/ag-frontend-polish` (frontend 6.9–6.14 + polish 6.18–6.22) into the delivery branch, resolving CONTEXT/TASKS conflicts (kept both agents' history, current statuses). Verified closed loop on the merged tree: **282 backend tests**, **59 frontend tests**, lint 0 warnings, `next build` green. Task 6.15 **verified — negative verdict** (DeepSeek terms contain no no-training/no-retention commitment; no claim published; `DATA_PRIVACY.md` updated; HelpModal copy corrected). ADR-020 flipped to **Accepted** (6.17); TASKS 6.0/6.15/6.17 → done, 6.16 → review (live staging E2E with real keys is the user's acceptance step); CHANGELOG v0.3.0 completed with backend + review + verdict sections. |
 | 2026-09-27 | OpenCode | **Account-tier provider re-pointed at kenari.id gateway (user-directed)**: the user's DeepSeek key is a kenari.id gateway key (`kn-...`) that only works against `https://kenari.id/v1`. `render.yaml`/`.env.example` updated: `DEEPSEEK_BASE_URL=https://kenari.id`, `DEEPSEEK_MODEL=deepseek-v4-1-flash` (kenari's id for DeepSeek-V4.1-Flash). Backend adds `DEEPSEEK_DISABLE_THINKING` (default true) — sends `reasoning:{enabled:false}` so extraction does not burn output tokens on hidden thinking, with a graceful 400-retry without the field for providers that reject it. 4 new tests → **286 backend tests green**; eval PASS both providers. Rule 2 note added before shared-file edits. Live Render check still pending user's `kn-...` key. |
 | 2026-09-27 | OpenCode | **Task 6.16 live acceptance (user-directed)**: verified Render deployment via API (env vars + deploy `716606e`), then ran the live E2E — login → pro upload → results (`engine_used: deepseek`, 5/5 `extracted_by: deepseek`, no fallback) → confirm → download (37,760-byte docx, brace-free except the intentionally-unfilled not-found field); free-tier upload still `gemini`; wrong password 401; quota counters correct. **Live DeepSeek eval 1.00 PASS** all metrics. Phase 6 closed (6.16 → done). |
+| 2026-09-27 | OpenCode | **Visual tutorial shipped (user-directed, both zones)**: captured 20 screenshots from the live site via Playwright (run outside the repo) — free flow (landing→upload→demo→processing→review split/table→citation→re-extract→edit→download→history→account-request→login) + account flow (DeepSeek badge/processing/review/export). New frontend/src/lib/tutorial.ts (18 steps, tier-gated) + **HelpModal Tutorial tab as tab 1** (account steps only for signed-in users; free users see a teaser) + 	ier prop wired from page.tsx; new docs/1-product/TUTORIAL.md (Parts A/B + troubleshooting) linked from USER_GUIDE/README. 5 new frontend tests (screenshot existence, tier gating, step integrity) → **64/64 green**, lint 0 warnings, build clean; tier gating verified against the local production build (free=14 steps, pro=18). All shots optimized JPEG, 0.96 MB total. |
 
 
 

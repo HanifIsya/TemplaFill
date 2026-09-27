@@ -1,8 +1,9 @@
 # TemplaFill — User Guide & Operations Manual
 
-> **Version**: 1.2.0 (frontend polish 2026-09-26, code is `gemini-3.6-flash`/`deepseek-flash` / `gemini-embedding-001` / `214 backend + 59 frontend tests`)  
+> **Version**: 1.3.0 (visual tutorial 2026-09-27; engines `gemini-3.6-flash` free / `deepseek-v4-1-flash` via kenari.id account / `gemini-embedding-001` / `286 backend + 64 frontend tests`)  
 > **Target Audience**: End-users, Legal Analysts, Operations Teams, Administrators  
-> **Last Updated**: 2026-09-26 · **Code references**: `frontend/src/lib/api.ts:13`, `frontend/src/lib/tier.ts:4`, `frontend/src/components/Modal.tsx:1`, `backend/app/services/mapping/parser.py:32`, `backend/app/services/generation/extractor.py:220`  
+> **Last Updated**: 2026-09-27 · **Code references**: `frontend/src/lib/api.ts:13`, `frontend/src/lib/tier.ts:4`, `frontend/src/lib/tutorial.ts:1`, `frontend/src/components/Modal.tsx:1`, `backend/app/services/mapping/parser.py:32`, `backend/app/services/generation/extractor.py:220`  
+> **New to TemplaFill?** Follow the screenshot-by-screenshot **[Visual Tutorial](TUTORIAL.md)** — also available in-app: Navbar → **Guide** → **1. Tutorial**.  
 
 ---
 
@@ -116,9 +117,9 @@ TemplaFill runs on two tiers (Phase 6). There is no self-registration: the accou
 | Feature | Free Tier (anonymous) | Account Tier (signed in) |
 |---------|----------------------|--------------------------|
 | Account Required | No | Yes — shared username/password (by request) |
-| AI Engine | Google Gemini free API (`gemini-3.6-flash` + `gemini-embedding-001`) | DeepSeek (`deepseek-flash`), **zero Google calls** |
+| AI Engine | Google Gemini free API (`gemini-3.6-flash` + `gemini-embedding-001`) | DeepSeek `deepseek-v4-1-flash` via the kenari.id gateway, **zero Google calls** |
 | Daily Extractions | **5 jobs / day per network (IP)** | 50 jobs / day per network (cost guard) |
-| Privacy | Prompts may be used by Google to improve its services | Documents are not sent to Google on this tier |
+| Privacy | Prompts may be used by Google to improve its services | Documents are not sent to Google on this tier (DeepSeek terms: no no-training commitment exists — no such claim is made) |
 | Fallback | local heuristic engine | local heuristic engine only (never Google) |
 | Session History | Browser-local (`tf_history`), last sessions | Browser-local (`tf_history`) |
 | Cost | Free | Free to the user (host absorbs token cost) |
@@ -145,8 +146,8 @@ TemplaFill runs on two tiers (Phase 6). There is no self-registration: the accou
   - **Surrogate Restoration**: Tokens are restored automatically to their original values upon extraction prior to template generation.
 - **Privacy by Tier**:
   - *Free Tier*: Document text and chunks are sent to Google's free Gemini API, whose free-tier terms allow prompt data to be used to improve Google's products. Selective PII Masking keeps the masked identifiers off Google servers.
-  - *Account Tier*: Documents are processed on DeepSeek instead of Google — no Gemini extraction and no Gemini embeddings. DeepSeek API retention/training wording remains generic until its terms are verified in writing (task 6.15).
-- **In-Memory & Ephemeral Storage**: InMemory jobs + `./uploads` (24h auto-delete) + vector store lifetime tied to job. 214 backend tests + 59 frontend tests pass with 100% offline safety via deterministic fallback.
+  - *Account Tier*: Documents are processed on DeepSeek (via the kenari.id gateway) instead of Google — no Gemini extraction and no Gemini embeddings. **Task 6.15 verdict (2026-09-27): DeepSeek's published terms contain no no-training/no-retention commitment for API inputs, so no such claim is published** — only the verified fact that no Google calls occur on this tier.
+- **In-Memory & Ephemeral Storage**: InMemory jobs + `./uploads` (24h auto-delete) + vector store lifetime tied to job. 286 backend tests + 64 frontend tests pass with 100% offline safety via deterministic fallback.
 - **In-Flight Encryption & Headers**: TLS 1.3 + strict CSP (`default-src 'self'; frame-ancestors 'none'`), `nosniff`/`DENY`/`HSTS preload`/`Referrer-Policy`/`Permissions-Policy` triple-enforced in `backend/app/core/security.py:28` + `frontend/next.config.ts:24` + `frontend/vercel.json:33`.
 - **OWASP & Validation Compliance (ADR-012)**: `sanitize_filename()` strips `../`/null/path traversal + `sanitize_text_input` scrubs control codes (5000 edit / 2000 hint) + `validate_file_magic` (`%PDF`/`PK`) + `sanitize_filename` on `Content-Disposition: filename*=UTF-8''...` (RFC 5987) + no `str(e)` leak + `DEBUG` gates `/api/debug/gemini` + `docs` disabled when `DEBUG=False` + CORS whitelist + rate limit `10/hr, 30/min, 5/min` + tier quotas `5/day` free / `50/day` pro + auth `5/min` (CI exempt). Formula injection `= + - @` stripped on xlsx.
 

@@ -2,16 +2,22 @@
 
 import React, { useState } from 'react';
 import { Modal } from './Modal';
+import { getTutorialSteps, hasHiddenProSteps } from '../lib/tutorial';
+import type { Tier } from '../lib/types';
 
 interface HelpModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Current tier — gates the account-only tutorial steps. */
+  tier?: Tier;
 }
 
-type TabKey = 'workflow' | 'syntax' | 'engine' | 'review' | 'privacy';
+type TabKey = 'tutorial' | 'workflow' | 'syntax' | 'engine' | 'review' | 'privacy';
 
-export function HelpModal({ isOpen, onClose }: HelpModalProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>('workflow');
+export function HelpModal({ isOpen, onClose, tier = 'free' }: HelpModalProps) {
+  const [activeTab, setActiveTab] = useState<TabKey>('tutorial');
+  const tutorialSteps = getTutorialSteps(tier);
+  const showProTeaser = hasHiddenProSteps(tier);
 
   return (
     <Modal
@@ -47,20 +53,19 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
         </div>
 
         {/* Tab Navigation - Responsive Grid without horizontal scrollbar */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 p-2 sm:p-2.5 border-b border-slate-800 bg-slate-950/90 shrink-0">
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5 p-2 sm:p-2.5 border-b border-slate-800 bg-slate-950/90 shrink-0">
           {[
-            { id: 'workflow', label: '1. Workflow', fullLabel: '1. Workflow' },
-            { id: 'syntax', label: '2. Syntax', fullLabel: '2. Template Syntax' },
-            { id: 'engine', label: '3. Engines', fullLabel: '3. Extraction Engines' },
-            { id: 'review', label: '4. Review & Edit', fullLabel: '4. Review & Edit' },
-            { id: 'privacy', label: '5. Privacy & Security', fullLabel: '5. Privacy & Security' },
-          ].map((t, idx) => (
+            { id: 'tutorial', label: '1. Tutorial', fullLabel: '1. Tutorial' },
+            { id: 'workflow', label: '2. Workflow', fullLabel: '2. Workflow' },
+            { id: 'syntax', label: '3. Syntax', fullLabel: '3. Template Syntax' },
+            { id: 'engine', label: '4. Engines', fullLabel: '4. Extraction Engines' },
+            { id: 'review', label: '5. Review & Edit', fullLabel: '5. Review & Edit' },
+            { id: 'privacy', label: '6. Privacy', fullLabel: '6. Privacy & Security' },
+          ].map((t) => (
             <button
               key={t.id}
               onClick={() => setActiveTab(t.id as TabKey)}
               className={`px-2 py-2 rounded text-xs font-mono font-medium transition-all text-center cursor-pointer select-none flex items-center justify-center min-h-[38px] ${
-                idx === 4 ? 'col-span-2 sm:col-span-1' : ''
-              } ${
                 activeTab === t.id
                   ? 'bg-blue-600 text-white font-semibold shadow-xs border border-blue-500'
                   : 'text-slate-400 bg-slate-900/60 border border-slate-800/80 hover:text-slate-200 hover:bg-slate-800/60 hover:border-slate-700'
@@ -74,6 +79,75 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
 
         {/* Content Area */}
         <div className="p-4 sm:p-6 overflow-y-auto space-y-5 text-sm text-slate-300 min-h-0 flex-1">
+          {/* TAB 0: TUTORIAL */}
+          {activeTab === 'tutorial' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-xs font-mono uppercase tracking-wider text-blue-400 font-semibold mb-2">
+                  Step-by-Step Tutorial
+                </h3>
+                <p className="text-xs text-slate-400 leading-relaxed mb-1">
+                  A complete visual walkthrough — from opening the site to downloading your filled document. Every step shows exactly what you should see on screen.
+                </p>
+                <p className="text-[11px] text-slate-500 font-mono">
+                  {tier === 'pro'
+                    ? `Showing all ${tutorialSteps.length} steps, including the account-tier walkthrough.`
+                    : `Showing ${tutorialSteps.length} free-tier steps. Sign in to unlock the account-tier walkthrough.`}
+                </p>
+              </div>
+
+              <ol className="space-y-4">
+                {tutorialSteps.map((step) => (
+                  <li
+                    key={step.id}
+                    id={`tutorial-step-${step.id}`}
+                    className="rounded border border-slate-800 bg-slate-950 overflow-hidden"
+                  >
+                    <div className="flex items-start gap-2.5 p-3 pb-2">
+                      <span className="w-6 h-6 shrink-0 rounded-full bg-blue-600/30 text-blue-300 border border-blue-500/40 text-[11px] font-mono font-bold flex items-center justify-center">
+                        {step.num}
+                      </span>
+                      <div className="min-w-0">
+                        <h4 className="text-xs font-mono font-bold text-slate-100 uppercase">
+                          {step.title}
+                          {step.tier === 'pro' && (
+                            <span className="ml-2 text-[10px] normal-case font-sans font-semibold text-blue-300 bg-blue-950/60 border border-blue-800/60 rounded px-1.5 py-0.5">
+                              Account tier
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-xs text-slate-400 leading-relaxed mt-1">{step.body}</p>
+                        {step.tip && (
+                          <p className="text-[11px] text-slate-500 leading-relaxed mt-1.5">
+                            <span className="font-mono text-blue-400">Tip:</span> {step.tip}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={step.image}
+                      alt={`Step ${step.num}: ${step.title}`}
+                      loading="lazy"
+                      className="w-full border-t border-slate-800 bg-slate-900"
+                    />
+                  </li>
+                ))}
+              </ol>
+
+              {showProTeaser && (
+                <div className="p-3 bg-blue-950/20 border border-blue-800/40 rounded text-xs space-y-1">
+                  <span className="font-mono text-blue-400 font-semibold uppercase">
+                    Account-tier walkthrough hidden
+                  </span>
+                  <p className="text-slate-400">
+                    Steps for the DeepSeek account tier appear here automatically after you sign in. Request an account from the landing page or the daily-limit screen.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* TAB 1: WORKFLOW */}
           {activeTab === 'workflow' && (
             <div className="space-y-4">
@@ -102,7 +176,7 @@ export function HelpModal({ isOpen, onClose }: HelpModalProps) {
                       <h4 className="text-xs font-mono font-bold text-slate-200 uppercase">RAG & AI Extraction</h4>
                     </div>
                     <p className="text-xs text-slate-400">
-                      PyMuPDF parses the PDF text, creates semantic chunks, generates vector embeddings, and calls <strong>Google Gemini 3.6 Flash</strong> to locate the exact data you need.
+                      PyMuPDF parses the PDF text, creates semantic chunks, generates vector embeddings, and calls {tier === 'pro' ? <strong>DeepSeek</strong> : <strong>Google Gemini 3.6 Flash</strong>} to locate the exact data you need.
                     </p>
                   </div>
 
