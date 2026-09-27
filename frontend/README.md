@@ -54,13 +54,14 @@ frontend/
 │   │   ├── DownloadView.tsx      # Filled doc + summary report download (RFC5987 name), “Start New”
 │   │   ├── BackendWakingBanner.tsx # Checking / Waking (Retry 1/12) / Live / Offline; calls api.checkHealth
 │   │   ├── HistoryModal.tsx      # localStorage recentSessions (5 max) + clear + download stub
-│   │   ├── HelpModal.tsx         # 4-tab in-app user guide (mirrors docs/1-product/USER_GUIDE.md)
+│   │   ├── HelpModal.tsx         # 6-tab in-app guide, Tutorial first (screenshots in public/guide/, account steps gated by tier)
 │   │   ├── CitationModal.tsx / ReExtractModal.tsx / AddFieldModal.tsx # Verify & hint-driven re-extract
 │   │   ├── Footer.tsx
 │   │   └── Toast.tsx             # success/warning/error 3.8s
 │   ├── lib/
 │   │   ├── api.ts                # ApiClient (BASE_URL from NEXT_PUBLIC_API_URL)
 │   │   ├── types.ts              # JobProgress, FieldMapping (extractedBy, fallbackReason, isSkipped), ExtractionResult (hasFallback, engineUsed)
+│   │   ├── tutorial.ts           # Tutorial step data (free + account steps, tier-gated)
 │   │   └── mockData.ts           # MOCK_FIELDS (8), MOCK_GENERATION, MOCK_DEMO_SESSION
 │   └── tests/
 │       ├── models.test.mjs       # 5/5

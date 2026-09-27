@@ -570,6 +570,7 @@ export default function Home() {
       <HelpModal
         isOpen={isHelpOpen}
         onClose={() => setIsHelpOpen(false)}
+        tier={tier}
       />
 
       {/* Tier Login Modal */}

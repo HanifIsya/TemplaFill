@@ -9,7 +9,7 @@
 [![Gemini](https://img.shields.io/badge/AI-Gemini%203.6%20Flash%20%7C%20DeepSeek-4285F4?logo=google)](https://ai.google.dev/)
 [![Embeddings](https://img.shields.io/badge/Embeddings-gemini--embedding--001-blue)](https://ai.google.dev/)
 [![Evaluation Benchmark](https://img.shields.io/badge/Evaluation%20F1-1.00%20(5%20Domains)-success)](docs/5-quality/EVAL.md)
-[![Test Suite](https://img.shields.io/badge/Tests-214%20Pytest%20%7C%2059%20Frontend-brightgreen)](tests/)
+[![Test Suite](https://img.shields.io/badge/Tests-286%20Pytest%20%7C%2064%20Frontend-brightgreen)](tests/)
 
 ---
 
@@ -17,6 +17,7 @@
 
 - [Overview](#-overview)
 - [Key Features](#-key-features)
+- [**Visual Tutorial (Step by Step)**](#-visual-tutorial-step-by-step)
 - [System Architecture & Workflow](#-system-architecture--workflow)
 - [Template Formats & Placeholder Syntax](#-template-formats--placeholder-syntax)
 - [Dual-Engine Resilience & Fallback Strategy](#-dual-engine-resilience--fallback-strategy)
@@ -47,6 +48,15 @@ In legal, financial, procurement, and administrative workflows, organizations ex
 4. **Output Document**: Fully populated template document preserving 100% of the original typography, run-level formatting, table designs, formulas, and slide compositions, with per-field citations and engine provenance.
 
 TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Retention** architecture, eliminating mandatory account registration and ensuring that user documents remain private and ephemeral. Users who need a Google-free, higher-quota engine can request the shared **account tier** (DeepSeek) shown in the tier section below.
+
+---
+
+## 📖 Visual Tutorial (Step by Step)
+
+**New to TemplaFill?** Follow the complete screenshot-by-screenshot walkthrough:
+
+- **📄 [docs/1-product/TUTORIAL.md](docs/1-product/TUTORIAL.md)** — 18 numbered steps covering the free tier (Part A) and the account tier (Part B), with a screenshot for every action.
+- **In-app**: open the app, click **Guide** in the Navbar, and select the **1. Tutorial** tab. Account-tier steps unlock automatically after you sign in.
 
 ---
 
