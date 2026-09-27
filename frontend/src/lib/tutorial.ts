@@ -54,8 +54,37 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     tier: 'free',
   },
   {
-    id: 'processing',
+    id: 'example-source',
     num: 4,
+    title: 'Inside the Example Source PDF',
+    body:
+      'The sample source is a one-page contract holding the facts to extract: contract number CTR-2026-889, signing date 2026-08-15, party PT Maju Jaya, and contract value $50,000. It never mentions a witness — so the witness field will stay unfilled. The AI only fills what the source actually says.',
+    tip: 'Your own source must be a text-based PDF with a real text layer; scanned images need OCR first.',
+    image: '/guide/21-example-source.jpg',
+    tier: 'free',
+  },
+  {
+    id: 'example-template',
+    num: 5,
+    title: 'Inside the Example Template',
+    body:
+      'The template is a Word document with {{placeholder}} markers where the values should go. Each marker name — like {{contract_number}} — tells TemplaFill which fact to look for in the source PDF.',
+    tip: 'Placeholders can also use <<field>>, [field], {field}, or __field__ syntax — all are supported.',
+    image: '/guide/22-example-template.jpg',
+    tier: 'free',
+  },
+  {
+    id: 'example-result',
+    num: 6,
+    title: 'What the Filled Result Looks Like',
+    body:
+      'After extraction, every placeholder that matched a source fact is replaced by its value, with the original formatting preserved. Here {{witness_name}} stays as-is because the source has no witness — which is why you should always review fields before downloading.',
+    image: '/guide/23-example-result.jpg',
+    tier: 'free',
+  },
+  {
+    id: 'processing',
+    num: 7,
     title: 'Start the AI Extraction',
     body:
       'Click "Begin Extraction". Four stages run automatically: PDF text/table extraction, semantic chunking and embedding, template placeholder inspection, and structured AI extraction.',
@@ -65,7 +94,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'review-split',
-    num: 5,
+    num: 8,
     title: 'Review Extracted Values (Split View)',
     body:
       'Every field is shown with its extracted value, a confidence score, and the source page. The left panel shows the exact snippet from the source document that the value came from.',
@@ -75,7 +104,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'review-table',
-    num: 6,
+    num: 9,
     title: 'Review in Table View',
     body:
       'Switch to "Table" view for a compact spreadsheet-style overview — ideal for templates with many fields. All the same actions are available on each row.',
@@ -84,7 +113,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'citation',
-    num: 7,
+    num: 10,
     title: 'Check the Source Citation',
     body:
       'Click "Source p.1" (or "View Citation") on any field to open the citation modal. It shows the exact excerpt from the PDF, the extracted value, and the similarity score.',
@@ -93,7 +122,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'reextract',
-    num: 8,
+    num: 11,
     title: 'Re-Extract a Field with a Hint',
     body:
       'If a value looks wrong, click "Re-extract" and type a hint such as "Look at the signature block on page 2". The AI re-runs extraction for that field only, with your hint as extra context.',
@@ -102,7 +131,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'editing-open',
-    num: 9,
+    num: 12,
     title: 'Edit a Value Manually',
     body:
       'Click "Edit" on a row to change the value by hand. Type the corrected text, then click the green check to save (or the cross to cancel).',
@@ -111,7 +140,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'edited',
-    num: 10,
+    num: 13,
     title: 'Saved Edits Are Marked',
     body:
       'Saved edits replace the extracted value and a "Field Updated" toast confirms the change. You can keep editing, re-extracting, or skip fields you do not need.',
@@ -120,7 +149,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'download',
-    num: 11,
+    num: 14,
     title: 'Generate and Download the Filled Document',
     body:
       'Click "Generate Filled Document" at the bottom of the review screen. On the Export step, download the populated document or a JSON audit log of every value and edit.',
@@ -130,7 +159,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'history',
-    num: 12,
+    num: 15,
     title: 'Find Past Sessions in History',
     body:
       'The clock icon in the Navbar opens your recent sessions. History is stored only in your browser (localStorage) — never on a server database — and each entry can be downloaded as a JSON metadata record.',
@@ -139,7 +168,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'account-request',
-    num: 13,
+    num: 16,
     title: 'Hit the Free Daily Limit? Request an Account',
     body:
       'After 5 free jobs in a day you will see this screen. The account tier runs on DeepSeek instead of Google, keeps documents off Google entirely, and raises the limit to 50 jobs/day. Send an email and the owner replies with the shared credentials.',
@@ -148,7 +177,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'login',
-    num: 14,
+    num: 17,
     title: 'Sign In to the Account Tier',
     body:
       'Click "Sign in" in the Navbar and enter the shared username and password you received by email. There is no self-registration.',
@@ -159,7 +188,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   // ----- Account tier walkthrough (only shown to signed-in users) -----
   {
     id: 'pro-navbar',
-    num: 15,
+    num: 18,
     title: 'Account Tier Active',
     body:
       'After signing in, the Navbar badge switches to "Account · DeepSeek" and the landing banner confirms that documents are no longer sent to Google. Your daily limit becomes 50 jobs.',
@@ -168,7 +197,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'pro-processing',
-    num: 16,
+    num: 19,
     title: 'Processing Runs on DeepSeek',
     body:
       'The pipeline is identical, but extraction runs on the DeepSeek engine with no Google embedding calls at all — retrieval is bypassed and document chunks are sent sequentially to DeepSeek.',
@@ -177,7 +206,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'pro-review',
-    num: 17,
+    num: 20,
     title: 'DeepSeek Provenance Badges',
     body:
       'Each extracted field is labelled "DeepSeek" instead of "Gemini 3.6 Flash". If the DeepSeek API is ever unavailable, the job falls back to the local heuristic engine only — never to Google.',
@@ -186,7 +215,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   },
   {
     id: 'pro-download',
-    num: 18,
+    num: 21,
     title: 'Export from the Account Tier',
     body:
       'Confirm and download exactly as on the free tier. The audit log records the DeepSeek engine as the extractor for every field.',

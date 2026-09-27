@@ -5,6 +5,9 @@
 ---
 
 ## Last Updated
+- **Date**: 2026-09-27 (tutorial example-shots session)
+- **By**: OpenCode
+- **Summary**: **Tutorial now shows what is inside the demo files (user-directed, frontend + docs zones)**: added 3 steps to the in-app Guide and `docs/1-product/TUTORIAL.md` — **step 4** the source contract PDF (CTR-2026-889, 2026-08-15, PT Maju Jaya, $50,000 — and no witness), **step 5** the template with `{{placeholders}}`, **step 6** the filled result generated with the **real backend generator** (unmatched `{{witness_name}}` stays visible) — each with a brief explanation of what to notice. New screenshots `21-example-source.jpg`, `22-example-template.jpg`, `23-example-result.jpg` (~87 KB total); tutorial renumbered 18 → **21 steps** (free 1–17, account 18–21). Verified against the local production build with Playwright (free tier renders 17 steps in correct order; all three images load) — Playwright runs outside the repo. Frontend **64/64 tests green**, lint 0, build clean. README/CHANGELOG counts updated. No shared config files touched.
 - **Date**: 2026-09-27 (security re-audit session)
 - **By**: OpenCode
 - **Summary**: **Full cyber-security re-audit + fixes (PR #9 merged, `security/audit-2026-09-27`)**: double-checked every API key and the shared credential across the working tree AND the full git history (76 commits / 1,051 blobs) — **no secret has ever been committed**; only `NEXT_PUBLIC_API_URL` reaches the browser; keys are never logged. Found and fixed **AUDIT-01 (High)**: `X-Forwarded-For` spoofing bypassed every per-IP control on the live deployment (5/day free quota, 50/day pro cap, 5/min login limit) because Render sets `FORWARDED_ALLOW_IPS=*` and uvicorn rewrote `request.client` from the leftmost attacker-controlled XFF entry. Fix: `--no-proxy-headers` + `TRUSTED_PROXIES=*` + `get_client_ip()` prefers `CF-Connecting-IP` (Cloudflare/Render edge). Also fixed AUDIT-02 (raw internal job error returned to clients), AUDIT-03 (8 deps on `~=` despite the pinned claim), AUDIT-04 (SECURITY.md inaccuracies). **295 backend tests green** (9 new), CI green. **Live re-verified after redeploy**: rotating XFF now returns a constant bucket. Report: `docs/6-security/CYBER_SECURITY_AUDIT_2026-09-27.md`. Note: the Render service is NOT Blueprint-managed — the two deployment settings were applied via the Render API and are documented in SECURITY/DEPLOYMENT.
@@ -123,6 +126,14 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 - **Priority**: medium
 - **Status**: done
 
+### Request: OpenCode added example-document screenshots to the tutorial (frontend + docs zones, user-directed)
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: frontend/src/lib/tutorial.ts (3 new steps, renumbered 18 → 21), frontend/public/guide/21-example-source.jpg + 22-example-template.jpg + 23-example-result.jpg (**new**), docs/1-product/TUTORIAL.md (rewritten with the new steps + explanations), README.md (step count), CHANGELOG.md. No shared config files touched; no component code changed.
+- **Description**: User asked to show what is actually inside the example files: the source PDF content (step 4), the template placeholders (step 5), and the generated filled result (step 6) with a brief explanation each. The result screenshot was produced by running the **real backend generator** on the demo pair, so it matches what users receive (`{{witness_name}}` intentionally left unfilled). Verified in the local production build (free tier = 17 steps, images load). If you regenerate guide shots later, keep the `21/22/23-example-*` names.
+- **Priority**: medium
+- **Status**: done
+
 
 ### Request: OpenCode re-pointing shared `DEEPSEEK_*` vars at kenari.id gateway (user-directed)
 - **From**: OpenCode
@@ -235,6 +246,7 @@ _No known issues._
 | 2026-09-27 | OpenCode | **Task 6.16 live acceptance (user-directed)**: verified Render deployment via API (env vars + deploy `716606e`), then ran the live E2E — login → pro upload → results (`engine_used: deepseek`, 5/5 `extracted_by: deepseek`, no fallback) → confirm → download (37,760-byte docx, brace-free except the intentionally-unfilled not-found field); free-tier upload still `gemini`; wrong password 401; quota counters correct. **Live DeepSeek eval 1.00 PASS** all metrics. Phase 6 closed (6.16 → done). |
 | 2026-09-27 | OpenCode | **Full security re-audit + fixes (PR #9)**: credential double-check (working tree + 76 commits / 1,051 blobs) → clean; AUDIT-01 XFF quota evasion fixed (`--no-proxy-headers` + `TRUSTED_PROXIES=*` + CF-Connecting-IP-first resolution) and **live-verified** (rotating XFF returns a constant bucket); AUDIT-02 generic job error; AUDIT-03 exact dependency pins; AUDIT-04 SECURITY.md corrections. 295 backend tests (9 new). Report `docs/6-security/CYBER_SECURITY_AUDIT_2026-09-27.md`. |
 | 2026-09-27 | OpenCode | **Visual tutorial shipped (user-directed, both zones)**: captured 20 screenshots from the live site via Playwright (run outside the repo) — free flow (landing→upload→demo→processing→review split/table→citation→re-extract→edit→download→history→account-request→login) + account flow (DeepSeek badge/processing/review/export). New frontend/src/lib/tutorial.ts (18 steps, tier-gated) + **HelpModal Tutorial tab as tab 1** (account steps only for signed-in users; free users see a teaser) + 	ier prop wired from page.tsx; new docs/1-product/TUTORIAL.md (Parts A/B + troubleshooting) linked from USER_GUIDE/README. 5 new frontend tests (screenshot existence, tier gating, step integrity) → **64/64 green**, lint 0 warnings, build clean; tier gating verified against the local production build (free=14 steps, pro=18). All shots optimized JPEG, 0.96 MB total. |
+| 2026-09-27 | OpenCode | **Tutorial example-document steps (user-directed, both zones)**: added steps 4–6 showing what is inside the demo files — source contract PDF, template with `{{placeholders}}`, and the **filled result produced by the real backend generator** (unmatched `{{witness_name}}` stays visible) — each with a brief explanation. New shots `21/22/23-example-*.jpg` (87 KB); tutorial renumbered 18 → **21 steps** (free 1–17, account 18–21); TUTORIAL.md rewritten with content tables/snippets. Verified in the local production build via Playwright (free tier renders 17 steps in order, all 3 images load). 64/64 frontend tests, lint 0, build clean. README/CHANGELOG/ADR-021 addendum updated. |
 
 
 
