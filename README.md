@@ -382,7 +382,7 @@ The application supports the following configurable environment variables:
 | `FREE_JOBS_PER_DAY` | No | `5` | Free-tier daily cap per IP |
 | `PRO_JOBS_PER_DAY` | No | `50` | Account-tier daily cap per IP (cost guard) |
 | `DATABASE_URL` | No | `postgresql+asyncpg://...` | Connection URI for Supabase / PostgreSQL |
-| `CORS_ORIGINS` | No | `http://localhost:3000` | Whitelisted frontend origins (comma-separated) |
+| `CORS_ORIGINS` | No | `http://localhost:3000` | Whitelisted frontend origins (comma-separated). **Production must include the deployed frontend origin**, e.g. `https://templa-fill.vercel.app,http://localhost:3000`, or browsers get `400 Disallowed CORS origin` |
 | `NEXT_PUBLIC_API_URL` | Yes (Frontend) | `http://localhost:8000/api` | Base URL for backend API requests |
 | `MAX_SOURCE_FILE_SIZE_MB` | No | `50` | Maximum allowable source PDF size (MB) |
 | `MAX_TEMPLATE_FILE_SIZE_MB`| No | `20` | Maximum allowable template document size (MB) |

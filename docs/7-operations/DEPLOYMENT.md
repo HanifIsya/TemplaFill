@@ -97,6 +97,11 @@ graph LR
 #    TRUSTED_PROXIES=*  <- REQUIRED on Render (service only reachable via the
 #      platform load balancer). get_client_ip() then prefers CF-Connecting-IP
 #      (set by Cloudflare at Render's edge) over client-supplied headers.
+#    CORS_ORIGINS=https://templa-fill.vercel.app,http://localhost:3000
+#      <- REQUIRED: must include the exact deployed frontend origin. If it only
+#      lists localhost, the browser blocks every API call with
+#      "Disallowed CORS origin" (400) while /api/health still works — this looks
+#      like a backend outage but is purely a CORS allow-list miss.
 
 # 4. Add Celery worker:
 #    Create separate Background Worker service

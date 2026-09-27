@@ -131,7 +131,7 @@ DEBUG=true
 # ----- Backend Server -----
 BACKEND_HOST=0.0.0.0
 BACKEND_PORT=8000
-CORS_ORIGINS=http://localhost:3000     # Comma-separated allowed origins
+CORS_ORIGINS=http://localhost:3000     # Comma-separated allowed origins. In production include the deployed frontend origin, e.g. https://templa-fill.vercel.app,http://localhost:3000
 
 # ----- Frontend -----
 NEXT_PUBLIC_API_URL=http://localhost:8000/api

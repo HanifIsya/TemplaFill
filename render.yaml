@@ -21,8 +21,11 @@ services:
       - key: DEBUG
         value: "false"
       # Exact allowed origins only — set your deployed frontend URL(s) here.
+      # The deployed frontend origin MUST be listed or the browser blocks every
+      # API call with "Disallowed CORS origin" (health checks still work because
+      # they are not preflighted, which makes this look like a network outage).
       - key: CORS_ORIGINS
-        value: "http://localhost:3000"
+        value: "https://templa-fill.vercel.app,http://localhost:3000"
       - key: DATABASE_URL
         sync: false
       - key: GEMINI_API_KEY
