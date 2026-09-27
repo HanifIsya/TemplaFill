@@ -259,6 +259,22 @@ def get_client_ip(request: Request) -> str:
     Forwarded headers are only honored when the direct peer is a configured
     trusted proxy (TRUSTED_PROXIES). Otherwise the socket peer is used, so a
     random client cannot spoof its IP to evade rate limits.
+
+    AUDIT-01 (2026-09-27): on Render, ``FORWARDED_ALLOW_IPS=*`` made uvicorn
+    rewrite ``request.client.host`` from the **leftmost** ``X-Forwarded-For``
+    entry, which is attacker-controlled — this defeated every per-IP quota and
+    rate limit (live-proven). Deployments MUST therefore:
+      1. start uvicorn with ``--no-proxy-headers`` so the socket peer stays
+         authentic (the platform load balancer), and
+      2. set ``TRUSTED_PROXIES`` (``*`` when the app is only reachable through
+         that load balancer).
+    With both in place this function runs its own, spoof-resistant resolution:
+      1. ``CF-Connecting-IP`` — set/overwritten by Cloudflare (Render's edge);
+         the authoritative client IP and not client-controllable.
+      2. Rightmost ``X-Forwarded-For`` hop — appended by the nearest proxy;
+         leftmost entries are attacker-controlled and ignored.
+      3. ``X-Real-IP``.
+      4. The socket peer.
     """
     peer = request.client.host if request.client else "unknown"
 
@@ -268,9 +284,14 @@ def get_client_ip(request: Request) -> str:
     if not _is_trusted_proxy(peer, trusted):
         return peer
 
-    # Peer is a trusted proxy. Use the RIGHT-most forwarded hop: that is the
-    # value appended by the proxy nearest to us. Any left-most entries are
-    # attacker-controlled and therefore ignored (spoof-resistant).
+    # 1. Platform-authoritative header (Cloudflare overwrites it at the edge).
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        candidate = cf_ip.strip()
+        if candidate:
+            return candidate
+
+    # 2. Rightmost X-Forwarded-For hop (appended by the nearest trusted proxy).
     xff = request.headers.get("x-forwarded-for")
     if xff:
         hops = [h.strip() for h in xff.split(",") if h.strip()]
@@ -280,9 +301,11 @@ def get_client_ip(request: Request) -> str:
                 if not _is_trusted_proxy(candidate, trusted):
                     return candidate
             return hops[-1]
+    # 3. X-Real-IP fallback.
     real_ip = request.headers.get("x-real-ip")
     if real_ip:
         return real_ip.strip()
+    # 4. Socket peer.
     return peer
 
 
