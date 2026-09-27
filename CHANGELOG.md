@@ -57,8 +57,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Verified (task 6.15)
 - **DeepSeek API terms (2026-09-27)**: the Open Platform ToS and Privacy Policy contain **no** no-training / no-retention commitment for API inputs. Verdict: **no such claim is published**; account-tier UI copy states only the verified fact that no Google calls occur. Recorded in `DATA_PRIVACY.md`.
 
-### Pending
-- **Live staging E2E with real provider keys** (`DEEPSEEK_API_KEY` + `TIER_ACCOUNT_PASSWORD_HASH` on Render) is the user's final acceptance step (task 6.16); offline eval PASS for both providers already in CI.
+### Verified live (task 6.16, 2026-09-27)
+- **Account tier on Render** runs via the **kenari.id** OpenAI-compatible gateway (`kn-...` key, `deepseek-v4-1-flash`, hidden thinking disabled): live pro upload returned `engine_used: deepseek` with 5/5 fields `extracted_by: deepseek` and **no fallback**; confirm + download produced a valid filled docx; free tier unchanged (`gemini`); wrong password → generic 401; daily quota counters accurate.
+- **Live DeepSeek eval**: **1.00 PASS** on every metric (precision/recall/F1/hallucination/not-found), real API calls. Cost ≈ Rp 0.2–0.5 per job.
 
 ---
 
