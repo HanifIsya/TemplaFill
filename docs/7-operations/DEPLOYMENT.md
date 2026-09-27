@@ -68,6 +68,9 @@ graph LR
 
 # 2. Set environment variables in Vercel dashboard:
 #    NEXT_PUBLIC_API_URL=https://api.templafill.com/api
+#    NEXT_PUBLIC_SITE_URL=https://templa-fill.vercel.app   <- canonical origin for SEO
+#    NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=<GSC token>      <- optional, Search Console
+#    See docs/7-operations/SEO.md for the full registration runbook.
 
 # 3. Configure build settings:
 #    Root Directory: frontend
@@ -77,6 +80,8 @@ graph LR
 # 4. Deploy
 #    Automatic on push to `main` branch
 ```
+
+> **SEO artifacts** (`/robots.txt`, `/sitemap.xml`, `/manifest.webmanifest`, `/opengraph-image`, `/twitter-image`) are generated at build time from `frontend/src/lib/seo.ts`. They are static, so they stay available while the Render backend is asleep.
 
 ### Backend (Render)
 
