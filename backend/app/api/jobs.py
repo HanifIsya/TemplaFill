@@ -82,7 +82,11 @@ async def get_job_results(request: Request, job_id: str):
     if denied:
         return denied
     if job.status == JobStatus.failed:
-        return _error("FAILED", job.error or "Job failed", status=500)
+        # AUDIT-02: never echo raw internal exception text (job.error) to the
+        # client — it can contain parser/library internals. Log it for operators
+        # and return a stable generic message.
+        logger.warning("Job %s failed: %s", job_id, job.error)
+        return _error("FAILED", "Job failed during processing", status=500)
     if job.status != JobStatus.completed:
         # Per API.md, results only for completed; return 404-like with status?
         # We return error with code NOT_COMPLETED

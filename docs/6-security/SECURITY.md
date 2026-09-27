@@ -32,9 +32,9 @@ TemplaFill processes **user-uploaded documents** that may contain sensitive, con
 | **API Keys** | Environment variables | Never in code, never in git, rotated quarterly. The Gemini key is sent via the `x-goog-api-key` header, never in a URL. |
 
 ### Data Isolation
-- Each user's documents are stored in isolated paths: `uploads/{user_id}/{job_id}/`
-- Users can only access their own jobs via API (enforced at API layer)
-- Anonymous users: isolated by session token
+- **Documents are never written to disk** — uploads live in process RAM only (`JobManager`); `UPLOAD_DIR` exists in config but the pipeline does not persist files.
+- Users can only access their own jobs via API: every `/api/jobs/{job_id}/*` route requires the signed per-job session token (404 without it).
+- Anonymous users: isolated by the per-job session token issued at upload.
 
 ### Data Retention
 | Data Type | Retention Period | Auto-Delete |
@@ -73,9 +73,9 @@ TemplaFill processes **user-uploaded documents** that may contain sensitive, con
 ```
 
 ### File Storage
-- Files stored outside web root (not directly accessible via URL)
-- Served via authenticated API endpoint with signed URLs
-- Temporary files cleaned up after processing completes
+- No on-disk storage: files are held in RAM for the job lifetime only
+- Served via the authenticated download endpoint (`GET /api/jobs/{id}/download`, session-token gated)
+- The generated document is produced in memory and streamed to the client; nothing is written to a web root
 
 ---
 
@@ -111,10 +111,11 @@ credential**, no per-user accounts:
 - `POST /api/auth/login` compares the username in constant time and the password
   against a **salted `hashlib.scrypt` hash** (`TIER_ACCOUNT_PASSWORD_HASH`); the
   plaintext password is never stored in code or git.
-- Success issues a **signed tier token** (HMAC-SHA256, 30-day expiry) with a
-  `purpose:"tier"` claim. Per-job tokens carry `purpose:"job"`, so **tier and job
-  tokens are mutually invalid** (a stolen job token cannot become a tier token and
-  vice versa). This is asserted by backend tests (T4).
+- Success issues a **signed tier token** (HMAC-SHA256, 30-day expiry). Isolation
+  from per-job tokens is **structural**: tier tokens use a 4-part payload
+  (`tier.<tier>.<exp>.<nonce>`) while job tokens use a 3-part payload
+  (`<job_id>.<exp>.<nonce>`), so neither verifies as the other. This is asserted
+  by backend tests (T2–T4).
 - The token is set as an HttpOnly cookie and returned for the `localStorage`
   fallback (`tf_tier_token`).
 - `POST /api/upload` accepts the tier token via `X-Session-Token`; a valid token
@@ -134,7 +135,7 @@ credential**, no per-user accounts:
 
 ### Input Validation (VULN-1→10, ADR-012)
 
-- Backend Pydantic: `Job`/`FieldResult`/`FileInfo` + strict extension/magic checks (`upload.py:53` `%PDF`/`PK`) + `sanitize_filename()` (strip `../`/null chars, whitelist `a-zA-Z0-9._-`, `__+→_` collapse, 128-char cap) + `sanitize_text_input(5000/2000)` (null byte + `[\x01-\x08\x0B\x0C\x0E-\x1F]` strip) + download `Content-Disposition: filename*=UTF-8''...` RFC5987 (`jobs.py:325`) + no `str(e)` leak (generic `msg`) + `DEBUG` gates `/api/debug/gemini` + `/docs` disabled when `DEBUG=False` + CORS whitelist (`GET POST PATCH PUT DELETE OPTIONS` + explicit headers) (`main.py:37`).
+- Backend Pydantic: `Job`/`FieldResult`/`FileInfo` + strict extension/magic checks (`upload.py:53` `%PDF`/`PK`) + `sanitize_filename()` (strip `../`/null chars, whitelist `a-zA-Z0-9._-`, `__+→_` collapse, 128-char cap) + `sanitize_text_input(5000/2000)` (null byte + `[\x01-\x08\x0B\x0C\x0E-\x1F]` strip) + download `Content-Disposition: filename*=UTF-8''...` RFC5987 (`jobs.py:325`) + failed jobs return a generic message (internal cause is logged server-side, never echoed) + `DEBUG` gates `/api/debug/gemini` + `/docs` disabled when `DEBUG=False` + CORS allow-list (`GET, POST, PATCH, OPTIONS` + explicit headers) (`main.py`).
 - Frontend: React JSX escapes all fields/snippets; no `dangerouslySetInnerHTML`; `DualDropzone` 50MB/20MB client-side checks mirror backend.
 - SQL injection: SQLAlchemy ORM parameterized; vector `VECTOR(768)` via `asyncpg`.
 - XSS: React escaping + triple-enforced CSP (see above); `X-XSS-Protection: 0` is intentional per modern guidance.
@@ -152,12 +153,19 @@ credential**, no per-user accounts:
 | Re-extraction (`POST /re-extract` + alias `PATCH re_extract`) | 5 | per minute per IP | `re_extract` | `5/min`, hint `max_len=2000` sanitized |
 | Gemini bursts (embeddings/extraction) | 15 RPM global | per process | Gemini throttle | `4s` embedder + `1.2s` extractor + backoff |
 
-**Client IP resolution (VULN-05):** `get_client_ip()` only trusts
-`X-Forwarded-For`/`X-Real-IP` when the direct peer is listed in `TRUSTED_PROXIES`
-(IP or CIDR), and then uses the right-most hop, so clients cannot spoof their IP
-to evade limits. The limiter is bounded (`MAX_TRACKED_KEYS`, empty-bucket pruning)
-so it cannot grow without limit. Set `TRUSTED_PROXIES` to your platform's proxy
-range in production.
+**Client IP resolution (VULN-05, hardened 2026-09-27):** `get_client_ip()` only
+trusts `X-Forwarded-For`/`X-Real-IP` when the direct peer is listed in
+`TRUSTED_PROXIES` (IP or CIDR), and then uses the **right-most** hop, so clients
+cannot spoof their IP to evade limits. The limiter is bounded (`MAX_TRACKED_KEYS`,
+empty-bucket pruning) so it cannot grow without limit.
+
+> **AUDIT-01 (2026-09-27):** on Render, `FORWARDED_ALLOW_IPS=*` makes uvicorn
+> rewrite `request.client.host` from the client-supplied **leftmost**
+> `X-Forwarded-For` entry before the app sees it — this defeated all per-IP
+> controls until `TRUSTED_PROXIES=*` was set **and** uvicorn was started with
+> `--no-proxy-headers`. With both in place the app reads the rightmost hop
+> (appended by Render's load balancer) and ignores attacker-supplied entries.
+> See `CYBER_SECURITY_AUDIT_2026-09-27.md`.
 
 ### Resource / DoS Controls (VULN-02, VULN-03, VULN-11)
 
@@ -186,7 +194,7 @@ Content-Security-Policy: default-src 'self';
   style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
   font-src 'self' https://fonts.gstatic.com data:;
   img-src 'self' data: blob:;
-  connect-src 'self' https://*.onrender.com https://*.vercel.app http://localhost:8000;
+  connect-src 'self' https://*.onrender.com;          # + https://*.vercel.app in vercel.json, + http://localhost:8000 in next.config.ts
   frame-ancestors 'none'
 X-Content-Type-Options: nosniff
 X-Frame-Options: DENY
@@ -243,8 +251,11 @@ Enforced in middleware `SecurityHeadersMiddleware` + `nextConfig.headers()` + Ve
 
 Initial audit by **Antigravity** 2026-09-23. **Revised 2026-09-26** after a
 white-box assessment (`docs/6-security/CYBER_SECURITY_REPORT.md`) found the
-original sign-off overstated several controls. The table below reflects the
-current, implemented state.
+original sign-off overstated several controls. **Re-audited 2026-09-27**
+(`docs/6-security/CYBER_SECURITY_AUDIT_2026-09-27.md`) — credential exposure
+double-checked (working tree + full git history), `X-Forwarded-For` quota-evasion
+fixed (AUDIT-01), raw job-error leakage fixed (AUDIT-02). The table below reflects
+the current, implemented state.
 
 | Checkpoint | Status | Assessment Details |
 |---|---|---|
@@ -252,9 +263,11 @@ current, implemented state.
 | **Formula / DDE Injection** | **PASS (implemented 2026-09-26)** | `neutralize_formula()` prefixes dangerous values (`=`, `+`, `-`, `@`, leading control chars) with an apostrophe for spreadsheet output while preserving legitimate numbers (`generator.py`). Unit-tested. |
 | **Content Security Policy (CSP)** | **PASS** | Strict CSP in `vercel.json` / `next.config.ts`; `nosniff`, `DENY` frames, no unauthorized script sources. |
 | **Per-Job Authorization** | **PASS (implemented 2026-09-26)** | Signed per-job session tokens; `/jobs/*` returns 404 without a valid token. Full user accounts remain Phase 2. |
-| **Token Storage** | **PLANNED** | There is no JWT account system yet; the previous "JWT in localStorage" claim was inaccurate. The current per-job token is held in memory in the client. |
+| **Client-IP Trust / Quota Integrity** | **PASS (implemented 2026-09-27)** | `TRUSTED_PROXIES=*` + uvicorn `--no-proxy-headers`; rightmost-hop resolution; XFF spoof live re-test shows the real bucket. |
+| **Secret Exposure** | **PASS (re-verified 2026-09-27)** | No real credential in the working tree or any of 76 commits / 1,051 blobs; only `NEXT_PUBLIC_API_URL` reaches the browser; keys never logged. |
+| **Token Storage** | **PLANNED** | There is no JWT account system yet; the previous "JWT in localStorage" claim was inaccurate. Per-job and tier tokens are held in memory / localStorage by the client. |
 | **Client-Side File Validation** | **PASS** | DualDropzone enforces 50MB PDF / 20MB Office limits; mirrored server-side with a body cap and ZIP-bomb guard. |
-| **Dependency Vulnerabilities** | **PASS (2026-09-26)** | Backend pinned and `pip-audit` clean in CI (blocking); `python-multipart` bumped to a CVE-fixed release. |
+| **Dependency Vulnerabilities** | **PASS (2026-09-27)** | All direct dependencies pinned to exact versions; `pip-audit` clean in CI (blocking). |
 
 **Overall Security Status**: 🟢 **VERIFIED** — controls in this document are
 implemented unless explicitly marked *PLANNED*.

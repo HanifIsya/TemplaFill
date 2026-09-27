@@ -7,7 +7,11 @@ services:
     runtime: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    # AUDIT-01: --no-proxy-headers stops uvicorn from rewriting request.client
+    # with the attacker-controlled leftmost X-Forwarded-For entry. The app then
+    # resolves the client IP itself: CF-Connecting-IP (set by Cloudflare at
+    # Render's edge) → rightmost XFF hop → X-Real-IP → socket peer.
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-proxy-headers
     healthCheckPath: /api/health
     plan: free
     autoDeploy: true
@@ -38,9 +42,13 @@ services:
         value: "true"
       - key: SESSION_COOKIE_SAMESITE
         value: "none"
-      # Set to Render's proxy egress IP ranges that appear in X-Forwarded-For.
+      # AUDIT-01: the service is only reachable through Render's load balancer,
+      # so every direct peer is a trusted proxy. get_client_ip() then prefers
+      # CF-Connecting-IP (set by Cloudflare at Render's edge) and falls back to
+      # the RIGHT-most X-Forwarded-For hop. Leftmost attacker-supplied entries
+      # are ignored.
       - key: TRUSTED_PROXIES
-        sync: false
+        value: "*"
       - key: MAX_REQUEST_BODY_MB
         value: "90"
       - key: MAX_CONCURRENT_JOBS
