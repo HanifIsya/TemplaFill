@@ -370,10 +370,11 @@
 - **Decision**:
   1. **Single image source**: all tutorial screenshots live in frontend/public/guide/ (served in-app); docs/1-product/TUTORIAL.md references them by relative path (no duplication).
   2. **In-app**: HelpModal gains a **Tutorial** tab as tab 1, rendered from the plain-data module frontend/src/lib/tutorial.ts; **account-tier steps render only when 	ier === 'pro'**, with a teaser for free users.
-  3. **Capture pipeline outside the repo**: Playwright + Chromium installed in a temp dir; only optimized JPEGs (<1 MB total) are committed. No new npm dependency enters package.json/CI.
+  3. **Capture pipeline outside the repo**: Playwright + Chromium installed in a temp dir; only optimized JPEGs (~1.1 MB total incl. the later example-document shots) are committed. No new npm dependency enters package.json/CI.
   4. **Tier gating is unit-tested** (DOM-free, like the rest of the frontend suite): screenshot existence, step integrity, and free/pro filtering.
 - **Alternatives Considered**: PNG screenshots (rejected — ~2× repo weight); duplicating images under docs/ (rejected — drift risk); committed Playwright dev-dependency + capture script (rejected — CI weight for a one-off task; can be revisited if screenshots need frequent regeneration).
 - **Consequences**: Tutorial screenshots can go stale when the UI changes; regeneration is a documented manual step (re-run the capture flow). HelpModal tab count grew 5→6.
+- **Addendum (2026-09-27, user-directed)**: three **example-document** steps were added (tutorial now 21 steps: free 1–17, account 18–21) showing the content of the demo files — source PDF (step 4), template with placeholders (step 5), and filled result (step 6). The result screenshot was produced by running the **real backend generator** (`generate_filled_document`) on the demo pair so it reflects actual output, including the intentionally unmatched `{{witness_name}}`. New images `21/22/23-example-*.jpg`; the capture pipeline stays outside the repo (Word COM → PDF → PyMuPDF render → JPEG).
 
 ### ADR-022: Client-IP Trust Model for Rate Limits & Quotas (2026-09-27)
 - **Date**: 2026-09-27

@@ -6,10 +6,10 @@
 
 This tutorial walks through the complete workflow with a screenshot for every step. It has two parts:
 
-- **Part A — Free Tier** (no account needed): steps 1–14.
-- **Part B — Account Tier** (signed-in users only): steps 15–18.
+- **Part A — Free Tier** (no account needed): steps 1–17.
+- **Part B — Account Tier** (signed-in users only): steps 18–21.
 
-All screenshots use the built-in demo files, so you can follow along safely.
+All screenshots use the built-in demo files, so you can follow along safely. Steps 4–6 show exactly what is inside those demo files: the source PDF, the template, and the filled result.
 
 The same walkthrough is built into the app: open **Guide** in the Navbar and select the **1. Tutorial** tab.
 
@@ -47,7 +47,68 @@ Click **Load Sample Contract and Template Pair**. A demo contract PDF and a Word
 
 ---
 
-### Step 4 — Start the AI Extraction
+### Step 4 — Inside the Example Source PDF
+
+Here is the full content of the sample source document — a one-page contract holding the facts to extract:
+
+| Fact | Value in the source |
+|------|---------------------|
+| Contract number | `CTR-2026-889` |
+| Signing date | `2026-08-15` |
+| Party name | `PT Maju Jaya` |
+| Contract value | `$50,000` |
+
+Notice what the source **does not** contain: there is no witness anywhere in the document. TemplaFill only fills what the source actually says, so that field will stay unfilled (you will see this in step 6).
+
+> **Tip**: Your own source must be a text-based PDF with a real text layer. Scanned images need OCR first (see Troubleshooting).
+
+![Step 4 — Example source PDF content](../../frontend/public/guide/21-example-source.jpg)
+
+---
+
+### Step 5 — Inside the Example Template
+
+The template is a Word document with `{{placeholder}}` markers where values should go. Each marker name — like `{{contract_number}}` — tells TemplaFill which fact to look for in the source PDF:
+
+```
+CONTRACT SUMMARY
+
+Contract {{contract_number}} signed on {{signing_date}}
+between PT Maju Jaya and counterparty.
+
+Party: {{party_name}}
+Value: {{contract_value}}
+Witness: {{witness_name}}
+```
+
+> **Tip**: Placeholders can also use `<<field>>`, `[field]`, `{field}`, or `__field__` syntax — all five styles are supported interchangeably.
+
+![Step 5 — Example template with placeholders](../../frontend/public/guide/22-example-template.jpg)
+
+---
+
+### Step 6 — What the Filled Result Looks Like
+
+After extraction, every placeholder that matched a source fact is replaced by its value, with the original formatting preserved:
+
+```
+CONTRACT SUMMARY
+
+Contract CTR-2026-889 signed on 2026-08-15
+between PT Maju Jaya and counterparty.
+
+Party: PT Maju Jaya
+Value: $50,000
+Witness: {{witness_name}}
+```
+
+Because the source contract never mentions a witness, `{{witness_name}}` remains as-is in the output. This is why you should always review the fields before downloading — use **Edit** (step 12) to fill anything the source did not provide.
+
+![Step 6 — Filled result document](../../frontend/public/guide/23-example-result.jpg)
+
+---
+
+### Step 7 — Start the AI Extraction
 
 Click **Begin Extraction**. Four stages run automatically:
 
@@ -58,91 +119,91 @@ Click **Begin Extraction**. Four stages run automatically:
 
 > **Tip**: A typical document finishes in well under a minute. You can leave the tab open — it polls the server for progress.
 
-![Step 4 — Processing](../../frontend/public/guide/04-processing.jpg)
+![Step 7 — Processing](../../frontend/public/guide/04-processing.jpg)
 
 ---
 
-### Step 5 — Review Extracted Values (Split View)
+### Step 8 — Review Extracted Values (Split View)
 
 Every field appears with its extracted value, a **confidence score**, and the **source page**. The left panel shows the exact snippet the value came from.
 
-> **Tip**: Green **High** means the AI found the value verbatim. Red **Missing** means it was not found — enter it manually or use a re-extract hint (step 8).
+> **Tip**: Green **High** means the AI found the value verbatim. Red **Missing** means it was not found — enter it manually or use a re-extract hint (step 11).
 
-![Step 5 — Review, split view](../../frontend/public/guide/05-review-split.jpg)
+![Step 8 — Review, split view](../../frontend/public/guide/05-review-split.jpg)
 
 ---
 
-### Step 6 — Review in Table View
+### Step 9 — Review in Table View
 
 Switch to **Table** view for a compact spreadsheet-style overview — ideal for templates with many fields. All actions are available on each row.
 
-![Step 6 — Review, table view](../../frontend/public/guide/06-review-table.jpg)
+![Step 9 — Review, table view](../../frontend/public/guide/06-review-table.jpg)
 
 ---
 
-### Step 7 — Check the Source Citation
+### Step 10 — Check the Source Citation
 
 Click **Source p.1** (or **View Citation**) on any field to open the citation modal: the exact excerpt from the PDF, the extracted value, and the similarity score.
 
-![Step 7 — Citation modal](../../frontend/public/guide/07-citation.jpg)
+![Step 10 — Citation modal](../../frontend/public/guide/07-citation.jpg)
 
 ---
 
-### Step 8 — Re-Extract a Field with a Hint
+### Step 11 — Re-Extract a Field with a Hint
 
 If a value looks wrong, click **Re-extract** and type a hint such as *"Look at the signature block on page 2"*. The AI re-runs extraction for that field only, with your hint as extra context.
 
-![Step 8 — Re-extract modal](../../frontend/public/guide/08-reextract.jpg)
+![Step 11 — Re-extract modal](../../frontend/public/guide/08-reextract.jpg)
 
 ---
 
-### Step 9 — Edit a Value Manually
+### Step 12 — Edit a Value Manually
 
 Click **Edit** on a row to change the value by hand. Type the corrected text, then click the **green check** to save (or the **cross** to cancel).
 
-![Step 9 — Editing a value](../../frontend/public/guide/09-editing-open.jpg)
+![Step 12 — Editing a value](../../frontend/public/guide/09-editing-open.jpg)
 
 ---
 
-### Step 10 — Saved Edits Are Marked
+### Step 13 — Saved Edits Are Marked
 
 Saved edits replace the extracted value and a **Field Updated** toast confirms the change. You can keep editing, re-extracting, or skip fields you do not need.
 
-![Step 10 — Saved edit](../../frontend/public/guide/09-edited.jpg)
+![Step 13 — Saved edit](../../frontend/public/guide/09-edited.jpg)
 
 ---
 
-### Step 11 — Generate and Download the Filled Document
+### Step 14 — Generate and Download the Filled Document
 
 Click **Generate Filled Document** at the bottom of the review screen. On the Export step, download the **populated document** or a **JSON audit log** of every value and edit.
 
 > **Tip**: Generated files and uploads are purged from the server within 24 hours — download what you need.
 
-![Step 11 — Download](../../frontend/public/guide/10-download.jpg)
+![Step 14 — Download](../../frontend/public/guide/10-download.jpg)
 
 ---
 
-### Step 12 — Find Past Sessions in History
+### Step 15 — Find Past Sessions in History
 
 The **clock icon** in the Navbar opens your recent sessions. History is stored only in your browser (localStorage) — never on a server database — and each entry can be downloaded as a JSON metadata record.
 
-![Step 12 — History](../../frontend/public/guide/11-history.jpg)
+![Step 15 — History](../../frontend/public/guide/11-history.jpg)
 
 ---
 
-### Step 13 — Hit the Free Daily Limit? Request an Account
+### Step 16 — Hit the Free Daily Limit? Request an Account
 
 After 5 free jobs in a day you will see this screen. The **account tier** runs on DeepSeek instead of Google, keeps documents off Google entirely, and raises the limit to **50 jobs/day**. Send an email and the owner replies with the shared credentials.
 
-![Step 13 — Daily limit / request account](../../frontend/public/guide/12-account-request.jpg)
+![Step 16 — Daily limit / request account](../../frontend/public/guide/12-account-request.jpg)
 
 ---
 
-### Step 14 — Sign In to the Account Tier
+### Step 17 — Sign In to the Account Tier
 
 Click **Sign in** in the Navbar and enter the shared username and password you received by email. There is no self-registration.
 
-![Step 14 — Login modal](../../frontend/public/guide/13-login.jpg)
+![Step 17 — Login modal](../../frontend/public/guide/13-login.jpg)
 
 ---
 
@@ -150,35 +211,35 @@ Click **Sign in** in the Navbar and enter the shared username and password you r
 
 > The following steps appear in the in-app tutorial **only after you sign in** (Navbar → Guide → Tutorial).
 
-### Step 15 — Account Tier Active
+### Step 18 — Account Tier Active
 
 After signing in, the Navbar badge switches to `Account · DeepSeek` and the landing banner confirms documents are no longer sent to Google. Your daily limit becomes 50 jobs.
 
-![Step 15 — Account tier active](../../frontend/public/guide/14-pro-navbar.jpg)
+![Step 18 — Account tier active](../../frontend/public/guide/14-pro-navbar.jpg)
 
 ---
 
-### Step 16 — Processing Runs on DeepSeek
+### Step 19 — Processing Runs on DeepSeek
 
 The pipeline is identical, but extraction runs on the **DeepSeek engine** with no Google embedding calls at all — retrieval is bypassed and document chunks are sent sequentially to DeepSeek.
 
-![Step 16 — Processing on DeepSeek](../../frontend/public/guide/15-pro-processing.jpg)
+![Step 19 — Processing on DeepSeek](../../frontend/public/guide/15-pro-processing.jpg)
 
 ---
 
-### Step 17 — DeepSeek Provenance Badges
+### Step 20 — DeepSeek Provenance Badges
 
 Each extracted field is labelled **DeepSeek** instead of `Gemini 3.6 Flash`. If the DeepSeek API is ever unavailable, the job falls back to the **local heuristic engine only** — never to Google.
 
-![Step 17 — DeepSeek badges](../../frontend/public/guide/16-pro-review.jpg)
+![Step 20 — DeepSeek badges](../../frontend/public/guide/16-pro-review.jpg)
 
 ---
 
-### Step 18 — Export from the Account Tier
+### Step 21 — Export from the Account Tier
 
 Confirm and download exactly as on the free tier. The audit log records the DeepSeek engine as the extractor for every field.
 
-![Step 18 — Account export](../../frontend/public/guide/17-pro-download.jpg)
+![Step 21 — Account export](../../frontend/public/guide/17-pro-download.jpg)
 
 ---
 
@@ -187,7 +248,7 @@ Confirm and download exactly as on the free tier. The audit log records the Deep
 | Problem | What to do |
 |---------|------------|
 | **"Free Daily Limit Reached"** | You have used all 5 free jobs for today. Wait for the daily reset (server time) or request an account tier. |
-| **A field shows "Missing"** | The value was not found in the PDF. Edit it manually (step 9) or re-extract with a hint (step 8). |
+| **A field shows "Missing"** | The value was not found in the PDF. Edit it manually (step 12) or re-extract with a hint (step 11). |
 | **"Heuristic Fallback Active" warning** | The AI provider was temporarily unavailable, so the local engine filled in what it could. Review those fields carefully. |
 | **Backend "waking up"** | The free hosting sleeps after inactivity; the first request can take up to a minute. The banner shows progress. |
 | **Scanned PDF gives no text** | TemplaFill needs a digital text layer. Run OCR on scanned documents first. |

@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased] — v0.3.0 Tier System (2026-09-26 → present)
 
 ### Added
+- **Tutorial example-document walkthrough (2026-09-27)**: three new steps in the in-app Guide and `docs/1-product/TUTORIAL.md` show what is *inside* the demo files — the source contract PDF (step 4), the template with `{{placeholders}}` (step 5), and the filled result with the unmatched `{{witness_name}}` visible (step 6) — each with a brief explanation of what to notice. New screenshots `21-example-source.jpg`, `22-example-template.jpg`, `23-example-result.jpg` (the result was generated with the real backend generator). Tutorial renumbered to 21 steps (free 1–17, account 18–21).
 - **Frontend polish & accessibility pass (design-review follow-up, 2026-09-26)**:
   - **Shared `Modal` primitive** (`frontend/src/components/Modal.tsx`): portal rendering, `role="dialog"` + `aria-modal` + `aria-labelledby`, **Escape-to-close**, backdrop click-to-close, **focus trap**, focus restoration to the trigger, and body scroll lock. Adopted by `LoginModal`, `HistoryModal`, `CitationModal`, `ReExtractModal`, `AddFieldModal`, and `HelpModal` (removes ~150 lines of duplicated overlay markup).
   - **Tier-aware engine copy**: `ProcessingView`, `HeroLanding`, `Footer`, and the `DownloadView` audit log now name the active engine (`Free → Google Gemini 3.6 Flash`, `Account → DeepSeek`) instead of hardcoding Gemini.

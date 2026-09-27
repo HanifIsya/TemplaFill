@@ -55,7 +55,7 @@ TemplaFill is built with a **Guest-First** philosophy and strict **Zero Data Ret
 
 **New to TemplaFill?** Follow the complete screenshot-by-screenshot walkthrough:
 
-- **📄 [docs/1-product/TUTORIAL.md](docs/1-product/TUTORIAL.md)** — 18 numbered steps covering the free tier (Part A) and the account tier (Part B), with a screenshot for every action.
+- **📄 [docs/1-product/TUTORIAL.md](docs/1-product/TUTORIAL.md)** — 21 numbered steps covering the free tier (Part A) and the account tier (Part B), with a screenshot for every action — including what is inside the example source PDF, template, and filled result (steps 4–6).
 - **In-app**: open the app, click **Guide** in the Navbar, and select the **1. Tutorial** tab. Account-tier steps unlock automatically after you sign in.
 
 ---
