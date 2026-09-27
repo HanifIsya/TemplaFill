@@ -11,11 +11,14 @@ cd frontend
 npm install
 # env (optional — defaults to http://localhost:8000/api)
 echo "NEXT_PUBLIC_API_URL=http://localhost:8000/api" > .env.local
+# SEO (optional — canonical origin + GSC verification token; see ../docs/7-operations/SEO.md)
+# NEXT_PUBLIC_SITE_URL=https://templa-fill.vercel.app
+# NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION=<token from Search Console>
 
 npm run dev     # http://localhost:3000
 npm run lint    # eslint
 npm run build   # next build (static prerender + CSP headers)
-npm test        # node --test src/tests/*.test.mjs (13/13, 106ms)
+npm test        # node --test src/tests/*.test.mjs (73/73)
 npm start       # after build
 ```
 
@@ -27,7 +30,7 @@ npm start       # after build
 | `build` | `next build` (verifies CSP in `next.config.ts` + `vercel.json`) |
 | `start` | `next start` |
 | `lint` | `eslint` (next config) |
-| `test` | `node --test src/tests/*.test.mjs` (models 5/5 + e2e 8/8) |
+| `test` | `node --test src/tests/*.test.mjs` (models + e2e + tier + polish + tutorial + seo) |
 
 ## Stack
 
@@ -43,9 +46,15 @@ frontend/
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx              # Home — orchestrates landing→upload→processing→review→download, wake polling 12×5s, demo fallback (%PDF/PK minimal headers if /samples fetch fails)
-│   │   ├── layout.tsx            # IBM Plex fonts, globals.css
-│   │   └── globals.css           # Design tokens (primary/neutral/semantic, display/h1→caption, spacing 4px grid)
+│   │   ├── layout.tsx            # IBM Plex fonts, globals.css, full SEO metadata (canonical/OG/Twitter/googleBot/GSC verification)
+│   │   ├── globals.css           # Design tokens (primary/neutral/semantic, display/h1→caption, spacing 4px grid)
+│   │   ├── robots.ts             # Generated /robots.txt (allow /, disallow /api/ + /uploads/, sitemap + host)
+│   │   ├── sitemap.ts            # Generated /sitemap.xml (landing route, priority 1)
+│   │   ├── manifest.ts           # Generated /manifest.webmanifest (name, colors, start URL)
+│   │   ├── opengraph-image.tsx   # Generated 1200×630 OG card (next/og)
+│   │   └── twitter-image.tsx     # Generated 1200×630 Twitter card (next/og)
 │   ├── components/
+│   │   ├── StructuredData.tsx    # WebApplication + WebSite JSON-LD
 │   │   ├── Navbar.tsx            # Step indicator, backend dot (live/waking/offline/mock), Help/History triggers
 │   │   ├── HeroLanding.tsx       # Tagline + How-it-works + “Try Demo”
 │   │   ├── DualDropzone.tsx      # Two drag&drop zones (50MB PDF, 20MB docx/xlsx/pptx, %PDF/PK client check) + demo loader
@@ -61,10 +70,13 @@ frontend/
 │   ├── lib/
 │   │   ├── api.ts                # ApiClient (BASE_URL from NEXT_PUBLIC_API_URL)
 │   │   ├── types.ts              # JobProgress, FieldMapping (extractedBy, fallbackReason, isSkipped), ExtractionResult (hasFallback, engineUsed)
+│   │   ├── seo.ts                # Single source of truth: SITE_URL, title/description/keywords, indexable routes, bots
+│   │   ├── ogImage.tsx           # Shared 1200×630 social-card renderer (next/og ImageResponse)
 │   │   ├── tutorial.ts           # Tutorial step data (free + account steps, tier-gated)
 │   │   └── mockData.ts           # MOCK_FIELDS (8), MOCK_GENERATION, MOCK_DEMO_SESSION
 │   └── tests/
 │       ├── models.test.mjs       # 5/5
+│       ├── seo.test.mjs          # S1–S9 SEO/GSC invariants
 │       └── e2e.test.mjs          # 8/8 full-flow 106ms
 ├── public/samples/
 │   ├── sample_contract.pdf       # Real 1.1KB binary (passes %PDF)
@@ -85,7 +97,8 @@ frontend/
 ## Learn More
 
 - Next.js: https://nextjs.org/docs (App Router, `next/font`, `next.config.ts` headers)
-- TemplaFill docs: `../docs/3-design/*`, `../docs/7-operations/DECISIONS.md` (ADR-008→015), `../docs/4-coordination/CONTEXT.md` (last updated 2026-09-24), `../../README.md` (deployment table)
+- SEO / Search Console: `../docs/7-operations/SEO.md` (registration runbook) + ADR-024
+- TemplaFill docs: `../docs/3-design/*`, `../docs/7-operations/DECISIONS.md` (ADR-008→024), `../docs/4-coordination/CONTEXT.md` (last updated 2026-09-27), `../../README.md` (deployment table)
 
 ## Deploy on Vercel
 
