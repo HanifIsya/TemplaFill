@@ -374,3 +374,11 @@
   4. **Tier gating is unit-tested** (DOM-free, like the rest of the frontend suite): screenshot existence, step integrity, and free/pro filtering.
 - **Alternatives Considered**: PNG screenshots (rejected — ~2× repo weight); duplicating images under docs/ (rejected — drift risk); committed Playwright dev-dependency + capture script (rejected — CI weight for a one-off task; can be revisited if screenshots need frequent regeneration).
 - **Consequences**: Tutorial screenshots can go stale when the UI changes; regeneration is a documented manual step (re-run the capture flow). HelpModal tab count grew 5→6.
+
+### ADR-022: Client-IP Trust Model for Rate Limits & Quotas (2026-09-27)
+- **Date**: 2026-09-27
+- **Status**: **Accepted** (security remediation, PR #9)
+- **Context**: The 2026-09-27 re-audit proved that on Render, uvicorn rewrites `request.client` from the **leftmost** `X-Forwarded-For` entry (`FORWARDED_ALLOW_IPS=*`), letting a client rotate the header to obtain unlimited fresh quota/rate-limit buckets — defeating the 5/day free quota, 50/day pro cap, and 5/min login brute-force guard. Render does not overwrite an inbound XFF (verified empirically).
+- **Decision**: (1) start uvicorn with `--no-proxy-headers` so the socket peer stays authentic; (2) set `TRUSTED_PROXIES=*` (service reachable only via the platform load balancer); (3) `get_client_ip()` resolves in the order **`CF-Connecting-IP`** (set/overwritten by Cloudflare at Render's edge) → rightmost XFF hop → `X-Real-IP` → socket peer, and ignores all forwarded headers when the peer is not trusted.
+- **Alternatives Considered**: rightmost-XFF-only (rejected — Render does not sanitize XFF, so the last hop is client-controllable when the header is passed through); socket-peer-only (rejected — all users share the load-balancer IP, collapsing quotas to one global bucket); external store (rejected — overkill at this scale).
+- **Consequences**: per-IP controls are effective again (live-verified); deployments MUST keep both settings (documented in SECURITY.md + DEPLOYMENT.md + render.yaml). The production Render service is not Blueprint-managed, so the settings were applied via the Render API; a future Blueprint adoption inherits them from `render.yaml`.

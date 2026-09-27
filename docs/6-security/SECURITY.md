@@ -162,10 +162,14 @@ empty-bucket pruning) so it cannot grow without limit.
 > **AUDIT-01 (2026-09-27):** on Render, `FORWARDED_ALLOW_IPS=*` makes uvicorn
 > rewrite `request.client.host` from the client-supplied **leftmost**
 > `X-Forwarded-For` entry before the app sees it — this defeated all per-IP
-> controls until `TRUSTED_PROXIES=*` was set **and** uvicorn was started with
-> `--no-proxy-headers`. With both in place the app reads the rightmost hop
-> (appended by Render's load balancer) and ignores attacker-supplied entries.
-> See `CYBER_SECURITY_AUDIT_2026-09-27.md`.
+> controls until the deployment was fixed. **Required deployment settings:**
+> 1. `TRUSTED_PROXIES=*` (service reachable only via the platform load balancer)
+> 2. uvicorn started with `--no-proxy-headers`
+>
+> `get_client_ip()` then prefers **`CF-Connecting-IP`** (set by Cloudflare at
+> Render's edge; not client-controllable), falling back to the rightmost
+> `X-Forwarded-For` hop → `X-Real-IP` → socket peer. Live-verified after
+> redeploy. See `CYBER_SECURITY_AUDIT_2026-09-27.md` §6.
 
 ### Resource / DoS Controls (VULN-02, VULN-03, VULN-11)
 

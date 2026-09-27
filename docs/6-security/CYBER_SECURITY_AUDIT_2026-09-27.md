@@ -169,7 +169,7 @@ Additional checks:
 | AUDIT-03 | `~=` ranges vs "pinned" claim | ✅ Fixed | Exact pins for all eight dependencies |
 | AUDIT-04 | SECURITY.md inaccuracies | ✅ Fixed | SECURITY.md revised (this audit) |
 
-**Post-fix verification:** full backend suite green (293 tests), CI green, `pip-audit` clean, and a **live re-test on the redeployed service** confirms the real bucket is used regardless of spoofed `X-Forwarded-For` / `CF-Connecting-IP` values (see §6).
+**Post-fix verification:** full backend suite green (295 tests), CI green, `pip-audit` clean, and a **live re-test on the redeployed service** confirms the fix (see §6).
 
 ---
 
@@ -178,7 +178,29 @@ Additional checks:
 | Risk | Status |
 |---|---|
 | `TRUSTED_PROXIES=*` trusts any direct peer | Accepted — the service is only reachable through Render's load balancer (no public port); `--no-proxy-headers` prevents peer rewriting. Revisit if the service is ever exposed directly. |
+| Client-supplied `CF-Connecting-IP` requests are rejected at the edge | Accepted/by design — Cloudflare sanitizes this header; clients cannot spoof it. Browsers never send it. |
 | In-memory rate limiter resets on deploy/restart | Accepted (documented) — conservative reset, no persistence requirement at this scale. |
 | Shared account password is a single credential | Accepted by design (ADR-020); per-IP quotas remain the cost control. |
 | localStorage tier-token fallback is XSS-readable | Accepted — CSP + no DOM injection sinks; token is scoped to the account tier only. |
 | No server-side token revocation (logout is cookie-clear + expiry) | Accepted for v1; noted as future hardening in ADR-020. |
+
+---
+
+## 6. Live Verification (post-remediation, 2026-09-27)
+
+After merging the fix and redeploying the production service, the spoof probes were re-run:
+
+| Probe | Before fix | After fix |
+|---|---|---|
+| Real bucket (no header) | `2` | `1` (after 1 upload) |
+| `X-Forwarded-For: 203.0.113.99` (fixed value, 8×) | `0` each (fresh bucket) | `1` each (same bucket) |
+| Rotating `X-Forwarded-For: 203.0.113.1..8` | fresh bucket per value | `[1,1,1,1,1,1,1,1]` — constant |
+| Client-supplied `CF-Connecting-IP` | (not tested pre-fix) | Connection reset at Cloudflare's edge — not spoofable |
+
+Interpretation: rotating XFF no longer creates fresh buckets, which is only possible because `CF-Connecting-IP` (set by Cloudflare) is present and preferred by `get_client_ip()`. **AUDIT-01 is closed.**
+
+**Deployment note (important):** the production Render service is **not Blueprint-managed** — `render.yaml` changes do not auto-apply. The two required settings were applied via the Render API and must be preserved:
+1. `startCommand = uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-proxy-headers`
+2. `TRUSTED_PROXIES=*`
+
+The repository `render.yaml` already declares both, so a future Blueprint adoption or manual re-creation inherits them.

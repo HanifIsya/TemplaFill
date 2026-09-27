@@ -5,6 +5,10 @@
 ---
 
 ## Last Updated
+- **Date**: 2026-09-27 (security re-audit session)
+- **By**: OpenCode
+- **Summary**: **Full cyber-security re-audit + fixes (PR #9 merged, `security/audit-2026-09-27`)**: double-checked every API key and the shared credential across the working tree AND the full git history (76 commits / 1,051 blobs) — **no secret has ever been committed**; only `NEXT_PUBLIC_API_URL` reaches the browser; keys are never logged. Found and fixed **AUDIT-01 (High)**: `X-Forwarded-For` spoofing bypassed every per-IP control on the live deployment (5/day free quota, 50/day pro cap, 5/min login limit) because Render sets `FORWARDED_ALLOW_IPS=*` and uvicorn rewrote `request.client` from the leftmost attacker-controlled XFF entry. Fix: `--no-proxy-headers` + `TRUSTED_PROXIES=*` + `get_client_ip()` prefers `CF-Connecting-IP` (Cloudflare/Render edge). Also fixed AUDIT-02 (raw internal job error returned to clients), AUDIT-03 (8 deps on `~=` despite the pinned claim), AUDIT-04 (SECURITY.md inaccuracies). **295 backend tests green** (9 new), CI green. **Live re-verified after redeploy**: rotating XFF now returns a constant bucket. Report: `docs/6-security/CYBER_SECURITY_AUDIT_2026-09-27.md`. Note: the Render service is NOT Blueprint-managed — the two deployment settings were applied via the Render API and are documented in SECURITY/DEPLOYMENT.
+
 - **Date**: 2026-09-27 (live acceptance session)
 - **By**: OpenCode
 - **Summary**: **Task 6.16 live staging E2E complete — Phase 6 fully closed.** Account tier on Render now runs through the **kenari.id** OpenAI-compatible gateway (`kn-...` key, `deepseek-v4-1-flash`, thinking disabled) — live pro upload returned `engine_used: deepseek`, 5/5 fields `extracted_by: deepseek`, **no fallback**; confirm + download produced a valid 37,760-byte filled docx; free tier still `gemini`; wrong password → 401; quota counters accurate (pro 2/50, free 0/5). **Live DeepSeek eval 1.00 PASS all metrics** (54.96s, real API calls). Render config verified via API: all four `DEEPSEEK_*` vars correct on the live deploy (`716606e`). Cost sanity: ≈ Rp 0.2–0.5 per job at kenari's Rp 20/1M in + Rp 50/1M out.
@@ -102,6 +106,14 @@ All core phases completed (+ v0.2.0 hardening 2026-09-24, ADR-013→017):
 ---
 
 ## Cross-Agent Requests
+
+### Note: Security re-audit fixed deployment config + corrected SECURITY.md (no frontend changes)
+- **From**: OpenCode
+- **To**: Antigravity
+- **File(s)**: `docs/6-security/SECURITY.md` + `docs/6-security/CYBER_SECURITY_AUDIT_2026-09-27.md` (new), `docs/7-operations/DEPLOYMENT.md`, `render.yaml`, `.env.example`, `backend/` (code + tests). No frontend files touched.
+- **Description**: User-directed full re-audit. Credential exposure double-checked (clean). AUDIT-01 was a real high-severity quota/brute-force bypass on the live deployment; fixed in code + Render config. SECURITY.md's sign-off table now reflects verified reality — please keep the new AUDIT-01 deployment requirements (`--no-proxy-headers` + `TRUSTED_PROXIES=*`) when editing deployment docs.
+- **Priority**: high
+- **Status**: done
 
 ### Request: OpenCode added visual tutorial (frontend + docs zones, user-directed)
 - **From**: OpenCode
@@ -221,6 +233,7 @@ _No known issues._
 | 2026-09-27 | OpenCode | **Phase 6 delivery merge (user-directed)**: merged `feat/ag-frontend-polish` (frontend 6.9–6.14 + polish 6.18–6.22) into the delivery branch, resolving CONTEXT/TASKS conflicts (kept both agents' history, current statuses). Verified closed loop on the merged tree: **282 backend tests**, **59 frontend tests**, lint 0 warnings, `next build` green. Task 6.15 **verified — negative verdict** (DeepSeek terms contain no no-training/no-retention commitment; no claim published; `DATA_PRIVACY.md` updated; HelpModal copy corrected). ADR-020 flipped to **Accepted** (6.17); TASKS 6.0/6.15/6.17 → done, 6.16 → review (live staging E2E with real keys is the user's acceptance step); CHANGELOG v0.3.0 completed with backend + review + verdict sections. |
 | 2026-09-27 | OpenCode | **Account-tier provider re-pointed at kenari.id gateway (user-directed)**: the user's DeepSeek key is a kenari.id gateway key (`kn-...`) that only works against `https://kenari.id/v1`. `render.yaml`/`.env.example` updated: `DEEPSEEK_BASE_URL=https://kenari.id`, `DEEPSEEK_MODEL=deepseek-v4-1-flash` (kenari's id for DeepSeek-V4.1-Flash). Backend adds `DEEPSEEK_DISABLE_THINKING` (default true) — sends `reasoning:{enabled:false}` so extraction does not burn output tokens on hidden thinking, with a graceful 400-retry without the field for providers that reject it. 4 new tests → **286 backend tests green**; eval PASS both providers. Rule 2 note added before shared-file edits. Live Render check still pending user's `kn-...` key. |
 | 2026-09-27 | OpenCode | **Task 6.16 live acceptance (user-directed)**: verified Render deployment via API (env vars + deploy `716606e`), then ran the live E2E — login → pro upload → results (`engine_used: deepseek`, 5/5 `extracted_by: deepseek`, no fallback) → confirm → download (37,760-byte docx, brace-free except the intentionally-unfilled not-found field); free-tier upload still `gemini`; wrong password 401; quota counters correct. **Live DeepSeek eval 1.00 PASS** all metrics. Phase 6 closed (6.16 → done). |
+| 2026-09-27 | OpenCode | **Full security re-audit + fixes (PR #9)**: credential double-check (working tree + 76 commits / 1,051 blobs) → clean; AUDIT-01 XFF quota evasion fixed (`--no-proxy-headers` + `TRUSTED_PROXIES=*` + CF-Connecting-IP-first resolution) and **live-verified** (rotating XFF returns a constant bucket); AUDIT-02 generic job error; AUDIT-03 exact dependency pins; AUDIT-04 SECURITY.md corrections. 295 backend tests (9 new). Report `docs/6-security/CYBER_SECURITY_AUDIT_2026-09-27.md`. |
 | 2026-09-27 | OpenCode | **Visual tutorial shipped (user-directed, both zones)**: captured 20 screenshots from the live site via Playwright (run outside the repo) — free flow (landing→upload→demo→processing→review split/table→citation→re-extract→edit→download→history→account-request→login) + account flow (DeepSeek badge/processing/review/export). New frontend/src/lib/tutorial.ts (18 steps, tier-gated) + **HelpModal Tutorial tab as tab 1** (account steps only for signed-in users; free users see a teaser) + 	ier prop wired from page.tsx; new docs/1-product/TUTORIAL.md (Parts A/B + troubleshooting) linked from USER_GUIDE/README. 5 new frontend tests (screenshot existence, tier gating, step integrity) → **64/64 green**, lint 0 warnings, build clean; tier gating verified against the local production build (free=14 steps, pro=18). All shots optimized JPEG, 0.96 MB total. |
 
 

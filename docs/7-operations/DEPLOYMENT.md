@@ -87,10 +87,16 @@ graph LR
 # 2. Build settings:
 #    Root Directory: backend
 #    Build Command: pip install -r requirements.txt
-#    Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+#    Start Command: uvicorn app.main:app --host 0.0.0.0 --port $PORT --no-proxy-headers
+#    ^ AUDIT-01 (2026-09-27): --no-proxy-headers is REQUIRED. Without it, uvicorn
+#      rewrites request.client from the attacker-controlled leftmost
+#      X-Forwarded-For entry, which bypasses all per-IP quotas and rate limits.
 
 # 3. Set environment variables:
 #    DATABASE_URL, REDIS_URL, GEMINI_API_KEY, SECRET_KEY, etc.
+#    TRUSTED_PROXIES=*  <- REQUIRED on Render (service only reachable via the
+#      platform load balancer). get_client_ip() then prefers CF-Connecting-IP
+#      (set by Cloudflare at Render's edge) over client-supplied headers.
 
 # 4. Add Celery worker:
 #    Create separate Background Worker service
